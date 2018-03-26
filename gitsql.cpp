@@ -1,12 +1,13 @@
 #include <windows.h>
 #include <sqlext.h>
+#include <git2.h>
 #include <string>
 #include <vector>
 
 using namespace std;
 
 #define CONNEXION_STRING "DRIVER=SQL Server;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n"
-#define REPO_DIR "W:\\devel\\gitrepo\\"
+#define REPO_DIR "W:\\devel\\gitrepo\\" // FIXME - move to DB
 
 HDBC hdbc;
 
@@ -213,6 +214,85 @@ static void dump_sql() {
 	}
 }
 
+static void throw_git_error(int error, const char* func) {
+	const git_error *lg2err;
+
+	if ((lg2err = giterr_last()) && lg2err->message)
+		throw string(func) + " failed (" + lg2err->message + ").";
+
+	throw string(func) + " failed.";
+}
+
+static void update_git() {
+	git_repository* repo = NULL;
+	unsigned int ret;
+
+	git_libgit2_init();
+
+	if ((ret = git_repository_open(&repo, REPO_DIR)))
+		throw_git_error(ret, "git_repository_open");
+
+	try {
+		git_signature* sig;
+		git_index* index;
+		git_oid commit_id, tree_id;
+		git_tree* tree;
+
+		if ((ret = git_signature_now(&sig, "Mark Harmstone", "mark.harmstone@boltonft.nhs.uk"))) // FIXME - don't hardcode
+			throw_git_error(ret, "git_signature_now");
+
+		try {
+			if ((ret = git_repository_index(&index, repo)))
+				throw_git_error(ret, "git_repository_index");
+
+			// FIXME - loop through saved files and add
+			// FIXME - remove from index any that have been deleted
+
+			if ((ret = git_index_add_bypath(index, "test.txt")))
+				throw_git_error(ret, "git_index_add_bypath");
+
+			if ((ret = git_index_write_tree(&tree_id, index)))
+				throw_git_error(ret, "git_index_write_tree");
+
+			git_index_free(index);
+
+			if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
+				throw_git_error(ret, "git_tree_lookup");
+
+			try {
+				git_commit* parent;
+				git_oid parent_id;
+
+				if ((ret = git_reference_name_to_id(&parent_id, repo, "HEAD")))
+					throw_git_error(ret, "git_reference_name_to_id");
+
+				if ((ret = git_commit_lookup(&parent, repo, &parent_id)))
+					throw_git_error(ret, "git_commit_lookup");
+
+				if ((ret = git_commit_create_v(&commit_id, repo, "HEAD", sig, sig, NULL, "test commit", tree, 1, parent)))
+					throw_git_error(ret, "git_commit_create_v");
+			} catch (...) {
+				git_tree_free(tree);
+				throw;
+			}
+
+			git_tree_free(tree);
+
+			// FIXME - push to remote server?*/
+		} catch (...) {
+			git_signature_free(sig);
+			throw;
+		}
+
+		git_signature_free(sig);
+	} catch (...) {
+		git_repository_free(repo);
+		throw;
+	}
+
+	git_repository_free(repo);
+}
+
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	HENV henv;
 
@@ -228,7 +308,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
 				throw_sql_error("SQLDriverConnect", SQL_HANDLE_DBC, hdbc);
 
-			dump_sql();
+			//dump_sql();
+			update_git();
 		} catch (const char* s) {
 			MessageBoxA(0, s, "Error", MB_ICONERROR);
 			throw;
