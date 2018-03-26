@@ -223,6 +223,32 @@ static void throw_git_error(int error, const char* func) {
 	throw string(func) + " failed.";
 }
 
+static void git_add_dir(git_index* index, const string& dir, const string& unixpath) {
+	HANDLE h;
+	WIN32_FIND_DATAA fff;
+
+	h = FindFirstFileA((REPO_DIR + dir + "*").c_str(), &fff);
+
+	if (h == INVALID_HANDLE_VALUE)
+		return;
+
+	do {
+		if (fff.cFileName[0] != '.') {
+			if (fff.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+				git_add_dir(index, dir + fff.cFileName + "\\", dir + fff.cFileName + "/");
+			else {
+				unsigned int ret;
+
+				if ((ret = git_index_add_bypath(index, (unixpath + fff.cFileName).c_str())))
+					throw_git_error(ret, "git_index_add_bypath");
+			}
+		}
+	} while (FindNextFileA(h, &fff));
+
+	FindClose(h);
+	// FIXME
+}
+
 static void update_git() {
 	git_repository* repo = NULL;
 	unsigned int ret;
@@ -242,14 +268,13 @@ static void update_git() {
 			throw_git_error(ret, "git_signature_now");
 
 		try {
+			size_t c;
+
 			if ((ret = git_repository_index(&index, repo)))
 				throw_git_error(ret, "git_repository_index");
 
-			// FIXME - loop through saved files and add
-			// FIXME - remove from index any that have been deleted
-
-			if ((ret = git_index_add_bypath(index, "test.txt")))
-				throw_git_error(ret, "git_index_add_bypath");
+			// loop through saved files and add
+			git_add_dir(index, "", "");
 
 			if ((ret = git_index_write_tree(&tree_id, index)))
 				throw_git_error(ret, "git_index_write_tree");
@@ -258,6 +283,31 @@ static void update_git() {
 
 			if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
 				throw_git_error(ret, "git_tree_lookup");
+
+			/*c = git_tree_entrycount(tree);
+
+			for (size_t i = 0; i < c; i++) {
+				const git_tree_entry* gte = git_tree_entry_byindex(tree, i);
+
+				if (gte)
+					MessageBoxA(0, git_tree_entry_name(gte), NULL, 0);
+			}*/
+
+			/*if (1) {
+				if ((ret = git_repository_index(&index, repo)))
+					throw_git_error(ret, "git_repository_index");
+
+				if ((ret = git_index_remove_bypath(index, "test.txt")))
+					throw_git_error(ret, "git_index_remove_bypath");
+
+				if ((ret = git_index_write_tree(&tree_id, index)))
+					throw_git_error(ret, "git_index_write_tree");
+
+				git_index_free(index);
+
+				if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
+					throw_git_error(ret, "git_tree_lookup");
+			}*/
 
 			try {
 				git_commit* parent;
