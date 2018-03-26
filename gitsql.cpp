@@ -197,13 +197,14 @@ static void dump_sql() {
 
 	// FIXME - also dump procedures etc.
 
-	SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition FROM sys.objects JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE objects.type='V' ORDER BY schemas.name, objects.name");
+	SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type) FROM sys.objects JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE objects.type='V' OR objects.type='P' ORDER BY schemas.name, objects.name");
 
 	while (sq.fetch_row()) {
 		string dir = string(REPO_DIR) + sanitize_fn(sq.row(0));
 		string fn;
 		string name = sq.row(1);
 		string def = sq.row(2);
+		string type = sq.row(3);
 		HANDLE h;
 		DWORD written;
 
@@ -214,7 +215,10 @@ static void dump_sql() {
 				throw "CreateDirectory returned error " + to_string(last_error);
 		}
 
-		dir += "\\views";
+		if (type == "V")
+			dir += "\\views";
+		else if (type == "P")
+			dir += "\\procedures";
 
 		if (!CreateDirectoryA(dir.c_str(), NULL)) {
 			auto last_error = GetLastError();
