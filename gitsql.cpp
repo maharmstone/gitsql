@@ -1,4 +1,7 @@
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <windows.h>
+#include <shlwapi.h>
 #include <sqlext.h>
 #include <git2.h>
 #include <string>
@@ -235,7 +238,7 @@ static void git_add_dir(git_index* index, const string& dir, const string& unixp
 	do {
 		if (fff.cFileName[0] != '.') {
 			if (fff.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-				git_add_dir(index, dir + fff.cFileName + "\\", dir + fff.cFileName + "/");
+				git_add_dir(index, dir + fff.cFileName + "\\", unixpath + fff.cFileName + "/");
 			else {
 				unsigned int ret;
 
@@ -246,7 +249,31 @@ static void git_add_dir(git_index* index, const string& dir, const string& unixp
 	} while (FindNextFileA(h, &fff));
 
 	FindClose(h);
-	// FIXME
+}
+
+
+static void git_remove_dir(git_repository* repo, git_tree* tree, const string& dir, const string& unixdir, vector<string>& deleted) {
+	size_t c = git_tree_entrycount(tree);
+
+	for (size_t i = 0; i < c; i++) {
+		const git_tree_entry* gte = git_tree_entry_byindex(tree, i);
+
+		if (gte) {
+			string name = git_tree_entry_name(gte);
+
+			if (!PathFileExistsA((REPO_DIR + dir + name).c_str()))
+				deleted.push_back(unixdir + name);
+			else if (git_tree_entry_type(gte) == GIT_OBJ_TREE) {
+				git_tree* subtree;
+				unsigned int ret;
+
+				if ((ret = git_tree_entry_to_object((git_object**)&subtree, repo, gte)))
+					throw_git_error(ret, "git_tree_entry_to_object");
+
+				git_remove_dir(repo, subtree, dir + name + "\\", unixdir + name + "/", deleted);
+			}
+		}
+	}
 }
 
 static void update_git() {
@@ -268,7 +295,10 @@ static void update_git() {
 			throw_git_error(ret, "git_signature_now");
 
 		try {
-			size_t c;
+			git_commit* parent;
+			git_oid parent_id;
+			git_tree* parent_tree;
+			vector<string> deleted;
 
 			if ((ret = git_repository_index(&index, repo)))
 				throw_git_error(ret, "git_repository_index");
@@ -284,21 +314,26 @@ static void update_git() {
 			if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
 				throw_git_error(ret, "git_tree_lookup");
 
-			/*c = git_tree_entrycount(tree);
+			if ((ret = git_reference_name_to_id(&parent_id, repo, "HEAD")))
+				throw_git_error(ret, "git_reference_name_to_id");
 
-			for (size_t i = 0; i < c; i++) {
-				const git_tree_entry* gte = git_tree_entry_byindex(tree, i);
+			if ((ret = git_commit_lookup(&parent, repo, &parent_id)))
+				throw_git_error(ret, "git_commit_lookup");
 
-				if (gte)
-					MessageBoxA(0, git_tree_entry_name(gte), NULL, 0);
-			}*/
+			if ((ret = git_commit_tree(&parent_tree, parent)))
+				throw_git_error(ret, "git_commit_tree");
 
-			/*if (1) {
+			// loop through repo and remove anything that's been deleted
+			git_remove_dir(repo, parent_tree, "", "", deleted);
+
+			if (deleted.size() > 0) {
 				if ((ret = git_repository_index(&index, repo)))
 					throw_git_error(ret, "git_repository_index");
 
-				if ((ret = git_index_remove_bypath(index, "test.txt")))
-					throw_git_error(ret, "git_index_remove_bypath");
+				for (unsigned int i = 0; i < deleted.size(); i++) {
+					if ((ret = git_index_remove_bypath(index, deleted[i].c_str())))
+						throw_git_error(ret, "git_index_remove_bypath");
+				}
 
 				if ((ret = git_index_write_tree(&tree_id, index)))
 					throw_git_error(ret, "git_index_write_tree");
@@ -307,19 +342,10 @@ static void update_git() {
 
 				if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
 					throw_git_error(ret, "git_tree_lookup");
-			}*/
+			}
 
 			try {
-				git_commit* parent;
-				git_oid parent_id;
-
-				if ((ret = git_reference_name_to_id(&parent_id, repo, "HEAD")))
-					throw_git_error(ret, "git_reference_name_to_id");
-
-				if ((ret = git_commit_lookup(&parent, repo, &parent_id)))
-					throw_git_error(ret, "git_commit_lookup");
-
-				if ((ret = git_commit_create_v(&commit_id, repo, "HEAD", sig, sig, NULL, "test commit", tree, 1, parent)))
+				if ((ret = git_commit_create_v(&commit_id, repo, "HEAD", sig, sig, NULL, "Update", tree, 1, parent)))
 					throw_git_error(ret, "git_commit_create_v");
 			} catch (...) {
 				git_tree_free(tree);
@@ -328,7 +354,7 @@ static void update_git() {
 
 			git_tree_free(tree);
 
-			// FIXME - push to remote server?*/
+			// FIXME - push to remote server?
 		} catch (...) {
 			git_signature_free(sig);
 			throw;
@@ -358,7 +384,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
 				throw_sql_error("SQLDriverConnect", SQL_HANDLE_DBC, hdbc);
 
-			//dump_sql();
+			dump_sql();
 			update_git();
 		} catch (const char* s) {
 			MessageBoxA(0, s, "Error", MB_ICONERROR);
