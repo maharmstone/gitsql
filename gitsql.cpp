@@ -170,10 +170,32 @@ static string sanitize_fn(const string& fn) {
 	return fn;
 }
 
-static void dump_sql() {
-	// FIXME - also dump procedures etc.
+static void clear_dir(const string& dir) {
+	HANDLE h;
+	WIN32_FIND_DATAA fff;
 
-	// FIXME - delete contents of directory first of all (apart from .git)
+	h = FindFirstFileA((dir + "*").c_str(), &fff);
+
+	if (h == INVALID_HANDLE_VALUE)
+		return;
+
+	do {
+		if (fff.cFileName[0] != '.') {
+			if (fff.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+				clear_dir(dir + fff.cFileName + "\\");
+				RemoveDirectoryA((dir + fff.cFileName).c_str());
+			} else
+				DeleteFileA((dir + fff.cFileName).c_str());
+		}
+	} while (FindNextFileA(h, &fff));
+
+	FindClose(h);
+}
+
+static void dump_sql() {
+	clear_dir(REPO_DIR);
+
+	// FIXME - also dump procedures etc.
 
 	SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition FROM sys.objects JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE objects.type='V' ORDER BY schemas.name, objects.name");
 
