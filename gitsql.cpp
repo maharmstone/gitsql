@@ -245,33 +245,7 @@ static void dump_sql2(SQLQuery& sq) {
 	}
 }
 
-static void dump_sql3(SQLQuery& sq, string& unixpath, string& def) {
-	if (sq.fetch_row()) {
-		string schema = sanitize_fn(sq.row(0));
-		string dir = string(REPO_DIR) + schema;
-		string subdir;
-		string fn;
-		string name = sq.row(1);
-		string value = sq.row(2);
-		string type = sq.row(3);
-
-		def = value;
-		unixpath = schema;
-
-		if (type == "V")
-			subdir = "views";
-		else if (type == "P")
-			subdir = "procedures";
-		else if (type == "FN")
-			subdir = "functions";
-
-		unixpath += "/" + subdir;
-
-		unixpath += "/" + sanitize_fn(name) + ".sql";
-	}
-}
-
-static void dump_sql(const string& schema, const string& obj, string& unixpath, string& def) {
+static void dump_sql(const string& schema, const string& obj, const string& type, string& unixpath, string& def, bool& deleted) {
 	if (obj == "") {
 		string s;
 
@@ -281,9 +255,34 @@ static void dump_sql(const string& schema, const string& obj, string& unixpath, 
 
 		dump_sql2(sq);
 	} else {
-		SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type) FROM sys.objects JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE (objects.type='V' OR objects.type='P' OR objects.type='FN') AND schemas.name=? AND objects.name=?", schema, obj);
+		string subdir;
 
-		dump_sql3(sq, unixpath, def);
+		SQLQuery sq("SELECT sql_modules.definition FROM sys.objects JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE (objects.type='V' OR objects.type='P' OR objects.type='FN') AND schemas.name=? AND objects.name=?", schema, obj);
+
+		if (sq.fetch_row()) {
+			def = sq.row(0);
+			deleted = false;
+		} else
+			deleted = true;
+
+		unixpath = sanitize_fn(schema);
+
+		if (type == "V")
+			subdir = "views";
+		else if (type == "P")
+			subdir = "procedures";
+		else if (type == "FN")
+			subdir = "functions";
+
+		unixpath += "/" + subdir;
+		unixpath += "/" + sanitize_fn(obj) + ".sql";
+
+		if (type == "V")
+			subdir = "views";
+		else if (type == "P")
+			subdir = "procedures";
+		else if (type == "FN")
+			subdir = "functions";
 	}
 }
 
@@ -346,7 +345,7 @@ static void git_remove_dir(git_repository* repo, git_tree* tree, const string& d
 	}
 }
 
-static void update_git(const string& user, const string& schema, const string& obj, const string& unixpath, const string& def) {
+static void update_git(const string& user, const string& schema, const string& obj, const string& unixpath, const string& def, bool filedeleted) {
 	git_repository* repo = NULL;
 	unsigned int ret;
 
@@ -418,17 +417,38 @@ static void update_git(const string& user, const string& schema, const string& o
 				git_oid oid, blob;
 				git_tree_update upd;
 
-				if ((ret = git_blob_create_frombuffer(&blob, repo, def.c_str(), def.length())))
-					throw_git_error(ret, "git_blob_create_frombuffer");
+				if (!filedeleted) {
+					if ((ret = git_blob_create_frombuffer(&blob, repo, def.c_str(), def.length())))
+						throw_git_error(ret, "git_blob_create_frombuffer");
+				} else {
+					git_tree_entry* gte;
+					unsigned int ret;
 
-				upd.action = GIT_TREE_UPDATE_UPSERT; // FIXME - deleting
-				upd.id = blob;
-				upd.filemode = GIT_FILEMODE_BLOB;
+					// don't delete file if not there to begin with
+					ret = git_tree_entry_bypath(&gte, parent_tree, unixpath.c_str());
+
+					if (ret == GIT_ENOTFOUND)
+						return;
+					else if (ret)
+						throw_git_error(ret, "git_tree_entry_bypath");
+
+					git_tree_entry_free(gte);
+				}
+
+				upd.action = filedeleted ? GIT_TREE_UPDATE_REMOVE : GIT_TREE_UPDATE_UPSERT;
+
+				if (!filedeleted) {
+					upd.id = blob;
+					upd.filemode = GIT_FILEMODE_BLOB;
+				}
+
 				upd.path = unixpath.c_str();
 
-				git_tree_create_updated(&oid, repo, parent_tree, 1, &upd);
+				if ((ret = git_tree_create_updated(&oid, repo, parent_tree, 1, &upd)))
+					throw_git_error(ret, "git_tree_create_updated");
 
-				git_tree_lookup(&tree, repo, &oid);
+				if ((ret = git_tree_lookup(&tree, repo, &oid)))
+					throw_git_error(ret, "git_tree_lookup");
 			}
 
 			try {
@@ -458,13 +478,16 @@ static void update_git(const string& user, const string& schema, const string& o
 
 int main(int argc, char** argv) {  
 	HENV henv;
-	string schema, user, obj;
+	string schema, user, type, obj;
 
-	if (argc >= 4) {
+	if (argc >= 5) {
 		user = argv[1];
-		schema = argv[2];
-		obj = argv[3];
+		type = argv[2];
+		schema = argv[3];
+		obj = argv[4];
 	}
+
+	// FIXME - log errors in DB rather than by MessageBox
 
 	SQLAllocEnv(&henv);
 	SQLAllocConnect(henv, &hdbc);
@@ -473,6 +496,7 @@ int main(int argc, char** argv) {
 		try {
 			SQLRETURN rc;
 			string unixpath, def;
+			bool deleted;
 
 			rc = SQLDriverConnectA(hdbc, NULL, (unsigned char*)CONNEXION_STRING, (SQLSMALLINT)strlen(CONNEXION_STRING), NULL, 0, NULL, SQL_DRIVER_NOPROMPT);
 
@@ -480,8 +504,8 @@ int main(int argc, char** argv) {
 				throw_sql_error("SQLDriverConnect", SQL_HANDLE_DBC, hdbc);
 
 			// FIXME - handle deletions
-			dump_sql(schema, obj, unixpath, def);
-			update_git(user, schema, obj, unixpath, def);
+			dump_sql(schema, obj, type, unixpath, def, deleted);
+			update_git(user, schema, obj, unixpath, def, deleted);
 		} catch (const char* s) {
 			MessageBoxA(0, s, "Error", MB_ICONERROR);
 			throw;
