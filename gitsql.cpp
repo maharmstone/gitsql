@@ -10,7 +10,8 @@
 using namespace std;
 
 #define CONNEXION_STRING "DRIVER=SQL Server;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n"
-#define REPO_DIR "W:\\devel\\gitrepo\\" // FIXME - move to DB
+//#define CONNEXION_STRING "DRIVER=SQL Server Native Client 11.0;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n"
+#define REPO_DIR "\\\\sys122-n\\Manual Data Files\\devel\\gitrepo\\" // FIXME - move to DB
 
 HDBC hdbc;
 
@@ -47,6 +48,7 @@ private:
 
 		buf = (char*)malloc(t.size() + 1);
 		memcpy(buf, t.c_str(), t.size());
+		buf[t.size()] = 0;
 
 		bufs.push_back(buf);
 
@@ -62,7 +64,7 @@ private:
 	}
 
 	template<typename T, typename... Args>
-	void add_params(unsigned int i, Args... args) {
+	void add_params(unsigned int i, T t, Args... args) {
 		add_params(i, t);
 		add_params(i + 1, args...);
 	}
@@ -192,15 +194,11 @@ static void clear_dir(const string& dir) {
 	FindClose(h);
 }
 
-static void dump_sql() {
-	clear_dir(REPO_DIR);
-
-	// FIXME - also dump procedures etc.
-
-	SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type) FROM sys.objects JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE objects.type='V' OR objects.type='P' ORDER BY schemas.name, objects.name");
-
+static void dump_sql2(SQLQuery& sq) {
 	while (sq.fetch_row()) {
-		string dir = string(REPO_DIR) + sanitize_fn(sq.row(0));
+		string schema = sanitize_fn(sq.row(0));
+		string dir = string(REPO_DIR) + schema;
+		string subdir;
 		string fn;
 		string name = sq.row(1);
 		string def = sq.row(2);
@@ -216,9 +214,13 @@ static void dump_sql() {
 		}
 
 		if (type == "V")
-			dir += "\\views";
+			subdir = "views";
 		else if (type == "P")
-			dir += "\\procedures";
+			subdir = "procedures";
+		else if (type == "FN")
+			subdir = "functions";
+
+		dir += "\\" + subdir;
 
 		if (!CreateDirectoryA(dir.c_str(), NULL)) {
 			auto last_error = GetLastError();
@@ -240,6 +242,48 @@ static void dump_sql() {
 		SetEndOfFile(h);
 
 		CloseHandle(h);
+	}
+}
+
+static void dump_sql3(SQLQuery& sq, string& unixpath, string& def) {
+	if (sq.fetch_row()) {
+		string schema = sanitize_fn(sq.row(0));
+		string dir = string(REPO_DIR) + schema;
+		string subdir;
+		string fn;
+		string name = sq.row(1);
+		string value = sq.row(2);
+		string type = sq.row(3);
+
+		def = value;
+		unixpath = schema;
+
+		if (type == "V")
+			subdir = "views";
+		else if (type == "P")
+			subdir = "procedures";
+		else if (type == "FN")
+			subdir = "functions";
+
+		unixpath += "/" + subdir;
+
+		unixpath += "/" + sanitize_fn(name) + ".sql";
+	}
+}
+
+static void dump_sql(const string& schema, const string& obj, string& unixpath, string& def) {
+	if (obj == "") {
+		string s;
+
+		SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type) FROM sys.objects JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' ORDER BY schemas.name, objects.name");
+
+		clear_dir(REPO_DIR);
+
+		dump_sql2(sq);
+	} else {
+		SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type) FROM sys.objects JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE (objects.type='V' OR objects.type='P' OR objects.type='FN') AND schemas.name=? AND objects.name=?", schema, obj);
+
+		dump_sql3(sq, unixpath, def);
 	}
 }
 
@@ -302,7 +346,7 @@ static void git_remove_dir(git_repository* repo, git_tree* tree, const string& d
 	}
 }
 
-static void update_git() {
+static void update_git(const string& user, const string& schema, const string& obj, const string& unixpath, const string& def) {
 	git_repository* repo = NULL;
 	unsigned int ret;
 
@@ -317,7 +361,7 @@ static void update_git() {
 		git_oid commit_id, tree_id;
 		git_tree* tree;
 
-		if ((ret = git_signature_now(&sig, "Mark Harmstone", "mark.harmstone@boltonft.nhs.uk"))) // FIXME - don't hardcode
+		if ((ret = git_signature_now(&sig, user != "" ? user.c_str() : "Mark Harmstone", "mark.harmstone@boltonft.nhs.uk"))) // FIXME - don't hardcode, and use actual details
 			throw_git_error(ret, "git_signature_now");
 
 		try {
@@ -325,20 +369,6 @@ static void update_git() {
 			git_oid parent_id;
 			git_tree* parent_tree;
 			vector<string> deleted;
-
-			if ((ret = git_repository_index(&index, repo)))
-				throw_git_error(ret, "git_repository_index");
-
-			// loop through saved files and add
-			git_add_dir(index, "", "");
-
-			if ((ret = git_index_write_tree(&tree_id, index)))
-				throw_git_error(ret, "git_index_write_tree");
-
-			git_index_free(index);
-
-			if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
-				throw_git_error(ret, "git_tree_lookup");
 
 			if ((ret = git_reference_name_to_id(&parent_id, repo, "HEAD")))
 				throw_git_error(ret, "git_reference_name_to_id");
@@ -349,17 +379,12 @@ static void update_git() {
 			if ((ret = git_commit_tree(&parent_tree, parent)))
 				throw_git_error(ret, "git_commit_tree");
 
-			// loop through repo and remove anything that's been deleted
-			git_remove_dir(repo, parent_tree, "", "", deleted);
+			if ((ret = git_repository_index(&index, repo)))
+				throw_git_error(ret, "git_repository_index");
 
-			if (deleted.size() > 0) {
-				if ((ret = git_repository_index(&index, repo)))
-					throw_git_error(ret, "git_repository_index");
-
-				for (unsigned int i = 0; i < deleted.size(); i++) {
-					if ((ret = git_index_remove_bypath(index, deleted[i].c_str())))
-						throw_git_error(ret, "git_index_remove_bypath");
-				}
+			if (obj == "") {
+				// loop through saved files and add
+				git_add_dir(index, "", "");
 
 				if ((ret = git_index_write_tree(&tree_id, index)))
 					throw_git_error(ret, "git_index_write_tree");
@@ -368,6 +393,42 @@ static void update_git() {
 
 				if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
 					throw_git_error(ret, "git_tree_lookup");
+
+				// loop through repo and remove anything that's been deleted
+				git_remove_dir(repo, parent_tree, "", "", deleted);
+
+				if (deleted.size() > 0) {
+					if ((ret = git_repository_index(&index, repo)))
+						throw_git_error(ret, "git_repository_index");
+
+					for (unsigned int i = 0; i < deleted.size(); i++) {
+						if ((ret = git_index_remove_bypath(index, deleted[i].c_str())))
+							throw_git_error(ret, "git_index_remove_bypath");
+					}
+
+					if ((ret = git_index_write_tree(&tree_id, index)))
+						throw_git_error(ret, "git_index_write_tree");
+
+					git_index_free(index);
+
+					if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
+						throw_git_error(ret, "git_tree_lookup");
+				}
+			} else {
+				git_oid oid, blob;
+				git_tree_update upd;
+
+				if ((ret = git_blob_create_frombuffer(&blob, repo, def.c_str(), def.length())))
+					throw_git_error(ret, "git_blob_create_frombuffer");
+
+				upd.action = GIT_TREE_UPDATE_UPSERT; // FIXME - deleting
+				upd.id = blob;
+				upd.filemode = GIT_FILEMODE_BLOB;
+				upd.path = unixpath.c_str();
+
+				git_tree_create_updated(&oid, repo, parent_tree, 1, &upd);
+
+				git_tree_lookup(&tree, repo, &oid);
 			}
 
 			try {
@@ -395,8 +456,15 @@ static void update_git() {
 	git_repository_free(repo);
 }
 
-int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+int main(int argc, char** argv) {  
 	HENV henv;
+	string schema, user, obj;
+
+	if (argc >= 4) {
+		user = argv[1];
+		schema = argv[2];
+		obj = argv[3];
+	}
 
 	SQLAllocEnv(&henv);
 	SQLAllocConnect(henv, &hdbc);
@@ -404,14 +472,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	try {
 		try {
 			SQLRETURN rc;
+			string unixpath, def;
 
 			rc = SQLDriverConnectA(hdbc, NULL, (unsigned char*)CONNEXION_STRING, (SQLSMALLINT)strlen(CONNEXION_STRING), NULL, 0, NULL, SQL_DRIVER_NOPROMPT);
 
 			if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
 				throw_sql_error("SQLDriverConnect", SQL_HANDLE_DBC, hdbc);
 
-			dump_sql();
-			update_git();
+			// FIXME - handle deletions
+			dump_sql(schema, obj, unixpath, def);
+			update_git(user, schema, obj, unixpath, def);
 		} catch (const char* s) {
 			MessageBoxA(0, s, "Error", MB_ICONERROR);
 			throw;
