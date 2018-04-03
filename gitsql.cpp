@@ -452,7 +452,7 @@ static void update_git(const string& user, const string& schema, const string& o
 			}
 
 			try {
-				if ((ret = git_commit_create_v(&commit_id, repo, "HEAD", sig, sig, NULL, "Update", tree, 1, parent)))
+				if ((ret = git_commit_create_v(&commit_id, repo, "HEAD", sig, sig, NULL, unixpath == "" ? "Update" : unixpath.c_str(), tree, 1, parent)))
 					throw_git_error(ret, "git_commit_create_v");
 			} catch (...) {
 				git_tree_free(tree);
