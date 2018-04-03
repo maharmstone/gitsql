@@ -256,7 +256,7 @@ static void dump_sql(const string& schema, const string& obj, const string& type
 		dump_sql2(sq);
 	} else {
 		string subdir;
-
+		
 		SQLQuery sq("SELECT sql_modules.definition FROM sys.objects JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE (objects.type='V' OR objects.type='P' OR objects.type='FN') AND schemas.name=? AND objects.name=?", schema, obj);
 
 		if (sq.fetch_row()) {
@@ -503,17 +503,19 @@ int main(int argc, char** argv) {
 			if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
 				throw_sql_error("SQLDriverConnect", SQL_HANDLE_DBC, hdbc);
 
-			// FIXME - handle deletions
 			dump_sql(schema, obj, type, unixpath, def, deleted);
 			update_git(user, schema, obj, unixpath, def, deleted);
 		} catch (const char* s) {
-			MessageBoxA(0, s, "Error", MB_ICONERROR);
+			SQLQuery sq("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", s);
+			//MessageBoxA(0, s, "Error", MB_ICONERROR);
 			throw;
 		} catch (string s) {
-			MessageBoxA(0, s.c_str(), "Error", MB_ICONERROR);
+			SQLQuery sq("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", s);
+			//MessageBoxA(0, s.c_str(), "Error", MB_ICONERROR);
 			throw;
 		} catch (...) {
-			MessageBoxA(0, "Unrecognized exception.", "Error", MB_ICONERROR);
+			SQLQuery sq("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", "Unrecognized exception.");
+			//MessageBoxA(0, "Unrecognized exception.", "Error", MB_ICONERROR);
 			throw;
 		}
 	} catch (...) {
