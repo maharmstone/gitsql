@@ -347,9 +347,30 @@ static void git_remove_dir(git_repository* repo, git_tree* tree, const string& d
 	}
 }
 
-static void update_git(const string& user, const string& schema, const string& obj, const string& unixpath, const string& def, bool filedeleted) {
+// taken from Stack Overflow: https://stackoverflow.com/questions/2896600/how-to-replace-all-occurrences-of-a-character-in-string
+void replace_all(string& source, const string& from, const string& to) {
+	string new_string;
+	new_string.reserve(source.length());
+
+	string::size_type last_pos = 0;
+	string::size_type find_pos;
+
+	while((find_pos = source.find(from, last_pos)) != string::npos) {
+		new_string.append(source, last_pos, find_pos - last_pos);
+		new_string += to;
+		last_pos = find_pos + from.length();
+	}
+
+	new_string += source.substr(last_pos);
+
+	source.swap(new_string);
+}
+
+static void update_git(const string& user, const string& schema, const string& obj, const string& unixpath, string def, bool filedeleted) {
 	git_repository* repo = NULL;
 	unsigned int ret;
+
+	replace_all(def, "\r\n", "\n"); // fix line endings
 
 	git_libgit2_init();
 
