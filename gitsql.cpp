@@ -257,7 +257,7 @@ static void dump_sql(const string& schema, const string& obj, const string& type
 	} else {
 		string subdir;
 		
-		SQLQuery sq("SELECT sql_modules.definition FROM sys.objects JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE (objects.type='V' OR objects.type='P' OR objects.type='FN') AND schemas.name=? AND objects.name=?", schema, obj);
+		SQLQuery sq("SELECT sql_modules.definition FROM sys.objects LEFT JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE (objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U') AND schemas.name=? AND objects.name=?", schema, obj);
 
 		if (sq.fetch_row()) {
 			def = sq.row(0);
@@ -273,16 +273,18 @@ static void dump_sql(const string& schema, const string& obj, const string& type
 			subdir = "procedures";
 		else if (type == "FN")
 			subdir = "functions";
+		else if (type == "U")
+			subdir = "tables";
 
 		unixpath += "/" + subdir;
 		unixpath += "/" + sanitize_fn(obj) + ".sql";
 
-		if (type == "V")
-			subdir = "views";
-		else if (type == "P")
-			subdir = "procedures";
-		else if (type == "FN")
-			subdir = "functions";
+		if (type == "U") {
+			SQLQuery sq2("EXEC dbo.sp_GetDDL ?", "[" + schema + "].[" + obj + "]");
+
+			if (sq2.fetch_row())
+				def = sq2.row(0);
+		}
 	}
 }
 
