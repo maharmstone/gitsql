@@ -366,6 +366,15 @@ void replace_all(string& source, const string& from, const string& to) {
 	source.swap(new_string);
 }
 
+static string upper(string s) {
+	for (auto& c : s) {
+		if (c >= 'a' && c <= 'z')
+			c -= 32;
+	}
+
+	return s;
+}
+
 static void update_git(const string& user, const string& schema, const string& obj, const string& unixpath, string def, bool filedeleted) {
 	git_repository* repo = NULL;
 	unsigned int ret;
@@ -382,8 +391,18 @@ static void update_git(const string& user, const string& schema, const string& o
 		git_index* index;
 		git_oid commit_id, tree_id;
 		git_tree* tree;
+		string gituser = "Mark Harmstone", gitemail = "mark.harmstone@boltonft.nhs.uk";
 
-		if ((ret = git_signature_now(&sig, user != "" ? user.c_str() : "Mark Harmstone", "mark.harmstone@boltonft.nhs.uk"))) // FIXME - don't hardcode, and use actual details
+		if (upper(user.substr(0, 5)) == "XRBH\\") {
+			SQLQuery sq("SELECT givenName+' '+sn, mail FROM AD.ldap WHERE sAMAccountName=?", user.substr(5));
+
+			if (sq.fetch_row()) {
+				gituser = sq.row(0);
+				gitemail = sq.row(1);
+			}
+		}
+
+		if ((ret = git_signature_now(&sig, gituser.c_str(), gitemail.c_str())))
 			throw_git_error(ret, "git_signature_now");
 
 		try {
