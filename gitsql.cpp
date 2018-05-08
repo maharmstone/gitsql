@@ -493,6 +493,24 @@ static void update_git(const string& user, const string& schema, const string& o
 					throw_git_error(ret, "git_tree_lookup");
 			}
 
+			{
+				git_diff* diff;
+				size_t nd;
+
+				if ((ret = git_diff_tree_to_tree(&diff, repo, parent_tree, tree, NULL)))
+					throw_git_error(ret, "git_diff_tree_to_tree");
+
+				nd = git_diff_num_deltas(diff);
+
+				git_diff_free(diff);
+
+				if (nd == 0) { // no changes - avoid doing empty commit
+					git_signature_free(sig);
+					git_repository_free(repo);
+					return;
+				}
+			}
+
 			try {
 				if ((ret = git_commit_create_v(&commit_id, repo, "HEAD", sig, sig, NULL, unixpath == "" ? "Update" : unixpath.c_str(), tree, 1, parent)))
 					throw_git_error(ret, "git_commit_create_v");
