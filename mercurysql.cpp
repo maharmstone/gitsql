@@ -230,7 +230,25 @@ SQLField::SQLField(SQLHStmt& hstmt, unsigned int i) {
 
 		if (len == SQL_NULL_DATA)
 			null = true;
-	} else if (datatype == SQL_BINARY || datatype == SQL_VARBINARY || datatype ==SQL_LONGVARBINARY) {
+	} else if (datatype == SQL_UNICODE_VARCHAR || datatype == SQL_UNICODE_LONGVARCHAR || datatype == SQL_UNICODE_CHAR) {
+		wstring wstr = L" ";
+		SQLRETURN rc;
+
+		do {
+			rc = hstmt.SQLGetData(i + 1, SQL_C_WCHAR, (SQLPOINTER)wstr.c_str(), wstr.length() * sizeof(WCHAR), &len);
+
+			if (rc == SQL_SUCCESS) {
+				if (len == SQL_NULL_DATA) {
+					null = true;
+					str = "";
+				} else if (len > 0)
+					str = utf16_to_utf8(wstr.substr(0, len / sizeof(WCHAR)));
+				else
+					str = "";
+			} else if (rc == SQL_SUCCESS_WITH_INFO)
+				wstr += wstring(len, ' ');
+		} while (rc == SQL_SUCCESS_WITH_INFO);
+	} else {
 		SQLRETURN rc;
 
 		str = "";
@@ -247,25 +265,7 @@ SQLField::SQLField(SQLHStmt& hstmt, unsigned int i) {
 				else
 					str = "";
 			} else if (rc == SQL_SUCCESS_WITH_INFO)
-				str += string(1048576, ' ');
-		} while (rc == SQL_SUCCESS_WITH_INFO);
-	} else {
-		wstring wstr = L" ";
-		SQLRETURN rc;
-
-		do {
-			rc = hstmt.SQLGetData(i + 1, SQL_C_WCHAR, (SQLPOINTER)wstr.c_str(), wstr.length() * sizeof(WCHAR), &len);
-
-			if (rc == SQL_SUCCESS) {
-				if (len == SQL_NULL_DATA) {
-					null = true;
-					str = "";
-				} else if (len > 0)
-					str = utf16_to_utf8(wstr.substr(0, len / sizeof(WCHAR)));
-				else
-					str = "";
-			} else if (rc == SQL_SUCCESS_WITH_INFO)
-				wstr += wstring(1048576, ' ');
+				str += string(len, ' ');
 		} while (rc == SQL_SUCCESS_WITH_INFO);
 	}
 }
