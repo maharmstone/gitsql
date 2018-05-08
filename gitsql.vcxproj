@@ -124,6 +124,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="gitsql.cpp" />
+    <ClCompile Include="mercurysql.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="mercurysql.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

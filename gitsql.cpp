@@ -6,170 +6,32 @@
 #include <git2.h>
 #include <string>
 #include <vector>
+#include "mercurysql.h"
 
 using namespace std;
 
-#define CONNEXION_STRING "DRIVER=SQL Server;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n"
-//#define CONNEXION_STRING "DRIVER=SQL Server Native Client 11.0;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n"
+static const char* connexion_strings[] = {
+	"DRIVER=SQL Server Native Client 11.0;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n;MARS_Connection=Yes",
+	"DRIVER=SQL Server Native Client 10.0;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n;MARS_Connection=Yes",
+	"DRIVER=SQL Server;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n"
+};
+
 #define REPO_DIR "\\\\sys122-n\\Manual Data Files\\devel\\gitrepo\\" // FIXME - move to DB
 
 HDBC hdbc;
 
-static void throw_sql_error(string funcname, SQLSMALLINT handle_type, SQLHANDLE handle) {
-	char state[SQL_SQLSTATE_SIZE + 1];
-	char msg[1000];
-	SQLINTEGER error;
+static void replace_all(string& source, const string& from, const string& to);
 
-	SQLGetDiagRecA(handle_type, handle, 1, (SQLCHAR*)state, &error, (SQLCHAR*)msg, sizeof(msg), NULL);
-
-	throw funcname + " failed: " + msg;
-}
-
-class SQLQuery {
-private:
-	void add_params2(unsigned int i, signed long long t) {
-		signed long long* buf;
-		SQLRETURN rc;
-
-		buf = (signed long long*)malloc(sizeof(t));
-		*buf = t;
-
-		bufs.push_back(buf);
-
-		rc = SQLBindParameter(hstmt, i + 1, SQL_PARAM_INPUT, SQL_C_SBIGINT, SQL_VARCHAR, sizeof(t), 0, (SQLPOINTER)buf, sizeof(t), NULL);
-
-		if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
-			throw_sql_error("SQLBindParameter", SQL_HANDLE_STMT, hstmt);
-	}
-
-	void add_params2(unsigned int i, const string& t) {
-		char* buf;
-		SQLRETURN rc;
-
-		buf = (char*)malloc(t.size() + 1);
-		memcpy(buf, t.c_str(), t.size());
-		buf[t.size()] = 0;
-
-		bufs.push_back(buf);
-
-		rc = SQLBindParameter(hstmt, i + 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, t.size(), 0, (SQLPOINTER)buf, t.size(), NULL);
-
-		if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
-			throw_sql_error("SQLBindParameter", SQL_HANDLE_STMT, hstmt);
-	}
-
-	template<typename T>
-	void add_params(unsigned int i, T t) {
-		add_params2(i, t);
-	}
-
-	template<typename T, typename... Args>
-	void add_params(unsigned int i, T t, Args... args) {
-		add_params(i, t);
-		add_params(i + 1, args...);
-	}
-
-public:
-	SQLQuery(string q) {
-		SQLRETURN rc;
-
-		rc = SQLAllocStmt(hdbc, &hstmt);
-		if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
-			throw_sql_error("SQLAllocStmt", SQL_HANDLE_DBC, hdbc);
-
-		// FIXME - can we simplify if no params?
-
-		rc = SQLPrepare(hstmt, (unsigned char*)q.c_str(), q.length());
-		if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
-			throw_sql_error("SQLPrepare", SQL_HANDLE_STMT, hstmt);
-
-		rc = SQLExecute(hstmt);
-		if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
-			throw_sql_error("SQLExecute", SQL_HANDLE_STMT, hstmt);
-	}
-
-	template<typename... Args>
-	SQLQuery(string q, Args... args) {
-		SQLRETURN rc;
-
-		rc = SQLAllocStmt(hdbc, &hstmt);
-		if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
-			throw_sql_error("SQLAllocStmt", SQL_HANDLE_DBC, hdbc);
-
-		rc = SQLPrepare(hstmt, (unsigned char*)q.c_str(), q.length());
-		if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
-			throw_sql_error("SQLPrepare", SQL_HANDLE_STMT, hstmt);
-
-		add_params(0, args...);
-
-		rc = SQLExecute(hstmt);
-		if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
-			throw_sql_error("SQLExecute", SQL_HANDLE_STMT, hstmt);
-	}
-
-	~SQLQuery() {
-		if (hstmt)
-			SQLFreeStmt(hstmt, SQL_DROP);
-
-		for (unsigned int i = 0; i < bufs.size(); i++) {
-			free(bufs[i]);
-		}
-		bufs.clear();
-	}
-
-	bool fetch_row() {
-		SQLRETURN rc;
-
-		rc = SQLFetch(hstmt);
-
-		if (rc == SQL_NO_DATA)
-			return false;
-		else if (rc == SQL_SUCCESS || rc == SQL_SUCCESS_WITH_INFO)
-			return true;
-
-		throw_sql_error("SQLFetch", SQL_HANDLE_STMT, hstmt);
-
-		return false;
-	}
-
-	string row(unsigned int i) {
-		string s = "                ";
-		SQLRETURN rc;
-		SQLINTEGER len;
-		unsigned int origsize;
-
-		rc = SQLGetData(hstmt, i + 1, SQL_C_CHAR, (SQLPOINTER)s.c_str(), s.size(), &len);
-		if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
-			throw_sql_error("SQLGetData", SQL_HANDLE_STMT, hstmt);
-
-		if (len == -1) // NULL
-			return "";
-
-		if ((unsigned int)len < s.size()) {
-			s = s.substr(0, len);
-			return s;
-		}
-
-		origsize = strlen(s.c_str()); // FIXME - what if first 0 is after end of string?
-		len -= origsize;
-
-		s = s.substr(0, origsize) + string((unsigned int)len, ' ');
-
-		rc = SQLGetData(hstmt, i + 1, SQL_C_CHAR, (SQLPOINTER)&s[origsize], len + 1, &len);
-		if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
-			throw_sql_error("SQLGetData", SQL_HANDLE_STMT, hstmt);
-
-		return s.substr(0, origsize + len);
-	}
-
-	HSTMT hstmt = NULL;
-	vector<void*> bufs;
-};
-
+// strip out characters that NTFS doesn't like
 static string sanitize_fn(const string& fn) {
-	// FIXME - strip out characters that NTFS doesn't like
+	string s;
 
-	return fn;
+	for (auto c : fn) {
+		if (c != '<' && c != '>' && c != ':' && c != '"' && c != '/' && c != '\\' && c != '|' && c != '?' && c != '*')
+			s += c;
+	}
+
+	return s;
 }
 
 static void clear_dir(const string& dir) {
@@ -196,13 +58,13 @@ static void clear_dir(const string& dir) {
 
 static void dump_sql2(SQLQuery& sq) {
 	while (sq.fetch_row()) {
-		string schema = sanitize_fn(sq.row(0));
-		string dir = string(REPO_DIR) + schema;
+		string schema = sq.cols[0];
+		string dir = string(REPO_DIR) + sanitize_fn(schema);
 		string subdir;
 		string fn;
-		string name = sq.row(1);
-		string def = sq.row(2);
-		string type = sq.row(3);
+		string name = sq.cols[1];
+		string def = sq.cols[2];
+		string type = sq.cols[3];
 		HANDLE h;
 		DWORD written;
 
@@ -210,7 +72,7 @@ static void dump_sql2(SQLQuery& sq) {
 			auto last_error = GetLastError();
 
 			if (last_error != ERROR_ALREADY_EXISTS)
-				throw "CreateDirectory returned error " + to_string(last_error);
+				throw runtime_error("CreateDirectory returned error " + to_string(last_error));
 		}
 
 		if (type == "V")
@@ -219,6 +81,19 @@ static void dump_sql2(SQLQuery& sq) {
 			subdir = "procedures";
 		else if (type == "FN")
 			subdir = "functions";
+		else if (type == "U")
+			subdir = "tables";
+
+		if (type == "U") {
+			SQLQuery sq2("EXEC dbo.sp_GetDDL ?", schema + "." + name);
+
+			if (!sq2.fetch_row())
+				throw runtime_error("Error calling dbo.sp_GetDDL for " + schema + "." + name + ".");
+
+			def = sq2.cols[0];
+		}
+
+		replace_all(def, "\r\n", "\n");
 
 		dir += "\\" + subdir;
 
@@ -226,7 +101,7 @@ static void dump_sql2(SQLQuery& sq) {
 			auto last_error = GetLastError();
 
 			if (last_error != ERROR_ALREADY_EXISTS)
-				throw "CreateDirectory returned error " + to_string(last_error);
+				throw runtime_error("CreateDirectory returned error " + to_string(last_error));
 		}
 
 		fn = dir + "\\" + sanitize_fn(name) + ".sql";
@@ -234,10 +109,10 @@ static void dump_sql2(SQLQuery& sq) {
 		h = CreateFileA(fn.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
 		if (h == INVALID_HANDLE_VALUE)
-			throw "CreateFile returned error " + to_string(GetLastError());
+			throw runtime_error("CreateFile returned error " + to_string(GetLastError()));
 
 		if (!WriteFile(h, def.c_str(), def.size(), &written, NULL))
-			throw "WriteFile returned error " + to_string(GetLastError());
+			throw runtime_error("WriteFile returned error " + to_string(GetLastError()));
 
 		SetEndOfFile(h);
 
@@ -249,7 +124,7 @@ static void dump_sql(const string& schema, const string& obj, const string& type
 	if (obj == "") {
 		string s;
 
-		SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type) FROM sys.objects JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' ORDER BY schemas.name, objects.name");
+		SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type) FROM sys.objects LEFT JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
 
 		clear_dir(REPO_DIR);
 
@@ -260,7 +135,7 @@ static void dump_sql(const string& schema, const string& obj, const string& type
 		SQLQuery sq("SELECT sql_modules.definition FROM sys.objects LEFT JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE (objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U') AND schemas.name=? AND objects.name=?", schema, obj);
 
 		if (sq.fetch_row()) {
-			def = sq.row(0);
+			def = sq.cols[0];
 			deleted = false;
 		} else
 			deleted = true;
@@ -283,7 +158,7 @@ static void dump_sql(const string& schema, const string& obj, const string& type
 			SQLQuery sq2("EXEC dbo.sp_GetDDL ?", "[" + schema + "].[" + obj + "]");
 
 			if (sq2.fetch_row())
-				def = sq2.row(0);
+				def = sq2.cols[0];
 		}
 	}
 }
@@ -292,9 +167,9 @@ static void throw_git_error(int error, const char* func) {
 	const git_error *lg2err;
 
 	if ((lg2err = giterr_last()) && lg2err->message)
-		throw string(func) + " failed (" + lg2err->message + ").";
+		throw runtime_error(string(func) + " failed (" + lg2err->message + ").");
 
-	throw string(func) + " failed.";
+	throw runtime_error(string(func) + " failed.");
 }
 
 static void git_add_dir(git_index* index, const string& dir, const string& unixpath) {
@@ -348,7 +223,7 @@ static void git_remove_dir(git_repository* repo, git_tree* tree, const string& d
 }
 
 // taken from Stack Overflow: https://stackoverflow.com/questions/2896600/how-to-replace-all-occurrences-of-a-character-in-string
-void replace_all(string& source, const string& from, const string& to) {
+static void replace_all(string& source, const string& from, const string& to) {
 	string new_string;
 	new_string.reserve(source.length());
 
@@ -393,12 +268,12 @@ static void update_git(const string& user, const string& schema, const string& o
 		git_tree* tree;
 		string gituser = "Mark Harmstone", gitemail = "mark.harmstone@boltonft.nhs.uk";
 
-		if (upper(user.substr(0, 5)) == "XRBH\\") {
+		if (upper(user.substr(0, 5)) == "XRBH\\") { // FIXME - fetch this directly from AD without relying on DB
 			SQLQuery sq("SELECT givenName+' '+sn, mail FROM AD.ldap WHERE sAMAccountName=?", user.substr(5));
 
 			if (sq.fetch_row()) {
-				gituser = sq.row(0);
-				gitemail = sq.row(1);
+				gituser = sq.cols[0];
+				gitemail = sq.cols[1];
 			}
 		}
 
@@ -556,22 +431,25 @@ int main(int argc, char** argv) {
 		try {
 			SQLRETURN rc;
 			string unixpath, def;
-			bool deleted;
+			bool deleted, success = false;
 
-			rc = SQLDriverConnectA(hdbc, NULL, (unsigned char*)CONNEXION_STRING, (SQLSMALLINT)strlen(CONNEXION_STRING), NULL, 0, NULL, SQL_DRIVER_NOPROMPT);
+			for (const auto& cs : connexion_strings) {
+				rc = SQLDriverConnectA(hdbc, NULL, (unsigned char*)cs, (SQLSMALLINT)strlen(cs), NULL, 0, NULL, SQL_DRIVER_NOPROMPT);
 
-			if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
+				if (rc == SQL_SUCCESS || rc == SQL_SUCCESS_WITH_INFO) {
+					success = true;
+					break;
+				}
+			}
+
+			if (!success)
 				throw_sql_error("SQLDriverConnect", SQL_HANDLE_DBC, hdbc);
 
 			dump_sql(schema, obj, type, unixpath, def, deleted);
 			update_git(user, schema, obj, unixpath, def, deleted);
-		} catch (const char* s) {
-			SQLQuery sq("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", s);
+		} catch (const exception& e) {
+			SQLQuery sq("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", e.what());
 			//MessageBoxA(0, s, "Error", MB_ICONERROR);
-			throw;
-		} catch (string s) {
-			SQLQuery sq("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", s);
-			//MessageBoxA(0, s.c_str(), "Error", MB_ICONERROR);
 			throw;
 		} catch (...) {
 			SQLQuery sq("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", "Unrecognized exception.");
