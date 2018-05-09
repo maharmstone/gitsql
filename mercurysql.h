@@ -38,6 +38,7 @@ public:
 	operator signed long long() const;
 	operator NullableString() const;
 	operator double() const;
+	bool operator==(const string& s) const;
 
 	// FIXME - other operators (timestamp, ...?)
 

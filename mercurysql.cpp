@@ -3,6 +3,8 @@
 
 extern HDBC hdbc;
 
+#define SQL_VARIANT (-150) // not in header files??
+
 static wstring utf8_to_utf16(const string& s) {
 	int len;
 	wstring wstr;
@@ -230,7 +232,7 @@ SQLField::SQLField(SQLHStmt& hstmt, unsigned int i) {
 
 		if (len == SQL_NULL_DATA)
 			null = true;
-	} else if (datatype == SQL_UNICODE_VARCHAR || datatype == SQL_UNICODE_LONGVARCHAR || datatype == SQL_UNICODE_CHAR) {
+	} else if (datatype == SQL_UNICODE_VARCHAR || datatype == SQL_UNICODE_LONGVARCHAR || datatype == SQL_UNICODE_CHAR || datatype == SQL_VARIANT) {
 		wstring wstr = L" ";
 		SQLRETURN rc;
 
@@ -308,6 +310,10 @@ SQLField::operator double() const {
 		return d;
 	else
 		return stod(str);
+}
+
+bool SQLField::operator==(const string& s) const {
+	return (string)(*this) == s;
 }
 
 SQLQuery::SQLQuery(const string& q) : hstmt(hdbc) {

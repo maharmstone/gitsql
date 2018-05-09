@@ -56,6 +56,56 @@ static void clear_dir(const string& dir) {
 	FindClose(h);
 }
 
+static string sql_escape(string s) {
+	replace_all(s, "'", "''");
+
+	return s;
+}
+
+static string dump_table(const string& schema, const string& table) {
+	string obj = "[" + schema + "].[" + table + "]"; // FIXME - do we need to escape?
+	string cols, s;
+
+	SQLQuery sq("SELECT * FROM " + obj);
+
+	while (sq.fetch_row()) {
+		string vals;
+
+		if (cols == "") {
+			for (const auto& col : sq.cols) {
+				if (cols != "")
+					cols += ", ";
+
+				cols += "[" + col.name + "]";
+			}
+		}
+
+		s += "INSERT INTO " + obj + "(" + cols + ") VALUES(";
+
+		// FIXME - "Unicode" columns might break here: MS stores them as UTF-16, and we use UTF-8
+
+		for (const auto& col : sq.cols) {
+			if (vals != "")
+				vals += ", ";
+
+			if (col.null)
+				vals += "NULL";
+			else if (col.datatype == SQL_INTEGER || col.datatype == SQL_BIT || col.datatype == SQL_NUMERIC || col.datatype == SQL_BIGINT)
+				vals += to_string((signed long long)col);
+			else if (col.datatype == SQL_FLOAT || col.datatype == SQL_DOUBLE)
+				vals += to_string((double)col);
+			else
+				vals += "'" + sql_escape(string(col)) + "'";
+		}
+
+		s += vals;
+
+		s += ");\n";
+	}
+
+	return s;
+}
+
 static void dump_sql2(SQLQuery& sq) {
 	while (sq.fetch_row()) {
 		string schema = sq.cols[0];
@@ -65,6 +115,7 @@ static void dump_sql2(SQLQuery& sq) {
 		string name = sq.cols[1];
 		string def = sq.cols[2];
 		string type = sq.cols[3];
+		bool fulldump = sq.cols[4] == "true";
 		HANDLE h;
 		DWORD written;
 
@@ -91,6 +142,9 @@ static void dump_sql2(SQLQuery& sq) {
 				throw runtime_error("Error calling dbo.sp_GetDDL for " + schema + "." + name + ".");
 
 			def = sq2.cols[0];
+
+			if (fulldump)
+				def += "\n" + dump_table(schema, name);
 		}
 
 		replace_all(def, "\r\n", "\n");
@@ -124,18 +178,20 @@ static void dump_sql(const string& schema, const string& obj, const string& type
 	if (obj == "") {
 		string s;
 
-		SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type) FROM sys.objects LEFT JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
+		SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM sys.objects LEFT JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
 
 		clear_dir(REPO_DIR);
 
 		dump_sql2(sq);
 	} else {
 		string subdir;
+		bool fulldump;
 		
-		SQLQuery sq("SELECT sql_modules.definition FROM sys.objects LEFT JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id WHERE (objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U') AND schemas.name=? AND objects.name=?", schema, obj);
+		SQLQuery sq("SELECT sql_modules.definition, extended_properties.value FROM sys.objects LEFT JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE (objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U') AND schemas.name=? AND objects.name=?", schema, obj);
 
 		if (sq.fetch_row()) {
 			def = sq.cols[0];
+			fulldump = sq.cols[1] == "true";
 			deleted = false;
 		} else
 			deleted = true;
@@ -159,6 +215,9 @@ static void dump_sql(const string& schema, const string& obj, const string& type
 
 			if (sq2.fetch_row())
 				def = sq2.cols[0];
+
+			if (fulldump)
+				def += "\n" + dump_table(schema, obj);
 		}
 	}
 }
