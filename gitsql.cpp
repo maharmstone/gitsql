@@ -499,7 +499,11 @@ public:
 
 	~lockfile() {
 		if (h != INVALID_HANDLE_VALUE) {
-			UnlockFileEx(h, 0, 1, 0, NULL);
+			OVERLAPPED ol;
+
+			memset(&ol, 0, sizeof(ol));
+			UnlockFileEx(h, 0, 1, 0, &ol);
+
 			CloseHandle(h);
 		}
 	}
