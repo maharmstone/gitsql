@@ -470,6 +470,38 @@ static void update_git(const string& user, const string& schema, const string& o
 	git_repository_free(repo);
 }
 
+class lockfile {
+public:
+	lockfile() {
+		OVERLAPPED ol;
+
+		h = CreateFileA("lockfile", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+		if (h == INVALID_HANDLE_VALUE)
+			throw runtime_error("Could not create or open lockfile.");
+
+		if (GetLastError() == 0) { // file created
+			DWORD written;
+
+			WriteFile(h, "lockfile", 8, &written, nullptr);
+		}
+
+		memset(&ol, 0, sizeof(ol));
+
+		LockFileEx(h, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &ol);
+	}
+
+	~lockfile() {
+		if (h != INVALID_HANDLE_VALUE) {
+			UnlockFileEx(h, 0, 1, 0, NULL);
+			CloseHandle(h);
+		}
+	}
+
+private:
+	HANDLE h = INVALID_HANDLE_VALUE;
+};
+
 int main(int argc, char** argv) {  
 	HENV henv;
 	string schema, user, type, obj;
@@ -481,10 +513,9 @@ int main(int argc, char** argv) {
 		obj = argv[4];
 	}
 
-	// FIXME - log errors in DB rather than by MessageBox
-
 	SQLAllocEnv(&henv);
 	SQLAllocConnect(henv, &hdbc);
+
 
 	try {
 		try {
@@ -504,8 +535,12 @@ int main(int argc, char** argv) {
 			if (!success)
 				throw_sql_error("SQLDriverConnect", SQL_HANDLE_DBC, hdbc);
 
-			dump_sql(schema, obj, type, unixpath, def, deleted);
-			update_git(user, schema, obj, unixpath, def, deleted);
+			{
+				lockfile lf;
+
+				dump_sql(schema, obj, type, unixpath, def, deleted);
+				update_git(user, schema, obj, unixpath, def, deleted);
+			}
 		} catch (const exception& e) {
 			SQLQuery sq("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", e.what());
 			//MessageBoxA(0, s, "Error", MB_ICONERROR);
