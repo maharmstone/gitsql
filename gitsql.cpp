@@ -337,7 +337,7 @@ static void update_git(const string& user, const string& schema, const string& o
 		}
 
 		if (gituser == "")
-			gituser = "Mark Harmstone";
+			gituser = user == "" ? "Mark Harmstone" : user;
 
 		if (gitemail == "")
 			gitemail = "mark.harmstone@boltonft.nhs.uk";
