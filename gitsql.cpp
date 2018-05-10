@@ -325,7 +325,7 @@ static void update_git(const string& user, const string& schema, const string& o
 		git_index* index;
 		git_oid commit_id, tree_id;
 		git_tree* tree;
-		string gituser = "Mark Harmstone", gitemail = "mark.harmstone@boltonft.nhs.uk";
+		string gituser, gitemail;
 
 		if (upper(user.substr(0, 5)) == "XRBH\\") { // FIXME - fetch this directly from AD without relying on DB
 			SQLQuery sq("SELECT givenName+' '+sn, mail FROM AD.ldap WHERE sAMAccountName=?", user.substr(5));
@@ -335,6 +335,12 @@ static void update_git(const string& user, const string& schema, const string& o
 				gitemail = sq.cols[1];
 			}
 		}
+
+		if (gituser == "")
+			gituser = "Mark Harmstone";
+
+		if (gitemail == "")
+			gitemail = "mark.harmstone@boltonft.nhs.uk";
 
 		if ((ret = git_signature_now(&sig, gituser.c_str(), gitemail.c_str())))
 			throw_git_error(ret, "git_signature_now");
