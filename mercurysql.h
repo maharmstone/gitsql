@@ -114,6 +114,55 @@ public:
 	vector<SQLField> cols;
 };
 
+template<class T>
+class nullable {
+public:
+	nullable(const SQLField& f) {
+		if (f.null)
+			null = true;
+		else
+			t = (T)f;
+	}
+
+	nullable(const T& s) {
+		t = s;
+		null = false;
+	}
+
+	nullable(nullptr_t) {
+		null = true;
+	}
+
+	nullable() {
+		null = true;
+	}
+
+	operator T() const {
+		if (null)
+			return T();
+		else
+			return t;
+	}
+
+	bool is_null() const {
+		return null;
+	}
+
+private:
+	T t;
+	bool null = false;
+};
+
+class sql_transaction {
+public:
+	sql_transaction();
+	~sql_transaction();
+	void commit();
+
+private:
+	bool committed = false;
+};
+
 class mercury_exception : public runtime_error {
 public:
 	mercury_exception(const string& arg, const char* file, int line) : runtime_error(arg) {
@@ -165,5 +214,5 @@ private:
 void _throw_sql_error(const string& funcname, SQLSMALLINT handle_type, SQLHANDLE handle, const char* filename, unsigned int line);
 #define throw_sql_error(funcname, handle_type, handle) _throw_sql_error(funcname, handle_type, handle, __FILE__, __LINE__)
 
-void run_sql(string s);
+#define run_sql(s, ...) { SQLQuery sq(s, ##__VA_ARGS__); }
 void SQLInsert(const string& tablename, const vector<string>& np, const vector<vector<NullableString>>& vp);

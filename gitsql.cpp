@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include "mercurysql.h"
+#include "git.h"
 
 using namespace std;
 
@@ -16,7 +17,8 @@ static const char* connexion_strings[] = {
 	"DRIVER=SQL Server;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n"
 };
 
-#define REPO_DIR "\\\\sys122-n\\Manual Data Files\\devel\\gitrepo\\" // FIXME - move to DB
+//#define REPO_DIR "\\\\sys122-n\\Manual Data Files\\devel\\gitrepo\\" // FIXME - move to DB
+#define REPO_DIR "\\\\sys283\\gitrepo\\" // FIXME - move to DB
 
 HDBC hdbc;
 
@@ -476,6 +478,43 @@ static void update_git(const string& user, const string& schema, const string& o
 	git_repository_free(repo);
 }
 
+static void flush_git() {
+	git_libgit2_init();
+
+	GitRepo repo(REPO_DIR);
+
+	while (true) {
+		sql_transaction trans;
+
+		SQLQuery sq("SELECT TOP 1 Git.id, COALESCE(LDAP.givenName+' '+LDAP.sn, LDAP.name, Git.username), COALESCE(LDAP.mail,'business.intelligence@boltonft.nhs.uk'), Git.description, DATEDIFF(SECOND,'19700101',Git.dt), Git.offset FROM Restricted.Git JOIN AD.ldap ON LEFT(Git.username,5)='XRBH\\' AND ldap.sAMAccountName=RIGHT(Git.username,LEN(Git.username)-5) ORDER BY Git.id");
+
+		if (sq.fetch_row()) {
+			unsigned int commit = (signed long long)sq.cols[0];
+			string name = sq.cols[1];
+			string email = sq.cols[2];
+			string description = sq.cols[3];
+			unsigned int dt = (signed long long)sq.cols[4];
+			int offset = (signed long long)sq.cols[5];
+			vector<git_file> files;
+
+			SQLQuery sq2("SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit);
+
+			while (sq2.fetch_row()) {
+				files.push_back({ sq2.cols[0], sq2.cols[1] });
+			}
+
+			if (files.size() > 0)
+				update_git(repo, name, email, description, dt, offset, files);
+
+			run_sql("DELETE FROM Restricted.Git WHERE id=?", (signed long long)sq.cols[0]);
+			run_sql("DELETE FROM Restricted.GitFiles WHERE id=?", (signed long long)sq.cols[0]);
+		} else
+			break;
+
+		trans.commit();
+	}
+}
+
 class lockfile {
 public:
 	lockfile() {
@@ -526,7 +565,6 @@ int main(int argc, char** argv) {
 	SQLAllocEnv(&henv);
 	SQLAllocConnect(henv, &hdbc);
 
-
 	try {
 		try {
 			SQLRETURN rc;
@@ -548,8 +586,12 @@ int main(int argc, char** argv) {
 			{
 				lockfile lf;
 
-				dump_sql(schema, obj, type, unixpath, def, deleted);
-				update_git(user, schema, obj, unixpath, def, deleted);
+				if (argc >= 1 && !strcmp(argv[1], "flush"))
+					flush_git();
+				else {
+					dump_sql(schema, obj, type, unixpath, def, deleted);
+					update_git(user, schema, obj, unixpath, def, deleted);
+				}
 			}
 		} catch (const exception& e) {
 			SQLQuery sq("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", e.what());

@@ -385,13 +385,6 @@ void _throw_sql_error(const string& funcname, SQLSMALLINT handle_type, SQLHANDLE
 	throw mercury_exception(funcname + " failed: " + msg, filename, line);
 }
 
-void run_sql(string s) {
-	SQLHStmt hstmt(hdbc);
-
-	hstmt.SQLPrepare(s);
-	hstmt.SQLExecute();
-}
-
 void SQLInsert(const string& tablename, const vector<string>& np, const vector<vector<NullableString>>& vp) {
 	string nps, vps, q;
 	SQLHStmt hstmt(hdbc);
@@ -466,4 +459,36 @@ void SQLInsert(const string& tablename, const vector<string>& np, const vector<v
 			} while (rc == SQL_NEED_DATA);
 		}
 	}
+}
+
+sql_transaction::sql_transaction() {
+	SQLRETURN rc = SQLSetConnectAttr(hdbc, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER)false, 0);
+
+	if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
+		throw_sql_error("SQLSetConnectAttr", SQL_HANDLE_DBC, hdbc);
+}
+
+sql_transaction::~sql_transaction() {
+	SQLRETURN rc;
+
+	if (!committed) {
+		rc = SQLEndTran(SQL_HANDLE_DBC, hdbc, SQL_ROLLBACK);
+
+		if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
+			throw_sql_error("SQLEndTran", SQL_HANDLE_DBC, hdbc);
+	}
+
+	rc = SQLSetConnectAttr(hdbc, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER)true, 0);
+
+	if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
+		throw_sql_error("SQLSetConnectAttr", SQL_HANDLE_DBC, hdbc);
+}
+
+void sql_transaction::commit() {
+	SQLRETURN rc = SQLEndTran(SQL_HANDLE_DBC, hdbc, SQL_COMMIT);
+
+	if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
+		throw_sql_error("SQLEndTran", SQL_HANDLE_DBC, hdbc);
+
+	committed = true;
 }

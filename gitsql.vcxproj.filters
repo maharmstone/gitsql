@@ -21,9 +21,15 @@
     <ClCompile Include="mercurysql.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="git.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="mercurysql.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="git.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
