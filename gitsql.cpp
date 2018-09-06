@@ -36,7 +36,7 @@ static string sanitize_fn(const string& fn) {
 	return s;
 }
 
-static void clear_dir(const string& dir) {
+static void clear_dir(const string& dir, bool top) {
 	HANDLE h;
 	WIN32_FIND_DATAA fff;
 
@@ -46,9 +46,12 @@ static void clear_dir(const string& dir) {
 		return;
 
 	do {
-		if (fff.cFileName[0] != '.') {
+		if (!strcmp(fff.cFileName, ".") || !strcmp(fff.cFileName, ".."))
+			continue;
+
+		if (!top || fff.cFileName[0] != '.') {
 			if (fff.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-				clear_dir(dir + fff.cFileName + "\\");
+				clear_dir(dir + fff.cFileName + "\\", false);
 				RemoveDirectoryA((dir + fff.cFileName).c_str());
 			} else
 				DeleteFileA((dir + fff.cFileName).c_str());
@@ -108,7 +111,13 @@ static string dump_table(const string& schema, const string& table) {
 	return s;
 }
 
-static void dump_sql2(SQLQuery& sq) {
+static void dump_sql() {
+	string s;
+
+	SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM sys.objects LEFT JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
+
+	clear_dir(REPO_DIR, true);
+
 	while (sq.fetch_row()) {
 		string schema = sq.cols[0];
 		string dir = string(REPO_DIR) + sanitize_fn(schema);
@@ -173,54 +182,6 @@ static void dump_sql2(SQLQuery& sq) {
 		SetEndOfFile(h);
 
 		CloseHandle(h);
-	}
-}
-
-static void dump_sql(const string& schema, const string& obj, const string& type, string& unixpath, string& def, bool& deleted) {
-	if (obj == "") {
-		string s;
-
-		SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM sys.objects LEFT JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
-
-		clear_dir(REPO_DIR);
-
-		dump_sql2(sq);
-	} else {
-		string subdir;
-		bool fulldump;
-		
-		SQLQuery sq("SELECT sql_modules.definition, extended_properties.value FROM sys.objects LEFT JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE (objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U') AND schemas.name=? AND objects.name=?", schema, obj);
-
-		if (sq.fetch_row()) {
-			def = sq.cols[0];
-			fulldump = sq.cols[1] == "true";
-			deleted = false;
-		} else
-			deleted = true;
-
-		unixpath = sanitize_fn(schema);
-
-		if (type == "V")
-			subdir = "views";
-		else if (type == "P")
-			subdir = "procedures";
-		else if (type == "FN")
-			subdir = "functions";
-		else if (type == "U")
-			subdir = "tables";
-
-		unixpath += "/" + subdir;
-		unixpath += "/" + sanitize_fn(obj) + ".sql";
-
-		if (type == "U") {
-			SQLQuery sq2("EXEC dbo.sp_GetDDL ?", "[" + schema + "].[" + obj + "]");
-
-			if (sq2.fetch_row())
-				def = sq2.cols[0];
-
-			if (fulldump)
-				def += "\n" + dump_table(schema, obj);
-		}
 	}
 }
 
@@ -311,11 +272,9 @@ static string upper(string s) {
 	return s;
 }
 
-static void update_git(const string& user, const string& schema, const string& obj, const string& unixpath, string def, bool filedeleted) {
+static void do_update_git() {
 	git_repository* repo = NULL;
 	unsigned int ret;
-
-	replace_all(def, "\r\n", "\n"); // fix line endings
 
 	git_libgit2_init();
 
@@ -329,20 +288,8 @@ static void update_git(const string& user, const string& schema, const string& o
 		git_tree* tree;
 		string gituser, gitemail;
 
-		if (upper(user.substr(0, 5)) == "XRBH\\") { // FIXME - fetch this directly from AD without relying on DB
-			SQLQuery sq("SELECT givenName+' '+sn, mail FROM AD.ldap WHERE sAMAccountName=?", user.substr(5));
-
-			if (sq.fetch_row()) {
-				gituser = sq.cols[0];
-				gitemail = sq.cols[1];
-			}
-		}
-
-		if (gituser == "")
-			gituser = user == "" ? "Mark Harmstone" : user;
-
-		if (gitemail == "")
-			gitemail = "mark.harmstone@boltonft.nhs.uk";
+		gituser = "System";
+		gitemail = "business.intelligence@boltonft.nhs.uk";
 
 		if ((ret = git_signature_now(&sig, gituser.c_str(), gitemail.c_str())))
 			throw_git_error(ret, "git_signature_now");
@@ -365,9 +312,28 @@ static void update_git(const string& user, const string& schema, const string& o
 			if ((ret = git_repository_index(&index, repo)))
 				throw_git_error(ret, "git_repository_index");
 
-			if (obj == "") {
-				// loop through saved files and add
-				git_add_dir(index, "", "");
+			// loop through saved files and add
+			git_add_dir(index, "", "");
+
+			if ((ret = git_index_write_tree(&tree_id, index)))
+				throw_git_error(ret, "git_index_write_tree");
+
+			git_index_free(index);
+
+			if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
+				throw_git_error(ret, "git_tree_lookup");
+
+			// loop through repo and remove anything that's been deleted
+			git_remove_dir(repo, parent_tree, "", "", deleted);
+
+			if (deleted.size() > 0) {
+				if ((ret = git_repository_index(&index, repo)))
+					throw_git_error(ret, "git_repository_index");
+
+				for (unsigned int i = 0; i < deleted.size(); i++) {
+					if ((ret = git_index_remove_bypath(index, deleted[i].c_str())))
+						throw_git_error(ret, "git_index_remove_bypath");
+				}
 
 				if ((ret = git_index_write_tree(&tree_id, index)))
 					throw_git_error(ret, "git_index_write_tree");
@@ -375,63 +341,6 @@ static void update_git(const string& user, const string& schema, const string& o
 				git_index_free(index);
 
 				if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
-					throw_git_error(ret, "git_tree_lookup");
-
-				// loop through repo and remove anything that's been deleted
-				git_remove_dir(repo, parent_tree, "", "", deleted);
-
-				if (deleted.size() > 0) {
-					if ((ret = git_repository_index(&index, repo)))
-						throw_git_error(ret, "git_repository_index");
-
-					for (unsigned int i = 0; i < deleted.size(); i++) {
-						if ((ret = git_index_remove_bypath(index, deleted[i].c_str())))
-							throw_git_error(ret, "git_index_remove_bypath");
-					}
-
-					if ((ret = git_index_write_tree(&tree_id, index)))
-						throw_git_error(ret, "git_index_write_tree");
-
-					git_index_free(index);
-
-					if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
-						throw_git_error(ret, "git_tree_lookup");
-				}
-			} else {
-				git_oid oid, blob;
-				git_tree_update upd;
-
-				if (!filedeleted) {
-					if ((ret = git_blob_create_frombuffer(&blob, repo, def.c_str(), def.length())))
-						throw_git_error(ret, "git_blob_create_frombuffer");
-				} else {
-					git_tree_entry* gte;
-					unsigned int ret;
-
-					// don't delete file if not there to begin with
-					ret = git_tree_entry_bypath(&gte, parent_tree, unixpath.c_str());
-
-					if (ret == GIT_ENOTFOUND)
-						return;
-					else if (ret)
-						throw_git_error(ret, "git_tree_entry_bypath");
-
-					git_tree_entry_free(gte);
-				}
-
-				upd.action = filedeleted ? GIT_TREE_UPDATE_REMOVE : GIT_TREE_UPDATE_UPSERT;
-
-				if (!filedeleted) {
-					upd.id = blob;
-					upd.filemode = GIT_FILEMODE_BLOB;
-				}
-
-				upd.path = unixpath.c_str();
-
-				if ((ret = git_tree_create_updated(&oid, repo, parent_tree, 1, &upd)))
-					throw_git_error(ret, "git_tree_create_updated");
-
-				if ((ret = git_tree_lookup(&tree, repo, &oid)))
 					throw_git_error(ret, "git_tree_lookup");
 			}
 
@@ -454,7 +363,7 @@ static void update_git(const string& user, const string& schema, const string& o
 			}
 
 			try {
-				if ((ret = git_commit_create_v(&commit_id, repo, "HEAD", sig, sig, NULL, unixpath == "" ? "Update" : unixpath.c_str(), tree, 1, parent)))
+				if ((ret = git_commit_create_v(&commit_id, repo, "HEAD", sig, sig, NULL, "Update", tree, 1, parent)))
 					throw_git_error(ret, "git_commit_create_v");
 			} catch (...) {
 				git_tree_free(tree);
@@ -553,14 +462,10 @@ private:
 
 int main(int argc, char** argv) {  
 	HENV henv;
-	string schema, user, type, obj;
+	string cmd;
 
-	if (argc >= 5) {
-		user = argv[1];
-		type = argv[2];
-		schema = argv[3];
-		obj = argv[4];
-	}
+	if (argc > 1)
+		cmd = argv[1];
 
 	SQLAllocEnv(&henv);
 	SQLAllocConnect(henv, &hdbc);
@@ -586,11 +491,11 @@ int main(int argc, char** argv) {
 			{
 				lockfile lf;
 
-				if (argc >= 1 && !strcmp(argv[1], "flush"))
+				if (cmd == "flush")
 					flush_git();
 				else {
-					dump_sql(schema, obj, type, unixpath, def, deleted);
-					update_git(user, schema, obj, unixpath, def, deleted);
+					dump_sql();
+					do_update_git();
 				}
 			}
 		} catch (const exception& e) {
