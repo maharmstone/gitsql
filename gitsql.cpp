@@ -215,26 +215,19 @@ static void git_add_dir(GitIndex& index, const string& dir, const string& unixpa
 	FindClose(h);
 }
 
-static void git_remove_dir(git_repository* repo, git_tree* tree, const string& dir, const string& unixdir, vector<string>& deleted) {
-	size_t c = git_tree_entrycount(tree);
+static void git_remove_dir(GitRepo& repo, GitTree& tree, const string& dir, const string& unixdir, vector<string>& deleted) {
+	size_t c = tree.entrycount();
 
 	for (size_t i = 0; i < c; i++) {
-		const git_tree_entry* gte = git_tree_entry_byindex(tree, i);
+		GitTreeEntry gte(tree, i);
+		string name = gte.name();
 
-		if (gte) {
-			string name = git_tree_entry_name(gte);
+		if (!PathFileExistsA((REPO_DIR + dir + name).c_str()))
+			deleted.push_back(unixdir + name);
+		else if (gte.type() == GIT_OBJ_TREE) {
+			GitTree subtree(repo, gte);
 
-			if (!PathFileExistsA((REPO_DIR + dir + name).c_str()))
-				deleted.push_back(unixdir + name);
-			else if (git_tree_entry_type(gte) == GIT_OBJ_TREE) {
-				git_tree* subtree;
-				unsigned int ret;
-
-				if ((ret = git_tree_entry_to_object((git_object**)&subtree, repo, gte)))
-					throw_git_error(ret, "git_tree_entry_to_object");
-
-				git_remove_dir(repo, subtree, dir + name + "\\", unixdir + name + "/", deleted);
-			}
+			git_remove_dir(repo, subtree, dir + name + "\\", unixdir + name + "/", deleted);
 		}
 	}
 }
@@ -291,33 +284,17 @@ static void do_update_git() {
 		// loop through saved files and add
 		git_add_dir(index, "", "");
 
+		// loop through repo and remove anything that's been deleted
+		git_remove_dir(repo, parent_tree, "", "", deleted);
+
+		for (const auto& d : deleted) {
+			index.remove_bypath(d);
+		}
+
 		index.write_tree(&tree_id);
 	}
 
 	GitTree tree(repo, tree_id);
-
-	/*// loop through repo and remove anything that's been deleted
-	git_remove_dir(repo, parent_tree, "", "", deleted);
-
-	if (deleted.size() > 0) {
-		unsigned int ret;
-		
-		if ((ret = git_repository_index(&index, repo)))
-			throw_git_error(ret, "git_repository_index");
-
-		for (unsigned int i = 0; i < deleted.size(); i++) {
-			if ((ret = git_index_remove_bypath(index, deleted[i].c_str())))
-				throw_git_error(ret, "git_index_remove_bypath");
-		}
-
-		if ((ret = git_index_write_tree(&tree_id, index)))
-			throw_git_error(ret, "git_index_write_tree");
-
-		git_index_free(index);
-
-		if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
-			throw_git_error(ret, "git_tree_lookup");
-	}*/
 
 	{
 		GitDiff diff(repo, parent_tree, tree, nullptr);
@@ -418,7 +395,7 @@ int main(int argc, char** argv) {
 		try {
 			SQLRETURN rc;
 			string unixpath, def;
-			bool deleted, success = false;
+			bool success = false;
 
 			for (const auto& cs : connexion_strings) {
 				rc = SQLDriverConnectA(hdbc, NULL, (unsigned char*)cs, (SQLSMALLINT)strlen(cs), NULL, 0, NULL, SQL_DRIVER_NOPROMPT);
@@ -438,7 +415,7 @@ int main(int argc, char** argv) {
 				if (cmd == "flush")
 					flush_git();
 				else {
-					//dump_sql();
+					dump_sql();
 					do_update_git();
 				}
 			}

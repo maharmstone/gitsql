@@ -45,6 +45,13 @@ GitTree::GitTree(const GitRepo& repo, const git_oid& oid) {
 		throw_git_error(ret, "git_tree_lookup");
 }
 
+GitTree::GitTree(const GitRepo& repo, const GitTreeEntry& gte) {
+	unsigned int ret;
+
+	if ((ret = git_tree_entry_to_object((git_object**)&tree, repo, gte)))
+		throw_git_error(ret, "git_tree_entry_to_object");
+}
+
 GitTree::~GitTree() {
 	git_tree_free(tree);
 }
@@ -187,4 +194,30 @@ void GitIndex::add_bypath(const string& fn) {
 
 	if ((ret = git_index_add_bypath(index, fn.c_str())))
 		throw_git_error(ret, "git_index_add_bypath");
+}
+
+void GitIndex::remove_bypath(const string& fn) {
+	unsigned int ret;
+
+	if ((ret = git_index_remove_bypath(index, fn.c_str())))
+		throw_git_error(ret, "git_index_remove_bypath");
+}
+
+size_t GitTree::entrycount() {
+	return git_tree_entrycount(tree);
+}
+
+GitTreeEntry::GitTreeEntry(GitTree& tree, size_t idx) {
+	gte = git_tree_entry_byindex(tree, idx);
+
+	if (!gte)
+		throw runtime_error("git_tree_entry_byindex returned NULL.");
+}
+
+string GitTreeEntry::name() {
+	return git_tree_entry_name(gte);
+}
+
+git_otype GitTreeEntry::type() {
+	return git_tree_entry_type(gte);
 }

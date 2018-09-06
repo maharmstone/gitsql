@@ -10,6 +10,7 @@ using namespace std;
 class GitRepo;
 class GitDiff;
 class GitIndex;
+class GitTreeEntry;
 
 class GitSignature {
 	friend class GitRepo;
@@ -30,11 +31,14 @@ private:
 class GitTree {
 	friend class GitRepo;
 	friend class GitDiff;
+	friend class GitTreeEntry;
 
 public:
 	GitTree(const git_commit* commit);
 	GitTree(const GitRepo& repo, const git_oid& oid);
+	GitTree(const GitRepo& repo, const GitTreeEntry& gte);
 	~GitTree();
+	size_t entrycount();
 
 private:
 	git_tree* tree;
@@ -82,9 +86,26 @@ public:
 	~GitIndex();
 	void write_tree(git_oid* oid);
 	void add_bypath(const string& fn);
+	void remove_bypath(const string& fn);
 
 private:
 	git_index* index = nullptr;
+};
+
+class GitTreeEntry {
+public:
+	GitTreeEntry(GitTree& tree, size_t idx);
+	string name();
+	git_otype type();
+
+	friend class GitTree;
+
+private:
+	const git_tree_entry* gte;
+
+	operator const git_tree_entry*() const {
+		return gte;
+	}
 };
 
 typedef struct {
