@@ -222,13 +222,14 @@ static void git_remove_dir(GitRepo& repo, GitTree& tree, const string& dir, cons
 		GitTreeEntry gte(tree, i);
 		string name = gte.name();
 
-		if (!PathFileExistsA((REPO_DIR + dir + name).c_str()))
-			deleted.push_back(unixdir + name);
-		else if (gte.type() == GIT_OBJ_TREE) {
+		if (gte.type() == GIT_OBJ_TREE) {
 			GitTree subtree(repo, gte);
 
 			git_remove_dir(repo, subtree, dir + name + "\\", unixdir + name + "/", deleted);
 		}
+
+		if (!PathFileExistsA((REPO_DIR + dir + name).c_str()))
+			deleted.push_back(unixdir + name);
 	}
 }
 
@@ -415,7 +416,7 @@ int main(int argc, char** argv) {
 				if (cmd == "flush")
 					flush_git();
 				else {
-					dump_sql();
+					//dump_sql();
 					do_update_git();
 				}
 			}
