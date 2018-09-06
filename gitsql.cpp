@@ -416,7 +416,7 @@ int main(int argc, char** argv) {
 				if (cmd == "flush")
 					flush_git();
 				else {
-					//dump_sql();
+					dump_sql();
 					do_update_git();
 				}
 			}
