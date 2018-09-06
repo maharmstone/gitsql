@@ -163,3 +163,28 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 
 	repo.commit_create("HEAD", sig, sig, description, tree, parent);
 }
+
+GitIndex::GitIndex(const GitRepo& repo) {
+	unsigned int ret;
+
+	if ((ret = git_repository_index(&index, repo)))
+		throw_git_error(ret, "git_repository_index");
+}
+
+GitIndex::~GitIndex() {
+	git_index_free(index);
+}
+
+void GitIndex::write_tree(git_oid* oid) {
+	unsigned int ret;
+
+	if ((ret = git_index_write_tree(oid, index)))
+		throw_git_error(ret, "git_index_write_tree");
+}
+
+void GitIndex::add_bypath(const string& fn) {
+	unsigned int ret;
+
+	if ((ret = git_index_add_bypath(index, fn.c_str())))
+		throw_git_error(ret, "git_index_add_bypath");
+}

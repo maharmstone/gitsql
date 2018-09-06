@@ -194,7 +194,7 @@ static void throw_git_error(int error, const char* func) {
 	throw runtime_error(string(func) + " failed.");
 }
 
-static void git_add_dir(git_index* index, const string& dir, const string& unixpath) {
+static void git_add_dir(GitIndex& index, const string& dir, const string& unixpath) {
 	HANDLE h;
 	WIN32_FIND_DATAA fff;
 
@@ -207,18 +207,13 @@ static void git_add_dir(git_index* index, const string& dir, const string& unixp
 		if (fff.cFileName[0] != '.') {
 			if (fff.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 				git_add_dir(index, dir + fff.cFileName + "\\", unixpath + fff.cFileName + "/");
-			else {
-				unsigned int ret;
-
-				if ((ret = git_index_add_bypath(index, (unixpath + fff.cFileName).c_str())))
-					throw_git_error(ret, "git_index_add_bypath");
-			}
+			else
+				index.add_bypath(unixpath + fff.cFileName);
 		}
 	} while (FindNextFileA(h, &fff));
 
 	FindClose(h);
 }
-
 
 static void git_remove_dir(git_repository* repo, git_tree* tree, const string& dir, const string& unixdir, vector<string>& deleted) {
 	size_t c = git_tree_entrycount(tree);
@@ -273,118 +268,67 @@ static string upper(string s) {
 }
 
 static void do_update_git() {
-	git_repository* repo = NULL;
-	unsigned int ret;
+	git_oid tree_id;
+	git_commit* parent;
+	git_oid parent_id;
+	vector<string> deleted;
 
 	git_libgit2_init();
 
-	if ((ret = git_repository_open(&repo, REPO_DIR)))
-		throw_git_error(ret, "git_repository_open");
+	GitRepo repo(REPO_DIR);
 
-	try {
-		git_signature* sig;
-		git_index* index;
-		git_oid commit_id, tree_id;
-		git_tree* tree;
-		string gituser, gitemail;
+	GitSignature sig("System", "business.intelligence@boltonft.nhs.uk");
 
-		gituser = "System";
-		gitemail = "business.intelligence@boltonft.nhs.uk";
+	repo.reference_name_to_id(&parent_id, "HEAD");
 
-		if ((ret = git_signature_now(&sig, gituser.c_str(), gitemail.c_str())))
-			throw_git_error(ret, "git_signature_now");
+	repo.commit_lookup(&parent, &parent_id);
 
-		try {
-			git_commit* parent;
-			git_oid parent_id;
-			git_tree* parent_tree;
-			vector<string> deleted;
+	GitTree parent_tree(parent);
 
-			if ((ret = git_reference_name_to_id(&parent_id, repo, "HEAD")))
-				throw_git_error(ret, "git_reference_name_to_id");
+	{
+		GitIndex index(repo);
 
-			if ((ret = git_commit_lookup(&parent, repo, &parent_id)))
-				throw_git_error(ret, "git_commit_lookup");
+		// loop through saved files and add
+		git_add_dir(index, "", "");
 
-			if ((ret = git_commit_tree(&parent_tree, parent)))
-				throw_git_error(ret, "git_commit_tree");
-
-			if ((ret = git_repository_index(&index, repo)))
-				throw_git_error(ret, "git_repository_index");
-
-			// loop through saved files and add
-			git_add_dir(index, "", "");
-
-			if ((ret = git_index_write_tree(&tree_id, index)))
-				throw_git_error(ret, "git_index_write_tree");
-
-			git_index_free(index);
-
-			if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
-				throw_git_error(ret, "git_tree_lookup");
-
-			// loop through repo and remove anything that's been deleted
-			git_remove_dir(repo, parent_tree, "", "", deleted);
-
-			if (deleted.size() > 0) {
-				if ((ret = git_repository_index(&index, repo)))
-					throw_git_error(ret, "git_repository_index");
-
-				for (unsigned int i = 0; i < deleted.size(); i++) {
-					if ((ret = git_index_remove_bypath(index, deleted[i].c_str())))
-						throw_git_error(ret, "git_index_remove_bypath");
-				}
-
-				if ((ret = git_index_write_tree(&tree_id, index)))
-					throw_git_error(ret, "git_index_write_tree");
-
-				git_index_free(index);
-
-				if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
-					throw_git_error(ret, "git_tree_lookup");
-			}
-
-			{
-				git_diff* diff;
-				size_t nd;
-
-				if ((ret = git_diff_tree_to_tree(&diff, repo, parent_tree, tree, NULL)))
-					throw_git_error(ret, "git_diff_tree_to_tree");
-
-				nd = git_diff_num_deltas(diff);
-
-				git_diff_free(diff);
-
-				if (nd == 0) { // no changes - avoid doing empty commit
-					git_signature_free(sig);
-					git_repository_free(repo);
-					return;
-				}
-			}
-
-			try {
-				if ((ret = git_commit_create_v(&commit_id, repo, "HEAD", sig, sig, NULL, "Update", tree, 1, parent)))
-					throw_git_error(ret, "git_commit_create_v");
-			} catch (...) {
-				git_tree_free(tree);
-				throw;
-			}
-
-			git_tree_free(tree);
-
-			// FIXME - push to remote server?
-		} catch (...) {
-			git_signature_free(sig);
-			throw;
-		}
-
-		git_signature_free(sig);
-	} catch (...) {
-		git_repository_free(repo);
-		throw;
+		index.write_tree(&tree_id);
 	}
 
-	git_repository_free(repo);
+	GitTree tree(repo, tree_id);
+
+	/*// loop through repo and remove anything that's been deleted
+	git_remove_dir(repo, parent_tree, "", "", deleted);
+
+	if (deleted.size() > 0) {
+		unsigned int ret;
+		
+		if ((ret = git_repository_index(&index, repo)))
+			throw_git_error(ret, "git_repository_index");
+
+		for (unsigned int i = 0; i < deleted.size(); i++) {
+			if ((ret = git_index_remove_bypath(index, deleted[i].c_str())))
+				throw_git_error(ret, "git_index_remove_bypath");
+		}
+
+		if ((ret = git_index_write_tree(&tree_id, index)))
+			throw_git_error(ret, "git_index_write_tree");
+
+		git_index_free(index);
+
+		if ((ret = git_tree_lookup(&tree, repo, &tree_id)))
+			throw_git_error(ret, "git_tree_lookup");
+	}*/
+
+	{
+		GitDiff diff(repo, parent_tree, tree, nullptr);
+
+		if (diff.num_deltas() == 0) // no changes - avoid doing empty commit
+			return;
+	}
+
+	repo.commit_create("HEAD", sig, sig, "Update", tree, parent);
+
+	// FIXME - push to remote server?
 }
 
 static void flush_git() {
@@ -494,7 +438,7 @@ int main(int argc, char** argv) {
 				if (cmd == "flush")
 					flush_git();
 				else {
-					dump_sql();
+					//dump_sql();
 					do_update_git();
 				}
 			}

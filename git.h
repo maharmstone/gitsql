@@ -9,6 +9,7 @@ using namespace std;
 
 class GitRepo;
 class GitDiff;
+class GitIndex;
 
 class GitSignature {
 	friend class GitRepo;
@@ -56,6 +57,7 @@ private:
 class GitRepo {
 	friend GitTree;
 	friend GitDiff;
+	friend GitIndex;
 
 public:
 	GitRepo(const string& dir);
@@ -72,6 +74,17 @@ private:
 	operator git_repository*() const {
 		return repo;
 	}
+};
+
+class GitIndex {
+public:
+	GitIndex(const GitRepo& repo);
+	~GitIndex();
+	void write_tree(git_oid* oid);
+	void add_bypath(const string& fn);
+
+private:
+	git_index* index = nullptr;
 };
 
 typedef struct {
