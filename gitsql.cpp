@@ -6,6 +6,7 @@
 #include <git2.h>
 #include <string>
 #include <vector>
+#include <map>
 #include "mercurysql.h"
 #include "git.h"
 
@@ -16,9 +17,6 @@ static const char* connexion_strings[] = {
 	"DRIVER=SQL Server Native Client 10.0;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n;MARS_Connection=Yes",
 	"DRIVER=SQL Server;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n"
 };
-
-//#define REPO_DIR "\\\\sys122-n\\Manual Data Files\\devel\\gitrepo\\" // FIXME - move to DB
-const string repo_dir = "\\\\sys283\\gitrepo\\"; // FIXME - move to DB
 
 HDBC hdbc;
 
@@ -111,7 +109,7 @@ static string dump_table(const string& schema, const string& table) {
 	return s;
 }
 
-static void dump_sql() {
+static void dump_sql(const string& repo_dir) {
 	string s;
 
 	SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM sys.objects LEFT JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
@@ -198,7 +196,7 @@ static void git_add_dir(GitIndex& index, const string& dir, const string& unixpa
 	HANDLE h;
 	WIN32_FIND_DATAA fff;
 
-	h = FindFirstFileA((repo_dir + dir + "*").c_str(), &fff);
+	h = FindFirstFileA((dir + "*").c_str(), &fff);
 
 	if (h == INVALID_HANDLE_VALUE)
 		return;
@@ -228,7 +226,7 @@ static void git_remove_dir(GitRepo& repo, GitTree& tree, const string& dir, cons
 			git_remove_dir(repo, subtree, dir + name + "\\", unixdir + name + "/", deleted);
 		}
 
-		if (!PathFileExistsA((repo_dir + dir + name).c_str()))
+		if (!PathFileExistsA((dir + name).c_str()))
 			deleted.push_back(unixdir + name);
 	}
 }
@@ -261,7 +259,7 @@ static string upper(string s) {
 	return s;
 }
 
-static void do_update_git() {
+static void do_update_git(const string& repo_dir) {
 	git_oid tree_id;
 	git_commit* parent;
 	git_oid parent_id;
@@ -283,10 +281,10 @@ static void do_update_git() {
 		GitIndex index(repo);
 
 		// loop through saved files and add
-		git_add_dir(index, "", "");
+		git_add_dir(index, repo_dir, "");
 
 		// loop through repo and remove anything that's been deleted
-		git_remove_dir(repo, parent_tree, "", "", deleted);
+		git_remove_dir(repo, parent_tree, repo_dir, "", deleted);
 
 		for (const auto& d : deleted) {
 			index.remove_bypath(d);
@@ -310,39 +308,54 @@ static void do_update_git() {
 }
 
 static void flush_git() {
+	map<unsigned int, string> repos;
+
 	git_libgit2_init();
 
-	GitRepo repo(repo_dir);
+	{
+		SQLQuery sq("SELECT Git.repo, GitRepo.dir FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
 
-	while (true) {
-		sql_transaction trans;
+		while (sq.fetch_row()) {
+			repos[(unsigned int)sq.cols[0]] = sq.cols[1];
+		}
 
-		SQLQuery sq("SELECT TOP 1 Git.id, COALESCE(LDAP.givenName+' '+LDAP.sn, LDAP.name, Git.username), COALESCE(LDAP.mail,'business.intelligence@boltonft.nhs.uk'), Git.description, DATEDIFF(SECOND,'19700101',Git.dt), Git.offset FROM Restricted.Git LEFT JOIN AD.ldap ON LEFT(Git.username,5)='XRBH\\' AND ldap.sAMAccountName=RIGHT(Git.username,LEN(Git.username)-5) ORDER BY Git.id");
+		if (repos.size() == 0)
+			return;
+	}
 
-		if (sq.fetch_row()) {
-			unsigned int commit = (signed long long)sq.cols[0];
-			string name = sq.cols[1];
-			string email = sq.cols[2];
-			string description = sq.cols[3];
-			unsigned int dt = (signed long long)sq.cols[4];
-			int offset = (signed long long)sq.cols[5];
-			vector<git_file> files;
+	for (const auto& r : repos) {
+		GitRepo repo(r.second);
 
-			SQLQuery sq2("SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit);
+		while (true) {
+			sql_transaction trans;
 
-			while (sq2.fetch_row()) {
-				files.push_back({ sq2.cols[0], sq2.cols[1] });
-			}
+			SQLQuery sq("SELECT TOP 1 Git.id, COALESCE(LDAP.givenName+' '+LDAP.sn, LDAP.name, Git.username), COALESCE(LDAP.mail,'business.intelligence@boltonft.nhs.uk'), Git.description, DATEDIFF(SECOND,'19700101',Git.dt), Git.offset FROM Restricted.Git LEFT JOIN AD.ldap ON LEFT(Git.username,5)='XRBH\\' AND ldap.sAMAccountName=RIGHT(Git.username,LEN(Git.username)-5) WHERE Git.repo=? ORDER BY Git.id", r.first);
 
-			if (files.size() > 0)
-				update_git(repo, name, email, description, dt, offset, files);
+			if (sq.fetch_row()) {
+				unsigned int commit = (signed long long)sq.cols[0];
+				string name = sq.cols[1];
+				string email = sq.cols[2];
+				string description = sq.cols[3];
+				unsigned int dt = (signed long long)sq.cols[4];
+				int offset = (signed long long)sq.cols[5];
+				vector<git_file> files;
 
-			run_sql("DELETE FROM Restricted.Git WHERE id=?", (signed long long)sq.cols[0]);
-			run_sql("DELETE FROM Restricted.GitFiles WHERE id=?", (signed long long)sq.cols[0]);
-		} else
-			break;
+				SQLQuery sq2("SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit);
 
-		trans.commit();
+				while (sq2.fetch_row()) {
+					files.push_back({ sq2.cols[0], sq2.cols[1] });
+				}
+
+				if (files.size() > 0)
+					update_git(repo, name, email, description, dt, offset, files);
+
+				run_sql("DELETE FROM Restricted.Git WHERE id=?", (signed long long)sq.cols[0]);
+				run_sql("DELETE FROM Restricted.GitFiles WHERE id=?", (signed long long)sq.cols[0]);
+			} else
+				break;
+
+			trans.commit();
+		}
 	}
 }
 
@@ -416,8 +429,15 @@ int main(int argc, char** argv) {
 				if (cmd == "flush")
 					flush_git();
 				else {
-					dump_sql();
-					do_update_git();
+					SQLQuery sq("SELECT dir FROM Restricted.GitRepo WHERE id=?", stoul(cmd));
+
+					if (!sq.fetch_row())
+						throw runtime_error("Could not find Git repository " + to_string(stoul(cmd)) + ".");
+
+					string repo_dir = sq.cols[0];
+
+					dump_sql(repo_dir);
+					do_update_git(repo_dir);
 				}
 			}
 		} catch (const exception& e) {

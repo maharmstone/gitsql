@@ -301,6 +301,10 @@ SQLField::operator signed long long() const {
 		return strtoll(str.c_str(), NULL, 10);
 }
 
+SQLField::operator unsigned int() const {
+	return (unsigned int)operator signed long long();
+}
+
 SQLField::operator double() const {
 	if (datatype == SQL_INTEGER || datatype == SQL_BIT || datatype == SQL_NUMERIC || datatype == SQL_BIGINT)
 		return (double)val;

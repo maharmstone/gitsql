@@ -35,9 +35,10 @@ class SQLField {
 public:
 	SQLField(SQLHStmt& hstmt, unsigned int i);
 	operator string() const;
-	operator signed long long() const;
+	explicit operator signed long long() const;
+	explicit operator unsigned int() const;
 	operator NullableString() const;
-	operator double() const;
+	explicit operator double() const;
 	bool operator==(const string& s) const;
 
 	// FIXME - other operators (timestamp, ...?)
