@@ -135,7 +135,7 @@ static void dump_sql(const string& repo_dir, const string& db) {
 			auto last_error = GetLastError();
 
 			if (last_error != ERROR_ALREADY_EXISTS)
-				throw runtime_error("CreateDirectory returned error " + to_string(last_error));
+				throw runtime_error("CreateDirectory for " + dir + " returned error " + to_string(last_error));
 		}
 
 		if (type == "V")
@@ -167,7 +167,7 @@ static void dump_sql(const string& repo_dir, const string& db) {
 			auto last_error = GetLastError();
 
 			if (last_error != ERROR_ALREADY_EXISTS)
-				throw runtime_error("CreateDirectory returned error " + to_string(last_error));
+				throw runtime_error("CreateDirectory for " + dir + " returned error " + to_string(last_error));
 		}
 
 		fn = dir + "\\" + sanitize_fn(name) + ".sql";
