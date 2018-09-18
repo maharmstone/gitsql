@@ -18,7 +18,7 @@ static const char* connexion_strings[] = {
 };
 
 //#define REPO_DIR "\\\\sys122-n\\Manual Data Files\\devel\\gitrepo\\" // FIXME - move to DB
-#define REPO_DIR "\\\\sys283\\gitrepo\\" // FIXME - move to DB
+const string repo_dir = "\\\\sys283\\gitrepo\\"; // FIXME - move to DB
 
 HDBC hdbc;
 
@@ -116,11 +116,11 @@ static void dump_sql() {
 
 	SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM sys.objects LEFT JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
 
-	clear_dir(REPO_DIR, true);
+	clear_dir(repo_dir, true);
 
 	while (sq.fetch_row()) {
 		string schema = sq.cols[0];
-		string dir = string(REPO_DIR) + sanitize_fn(schema);
+		string dir = repo_dir + sanitize_fn(schema);
 		string subdir;
 		string fn;
 		string name = sq.cols[1];
@@ -198,7 +198,7 @@ static void git_add_dir(GitIndex& index, const string& dir, const string& unixpa
 	HANDLE h;
 	WIN32_FIND_DATAA fff;
 
-	h = FindFirstFileA((REPO_DIR + dir + "*").c_str(), &fff);
+	h = FindFirstFileA((repo_dir + dir + "*").c_str(), &fff);
 
 	if (h == INVALID_HANDLE_VALUE)
 		return;
@@ -228,7 +228,7 @@ static void git_remove_dir(GitRepo& repo, GitTree& tree, const string& dir, cons
 			git_remove_dir(repo, subtree, dir + name + "\\", unixdir + name + "/", deleted);
 		}
 
-		if (!PathFileExistsA((REPO_DIR + dir + name).c_str()))
+		if (!PathFileExistsA((repo_dir + dir + name).c_str()))
 			deleted.push_back(unixdir + name);
 	}
 }
@@ -269,7 +269,7 @@ static void do_update_git() {
 
 	git_libgit2_init();
 
-	GitRepo repo(REPO_DIR);
+	GitRepo repo(repo_dir);
 
 	GitSignature sig("System", "business.intelligence@boltonft.nhs.uk");
 
@@ -312,7 +312,7 @@ static void do_update_git() {
 static void flush_git() {
 	git_libgit2_init();
 
-	GitRepo repo(REPO_DIR);
+	GitRepo repo(repo_dir);
 
 	while (true) {
 		sql_transaction trans;
