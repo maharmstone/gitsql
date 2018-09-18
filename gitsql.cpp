@@ -109,10 +109,13 @@ static string dump_table(const string& schema, const string& table) {
 	return s;
 }
 
-static void dump_sql(const string& repo_dir) {
-	string s;
+static void dump_sql(const string& repo_dir, const string& db) {
+	string s, dbs;
 
-	SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM sys.objects LEFT JOIN sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
+	if (db != "")
+		dbs = db + ".";
+
+	SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM " + dbs + "sys.objects LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN " + dbs + "sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN " + dbs + "sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
 
 	clear_dir(repo_dir, true);
 
@@ -429,14 +432,15 @@ int main(int argc, char** argv) {
 				if (cmd == "flush")
 					flush_git();
 				else {
-					SQLQuery sq("SELECT dir FROM Restricted.GitRepo WHERE id=?", stoul(cmd));
+					SQLQuery sq("SELECT dir, db FROM Restricted.GitRepo WHERE id=?", stoul(cmd));
 
 					if (!sq.fetch_row())
 						throw runtime_error("Could not find Git repository " + to_string(stoul(cmd)) + ".");
 
 					string repo_dir = sq.cols[0];
+					string db = sq.cols[1];
 
-					dump_sql(repo_dir);
+					dump_sql(repo_dir, db);
 					do_update_git(repo_dir);
 				}
 			}
