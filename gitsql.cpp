@@ -148,10 +148,10 @@ static void dump_sql(const string& repo_dir, const string& db) {
 			subdir = "tables";
 
 		if (type == "U") {
-			SQLQuery sq2("SELECT CONVERT(VARBINARY(MAX), dbo.func_GetDDL(?))", schema + "." + name);
+			SQLQuery sq2("SELECT CONVERT(VARBINARY(MAX), " + dbs + "dbo.func_GetDDL(?))",  schema + "." + name);
 
 			if (!sq2.fetch_row())
-				throw runtime_error("Error calling dbo.func_GetDDL for " + schema + "." + name + ".");
+				throw runtime_error("Error calling dbo.func_GetDDL for " + dbs + schema + "." + name + ".");
 
 			def = sq2.cols[0];
 
