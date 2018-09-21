@@ -87,6 +87,7 @@ public:
 	void write_tree(git_oid* oid);
 	void add_bypath(const string& fn);
 	void remove_bypath(const string& fn);
+	void clear();
 
 private:
 	git_index* index = nullptr;

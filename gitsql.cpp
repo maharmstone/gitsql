@@ -283,6 +283,8 @@ static void do_update_git(const string& repo_dir) {
 	{
 		GitIndex index(repo);
 
+		index.clear();
+
 		// loop through saved files and add
 		git_add_dir(index, repo_dir, "");
 

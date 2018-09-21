@@ -203,6 +203,13 @@ void GitIndex::remove_bypath(const string& fn) {
 		throw_git_error(ret, "git_index_remove_bypath");
 }
 
+void GitIndex::clear() {
+	unsigned int ret;
+
+	if ((ret = git_index_clear(index)))
+		throw_git_error(ret, "git_index_clear");
+}
+
 size_t GitTree::entrycount() {
 	return git_tree_entrycount(tree);
 }
