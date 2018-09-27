@@ -161,6 +161,8 @@ static void dump_sql(const string& repo_dir, const string& db) {
 
 		replace_all(def, "\r\n", "\n");
 
+		def += "\n";
+
 		dir += "\\" + subdir;
 
 		if (!CreateDirectoryA(dir.c_str(), NULL)) {
