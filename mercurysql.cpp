@@ -204,8 +204,8 @@ SQLRETURN SQLHStmt::SQLDescribeCol(SQLUSMALLINT ColumnNumber, SQLCHAR* ColumnNam
 
 SQLField::SQLField(SQLHStmt& hstmt, unsigned int i) {
 	SQLSMALLINT namelen;
-	SQLUINTEGER colsize;
-	SQLINTEGER len;
+	SQLULEN colsize;
+	SQLLEN len;
 
 	hstmt.SQLDescribeCol(i + 1, NULL, 0, &namelen, &datatype, &colsize, &digits, &nullable);
 
@@ -356,7 +356,7 @@ unsigned int SQLQuery::num_cols() {
 
 string SQLQuery::col_name(unsigned int i) {
 	SQLSMALLINT namelen, datatype, digits, nullable;
-	SQLUINTEGER colsize;
+	SQLULEN colsize;
 
 	hstmt.SQLDescribeCol(i + 1, NULL, 0, &namelen, &datatype, &colsize, &digits, &nullable);
 
@@ -372,7 +372,7 @@ string SQLQuery::col_name(unsigned int i) {
 
 SQLSMALLINT SQLQuery::col_type(unsigned int i) {
 	SQLSMALLINT namelen, datatype, digits, nullable;
-	SQLUINTEGER colsize;
+	SQLULEN colsize;
 
 	hstmt.SQLDescribeCol(i + 1, NULL, 0, &namelen, &datatype, &colsize, &digits, &nullable);
 
