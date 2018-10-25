@@ -39,6 +39,7 @@ public:
 	GitTree(const GitRepo& repo, const GitTreeEntry& gte);
 	~GitTree();
 	size_t entrycount();
+	bool entry_bypath(git_tree_entry** out, const string& path);
 
 private:
 	git_tree* tree;

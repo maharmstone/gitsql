@@ -56,6 +56,15 @@ GitTree::~GitTree() {
 	git_tree_free(tree);
 }
 
+bool GitTree::entry_bypath(git_tree_entry** out, const string& path) {
+	int ret = git_tree_entry_bypath(out, tree, path.c_str());
+
+	if (ret != 0 && ret != GIT_ENOTFOUND)
+		throw_git_error(ret, "git_tree_entry_bypath");
+
+	return ret == 0;
+}
+
 GitRepo::GitRepo(const string& dir) {
 	unsigned int ret;
 
@@ -141,20 +150,34 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 
 	{
 		git_tree_update* upd = new git_tree_update[files.size()];
+		unsigned int nu = 0;
 
 		for (unsigned int i = 0; i < files.size(); i++) {
-			if (files[i].data.is_null())
-				upd[i].action = GIT_TREE_UPDATE_REMOVE;
-			else {
-				upd[i].action = GIT_TREE_UPDATE_UPSERT;
-				upd[i].id = repo.blob_create_frombuffer(files[i].data);
+			if (files[i].data.is_null()) {
+				git_tree_entry* out;
+
+				if (!parent_tree.entry_bypath(&out, files[i].filename))
+					continue;
+				
+				git_tree_entry_free(out);
+
+				upd[nu].action = GIT_TREE_UPDATE_REMOVE;
+			} else {
+				upd[nu].action = GIT_TREE_UPDATE_UPSERT;
+				upd[nu].id = repo.blob_create_frombuffer(files[i].data);
 			}
 
-			upd[i].filemode = GIT_FILEMODE_BLOB;
-			upd[i].path = files[i].filename.c_str();
+			upd[nu].filemode = GIT_FILEMODE_BLOB;
+			upd[nu].path = files[i].filename.c_str();
+			nu++;
 		}
 
-		oid = repo.tree_create_updated(parent_tree, files.size(), upd);
+		if (nu == 0) {
+			delete[] upd;
+			return;
+		}
+
+		oid = repo.tree_create_updated(parent_tree, nu, upd);
 
 		delete[] upd;
 	}
