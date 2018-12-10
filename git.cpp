@@ -251,3 +251,25 @@ string GitTreeEntry::name() {
 git_otype GitTreeEntry::type() {
 	return git_tree_entry_type(gte);
 }
+
+GitTree::GitTree(const GitRepo& repo, const string& rev) {
+	unsigned int ret;
+
+	if ((ret = git_revparse_single((git_object**)&tree, repo, rev.c_str())))
+		throw_git_error(ret, "git_revparse_single");
+}
+
+GitBlob::GitBlob(const GitTree& tree, const string& path) {
+	unsigned int ret;
+
+	if ((ret = git_object_lookup_bypath(&obj, (git_object*)(git_tree*)tree, path.c_str(), GIT_OBJ_BLOB)))
+		throw_git_error(ret, "git_object_lookup_bypath");
+}
+
+GitBlob::~GitBlob() {
+	git_object_free(obj);
+}
+
+GitBlob::operator string() const {
+	return string((char*)git_blob_rawcontent((git_blob*)obj), git_blob_rawsize((git_blob*)obj));
+}

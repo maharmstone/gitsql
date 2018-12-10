@@ -32,10 +32,12 @@ class GitTree {
 	friend class GitRepo;
 	friend class GitDiff;
 	friend class GitTreeEntry;
+	friend class GitBlob;
 
 public:
 	GitTree(const git_commit* commit);
 	GitTree(const GitRepo& repo, const git_oid& oid);
+	GitTree(const GitRepo& repo, const string& rev);
 	GitTree(const GitRepo& repo, const GitTreeEntry& gte);
 	~GitTree();
 	size_t entrycount();
@@ -108,6 +110,16 @@ private:
 	operator const git_tree_entry*() const {
 		return gte;
 	}
+};
+
+class GitBlob {
+public:
+	GitBlob(const GitTree& tree, const string& path);
+	~GitBlob();
+	operator string() const;
+
+private:
+	git_object* obj;
 };
 
 typedef struct {
