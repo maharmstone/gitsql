@@ -336,7 +336,7 @@ static void flush_git() {
 		while (true) {
 			sql_transaction trans;
 
-			SQLQuery sq("SELECT TOP 1 Git.id, COALESCE(LDAP.givenName+' '+LDAP.sn, LDAP.name, Git.username), COALESCE(LDAP.mail,'business.intelligence@boltonft.nhs.uk'), Git.description, DATEDIFF(SECOND,'19700101',Git.dt), Git.offset FROM Restricted.Git LEFT JOIN AD.ldap ON LEFT(Git.username,5)='XRBH\\' AND ldap.sAMAccountName=RIGHT(Git.username,LEN(Git.username)-5) WHERE Git.repo=? ORDER BY Git.id", r.first);
+			SQLQuery sq("SELECT TOP 1 Git.id, COALESCE(LDAP.givenName+' '+LDAP.sn, LDAP.name, Git.username), COALESCE(LDAP.mail,'business.intelligence@boltonft.nhs.uk'), Git.description, DATEDIFF(SECOND,'19700101',Git.dt), Git.offset FROM Restricted.Git LEFT JOIN AD.ldap ON LEFT(Git.username,5)='XRBH\\' AND ldap.sAMAccountName=RIGHT(Git.username,CASE WHEN LEN(Git.username)>=5 THEN LEN(Git.username)-5 END) WHERE Git.repo=? ORDER BY Git.id", r.first);
 
 			if (sq.fetch_row()) {
 				unsigned int commit = (signed long long)sq.cols[0];
