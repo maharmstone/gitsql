@@ -12,12 +12,6 @@
 
 using namespace std;
 
-static const char* connexion_strings[] = {
-	"DRIVER=SQL Server Native Client 11.0;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n;MARS_Connection=Yes",
-	"DRIVER=SQL Server Native Client 10.0;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n;MARS_Connection=Yes",
-	"DRIVER=SQL Server;SERVER=sys122-n;UID=Minerva_Apps;PWD=Inf0rmati0n"
-};
-
 HDBC hdbc;
 
 static void replace_all(string& source, const string& from, const string& to);
@@ -404,10 +398,15 @@ private:
 
 int main(int argc, char** argv) {  
 	HENV henv;
-	string cmd;
+	string connexion_string, cmd;
 
-	if (argc > 1)
-		cmd = argv[1];
+	if (argc < 2)
+		return 1;
+
+	connexion_string = argv[1];
+
+	if (argc > 2)
+		cmd = argv[2];
 
 	SQLAllocEnv(&henv);
 	SQLAllocConnect(henv, &hdbc);
@@ -416,18 +415,10 @@ int main(int argc, char** argv) {
 		try {
 			SQLRETURN rc;
 			string unixpath, def;
-			bool success = false;
 
-			for (const auto& cs : connexion_strings) {
-				rc = SQLDriverConnectA(hdbc, NULL, (unsigned char*)cs, (SQLSMALLINT)strlen(cs), NULL, 0, NULL, SQL_DRIVER_NOPROMPT);
+			rc = SQLDriverConnectA(hdbc, NULL, (SQLCHAR*)connexion_string.c_str(), (SQLSMALLINT)connexion_string.length(), NULL, 0, NULL, SQL_DRIVER_NOPROMPT);
 
-				if (rc == SQL_SUCCESS || rc == SQL_SUCCESS_WITH_INFO) {
-					success = true;
-					break;
-				}
-			}
-
-			if (!success)
+			if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
 				throw_sql_error("SQLDriverConnect", SQL_HANDLE_DBC, hdbc);
 
 			{
