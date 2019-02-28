@@ -398,7 +398,7 @@ private:
 
 int main(int argc, char** argv) {  
 	HENV henv;
-	string connexion_string, cmd;
+	string connexion_string, cmd, repo_dir, db;
 
 	if (argc < 2)
 		return 1;
@@ -407,6 +407,9 @@ int main(int argc, char** argv) {
 
 	if (argc > 2)
 		cmd = argv[2];
+
+	if (cmd != "flush" && argc < 4)
+		return 1;
 
 	SQLAllocEnv(&henv);
 	SQLAllocConnect(henv, &hdbc);
@@ -427,13 +430,8 @@ int main(int argc, char** argv) {
 				if (cmd == "flush")
 					flush_git();
 				else {
-					SQLQuery sq("SELECT dir, db FROM Restricted.GitRepo WHERE id=?", stoul(cmd));
-
-					if (!sq.fetch_row())
-						throw runtime_error("Could not find Git repository " + to_string(stoul(cmd)) + ".");
-
-					string repo_dir = sq.cols[0];
-					string db = sq.cols[1];
+					string repo_dir = cmd;
+					string db = argv[3];
 
 					dump_sql(repo_dir, db);
 					do_update_git(repo_dir);
