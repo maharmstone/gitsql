@@ -11,7 +11,7 @@ static void throw_git_error(int error, const char* func) {
 	if ((lg2err = giterr_last()) && lg2err->message)
 		throw runtime_error(string(func) + " failed (" + lg2err->message + ").");
 
-	throw runtime_error(string(func) + " failed.");
+	throw runtime_error(string(func) + " failed (error " + to_string(error) + ").");
 }
 
 GitSignature::GitSignature(const string& user, const string& email) {

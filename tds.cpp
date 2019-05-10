@@ -535,3 +535,7 @@ nullable<unsigned long long>::nullable(const TDSField& f) {
 		null = false;
 	}
 }
+
+void tds_run(const TDSConn& tds, const string& s) {
+	TDSQuery q(tds, s);
+}

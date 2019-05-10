@@ -84,6 +84,10 @@ public:
 	explicit operator uint16_t() const {
 		return (uint16_t)operator int64_t();
 	}
+	
+	explicit operator int32_t() const {
+		return (int32_t)operator int64_t();
+	}
 
 	bool is_null() const {
 		return null;
@@ -175,7 +179,4 @@ private:
 };
 
 TDSParam null_string(const std::string& s);
-
-static void tds_run(const TDSConn& tds, const std::string& s) {
-	TDSQuery q(tds, s);
-}
+void tds_run(const TDSConn& tds, const std::string& s);

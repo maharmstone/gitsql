@@ -69,10 +69,9 @@ static string dump_table(const TDSConn& tds, const string& schema, const string&
 
 	while (sq.fetch_row()) {
 		string vals;
+		auto column_count = sq.column_count();
 
 		if (cols == "") {
-			unsigned int column_count = sq.column_count();
-
 			for (unsigned int i = 0; i < column_count; i++) {
 				const auto& col = sq[i];
 
@@ -87,9 +86,7 @@ static string dump_table(const TDSConn& tds, const string& schema, const string&
 
 		// FIXME - "Unicode" columns might break here: MS stores them as UTF-16, and we use UTF-8
 
-		unsigned int col_count = sq.column_count();
-
-		for (unsigned int i = 0; i < col_count; i++) {
+		for (unsigned int i = 0; i < column_count; i++) {
 			const auto& col = sq[i];
 
 			if (vals != "")
@@ -195,22 +192,13 @@ static void dump_sql(const TDSConn& tds, const string& repo_dir, const string& d
 		if (h == INVALID_HANDLE_VALUE)
 			throw runtime_error("CreateFile returned error " + to_string(GetLastError()));
 
-		if (!WriteFile(h, obj.def.c_str(), obj.def.size(), &written, NULL))
+		if (!WriteFile(h, obj.def.c_str(), static_cast<DWORD>(obj.def.size()), &written, NULL))
 			throw runtime_error("WriteFile returned error " + to_string(GetLastError()));
 
 		SetEndOfFile(h);
 
 		CloseHandle(h);
 	}
-}
-
-static void throw_git_error(int error, const char* func) {
-	const git_error *lg2err;
-
-	if ((lg2err = giterr_last()) && lg2err->message)
-		throw runtime_error(string(func) + " failed (" + lg2err->message + ").");
-
-	throw runtime_error(string(func) + " failed.");
 }
 
 static void git_add_dir(GitIndex& index, const string& dir, const string& unixpath) {
@@ -269,15 +257,6 @@ static void replace_all(string& source, const string& from, const string& to) {
 	new_string += source.substr(last_pos);
 
 	source.swap(new_string);
-}
-
-static string upper(string s) {
-	for (auto& c : s) {
-		if (c >= 'a' && c <= 'z')
-			c -= 32;
-	}
-
-	return s;
 }
 
 static void do_update_git(const string& repo_dir) {
@@ -352,7 +331,7 @@ static void flush_git(const TDSConn& tds) {
 		while (true) {
 			TDSTrans trans(tds);
 			unsigned int commit, dt;
-			int offset;
+			int tz_offset;
 			string name, email, description;
 			nullable<unsigned long long> transaction;
 
@@ -362,12 +341,12 @@ static void flush_git(const TDSConn& tds) {
 				if (!sq.fetch_row())
 					break;
 
-				commit = (signed long long)sq[0];
+				commit = (unsigned int)sq[0];
 				name = sq[1];
 				email = sq[2];
 				description = sq[3];
-				dt = (signed long long)sq[4];
-				offset = (signed long long)sq[5];
+				dt = (unsigned int)sq[4];
+				tz_offset = (int)sq[5];
 				transaction = sq[6];
 			}
 
@@ -412,7 +391,7 @@ static void flush_git(const TDSConn& tds) {
 						while (sq2.fetch_row()) {
 							string fn = sq2[0];
 							
-							for (auto& it = files.begin(); it != files.end(); it++) {
+							for (auto it = files.begin(); it != files.end(); it++) {
 								if (it->filename == fn) {
 									files.erase(it);
 									break;
@@ -431,7 +410,7 @@ static void flush_git(const TDSConn& tds) {
 			}
 
 			if (files.size() > 0)
-				update_git(repo, name, email, description, dt, offset, files);
+				update_git(repo, name, email, description, dt, tz_offset, files);
 
 			{ TDSQuery(tds, "DELETE FROM Restricted.Git WHERE id=?", commit); }
 			{ TDSQuery(tds, "DELETE FROM Restricted.GitFiles WHERE id=?", commit); }
@@ -485,7 +464,7 @@ static int tds_message_handler(const TDSCONTEXT*, TDSSOCKET*, TDSMESSAGE* msg) {
 }
 
 int main(int argc, char** argv) {  
-	string cmd, repo_dir, db;
+	string cmd;
 
 	if (argc < 4)
 		return 1;
