@@ -290,7 +290,7 @@ bool TDSQuery::fetch_row() {
 						cols[i].null = col->column_cur_size < 0;
 						
 						if (!cols[i].null) {
-							if (cols[i].type == SYBVARCHAR) {		
+							if (cols[i].type == SYBVARCHAR || cols[i].type == SYBVARBINARY || cols[i].type == SYBBINARY) {		
 								if (is_blob_col(col)) {
 									char* s = *(char**)col->column_data;
 
@@ -328,8 +328,6 @@ bool TDSQuery::fetch_row() {
 								cols[i].doubval = *reinterpret_cast<float*>(col->column_data);
 							} else if (cols[i].type == SYBFLT8 || (cols[i].type == SYBFLTN && col->column_cur_size == 8)) {
 								cols[i].doubval = *reinterpret_cast<double*>(col->column_data);
-							} else if (cols[i].type == SYBVARBINARY || cols[i].type == SYBBINARY) {
-								cols[i].strval = string(reinterpret_cast<char*>(col->column_data), col->column_cur_size);
 							} else if (cols[i].type == SYBBITN) {
 								cols[i].intval = col->column_data[0] & 0x1;
 							} else {
@@ -523,6 +521,8 @@ void TDSTrans::commit() {
 nullable<string>::nullable(const TDSField& f) {
 	if (f.is_null())
 		null = true;
-	else
+	else {
 		t = f;
+		null = false;
+	}
 }
