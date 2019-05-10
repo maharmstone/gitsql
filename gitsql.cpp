@@ -162,7 +162,7 @@ static void dump_sql(const TDSConn& tds, const string& repo_dir, const string& d
 
 		if (obj.type == "U") {
 			{
-				TDSQuery sq2(tds, "SELECT CONVERT(VARBINARY(MAX), " + dbs + "dbo.func_GetDDL(?))",  obj.schema + "." + obj.name);
+				TDSQuery sq2(tds, "SELECT " + dbs + "dbo.func_GetDDL(?)",  obj.schema + "." + obj.name);
 
 				if (!sq2.fetch_row())
 					throw runtime_error("Error calling dbo.func_GetDDL for " + dbs + obj.schema + "." + obj.name + ".");
