@@ -136,7 +136,7 @@ size_t GitDiff::num_deltas() {
 	return git_diff_num_deltas(diff);
 }
 
-void update_git(GitRepo& repo, const string& user, const string& email, const string& description, time_t dt, signed int offset, const vector<git_file>& files) {
+void update_git(GitRepo& repo, const string& user, const string& email, const string& description, time_t dt, signed int offset, const list<git_file>& files) {
 	GitSignature sig(user, email, dt, offset);
 
 	git_commit* parent;
@@ -153,11 +153,11 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 		git_tree_update* upd = new git_tree_update[files.size()];
 		unsigned int nu = 0;
 
-		for (unsigned int i = 0; i < files.size(); i++) {
-			if (files[i].data.is_null()) {
+		for (const auto& f : files) {
+			if (f.data.is_null()) {
 				git_tree_entry* out;
 
-				if (!parent_tree.entry_bypath(&out, files[i].filename))
+				if (!parent_tree.entry_bypath(&out, f.filename))
 					continue;
 				
 				git_tree_entry_free(out);
@@ -165,11 +165,11 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 				upd[nu].action = GIT_TREE_UPDATE_REMOVE;
 			} else {
 				upd[nu].action = GIT_TREE_UPDATE_UPSERT;
-				upd[nu].id = repo.blob_create_frombuffer(files[i].data);
+				upd[nu].id = repo.blob_create_frombuffer(f.data);
 			}
 
 			upd[nu].filemode = GIT_FILEMODE_BLOB;
-			upd[nu].path = files[i].filename.c_str();
+			upd[nu].path = f.filename.c_str();
 			nu++;
 		}
 

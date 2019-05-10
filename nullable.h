@@ -60,3 +60,15 @@ public:
 
 	nullable(const TDSField& f);
 };
+
+template<>
+class nullable<unsigned long long> : public nullable_base<unsigned long long> {
+public:
+	nullable(const unsigned long long& s) : nullable_base(s) { }
+
+	nullable(nullptr_t) : nullable_base(nullptr) { }
+
+	nullable() : nullable_base() { }
+
+	nullable(const TDSField& f);
+};

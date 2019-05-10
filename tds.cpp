@@ -502,14 +502,14 @@ TDSTrans::TDSTrans(const TDSConn& tds) : sock(tds.sock) {
 
 TDSTrans::~TDSTrans() {
 	if (!committed) {
-		if (TDS_SUCCEED(tds_submit_rollback(sock, 1))) {
+		if (TDS_SUCCEED(tds_submit_rollback(sock, 0))) {
 			tds_process_simple_query(sock);
 		}
 	}
 }
 
 void TDSTrans::commit() {
-	if (TDS_FAILED(tds_submit_commit(sock, 1)))
+	if (TDS_FAILED(tds_submit_commit(sock, 0)))
 		throw std::runtime_error("tds_submit_commit failed.");
 
 	if (TDS_FAILED(tds_process_simple_query(sock)))
@@ -523,6 +523,15 @@ nullable<string>::nullable(const TDSField& f) {
 		null = true;
 	else {
 		t = f;
+		null = false;
+	}
+}
+
+nullable<unsigned long long>::nullable(const TDSField& f) {
+	if (f.is_null())
+		null = true;
+	else {
+		t = (signed long long)f;
 		null = false;
 	}
 }

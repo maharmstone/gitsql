@@ -7,6 +7,7 @@
 #include <git2.h>
 #include <string>
 #include <vector>
+#include <list>
 #include <map>
 #include "tds.h"
 #include "git.h"
@@ -353,9 +354,10 @@ static void flush_git(const TDSConn& tds) {
 			unsigned int commit, dt;
 			int offset;
 			string name, email, description;
+			nullable<unsigned long long> transaction;
 
 			{
-				TDSQuery sq(tds, "SELECT TOP 1 Git.id, COALESCE(LDAP.givenName+' '+LDAP.sn, LDAP.name, Git.username), COALESCE(LDAP.mail,'business.intelligence@boltonft.nhs.uk'), Git.description, DATEDIFF(SECOND,'19700101',Git.dt), Git.offset FROM Restricted.Git LEFT JOIN AD.ldap ON LEFT(Git.username,5)='XRBH\\' AND ldap.sAMAccountName=RIGHT(Git.username,CASE WHEN LEN(Git.username)>=5 THEN LEN(Git.username)-5 END) WHERE Git.repo=? ORDER BY Git.id", r.first);
+				TDSQuery sq(tds, "SELECT TOP 1 Git.id, COALESCE(LDAP.givenName+' '+LDAP.sn, LDAP.name, Git.username), COALESCE(LDAP.mail,'business.intelligence@boltonft.nhs.uk'), Git.description, DATEDIFF(SECOND,'19700101',Git.dt), Git.offset, Git.tran_id FROM Restricted.Git LEFT JOIN AD.ldap ON LEFT(Git.username,5)='XRBH\\' AND ldap.sAMAccountName=RIGHT(Git.username,CASE WHEN LEN(Git.username)>=5 THEN LEN(Git.username)-5 END) WHERE Git.repo=? ORDER BY Git.id", r.first);
 
 				if (!sq.fetch_row())
 					break;
@@ -366,15 +368,65 @@ static void flush_git(const TDSConn& tds) {
 				description = sq[3];
 				dt = (signed long long)sq[4];
 				offset = (signed long long)sq[5];
+				transaction = sq[6];
 			}
 
-			vector<git_file> files;
+			list<git_file> files;
 
 			{
 				TDSQuery sq2(tds, "SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit);
 
 				while (sq2.fetch_row()) {
-					files.push_back({ sq2[0], sq2[1] });
+					files.emplace_back(sq2[0], sq2[1]);
+				}
+			}
+
+			// merge together entries with the same transaction ID
+			if (!transaction.is_null()) {
+				bool first = true;
+
+				while (true) {
+					unsigned int commit2;
+
+					{
+						TDSQuery sq(tds, "SELECT TOP 1 Git.id, Git.tran_id FROM Restricted.Git WHERE repo=? AND id!=? ORDER BY id", r.first, commit);
+
+						if (!sq.fetch_row())
+							break;
+
+						if (sq[1].is_null())
+							break;
+
+						if ((signed long long)sq[1] != (signed long long)transaction)
+							break;
+
+						commit2 = (unsigned int)sq[0];
+					}
+
+					if (first)
+						description += " (transaction)";
+
+					{
+						TDSQuery sq2(tds, "SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit2);
+
+						while (sq2.fetch_row()) {
+							string fn = sq2[0];
+							
+							for (auto& it = files.begin(); it != files.end(); it++) {
+								if (it->filename == fn) {
+									files.erase(it);
+									break;
+								}
+							}
+
+							files.emplace_back(fn, sq2[1]);
+						}
+					}
+
+					{ TDSQuery(tds, "UPDATE Restricted.GitFiles SET id=? WHERE id=?", commit, commit2); }
+					{ TDSQuery(tds, "DELETE FROM Restricted.Git WHERE id=?", commit2); }
+
+					first = false;
 				}
 			}
 

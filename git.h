@@ -2,6 +2,7 @@
 
 #include <git2.h>
 #include <string>
+#include <list>
 #include <time.h>
 #include "nullable.h"
 
@@ -122,9 +123,11 @@ private:
 	git_object* obj;
 };
 
-typedef struct {
+struct git_file {
+	git_file(const string& filename, const TDSField& data) : filename(filename), data(data) { }
+
 	string filename;
 	nullable<string> data;
-} git_file;
+};
 
-void update_git(GitRepo& repo, const string& user, const string& email, const string& description, time_t dt, signed int offset, const vector<git_file>& files);
+void update_git(GitRepo& repo, const string& user, const string& email, const string& description, time_t dt, signed int offset, const list<git_file>& files);
