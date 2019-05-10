@@ -84,8 +84,6 @@ static string dump_table(const TDSConn& tds, const string& schema, const string&
 
 		s += "INSERT INTO " + obj + "(" + cols + ") VALUES(";
 
-		// FIXME - "Unicode" columns might break here: MS stores them as UTF-16, and we use UTF-8
-
 		for (unsigned int i = 0; i < column_count; i++) {
 			const auto& col = sq[i];
 
@@ -94,12 +92,28 @@ static string dump_table(const TDSConn& tds, const string& schema, const string&
 
 			if (col.is_null())
 				vals += "NULL";
-			else if (col.type == SYBINTN || col.type == SYBBITN)
-				vals += to_string((signed long long)col);
-			else if (col.type == SYBFLT8 || col.type == SYBFLTN)
-				vals += to_string((double)col);
-			else
-				vals += "'" + sql_escape(string(col)) + "'";
+			else {
+				switch (col.type) {
+					case SYBINTN:
+					case SYBINT1:
+					case SYBINT2:
+					case SYBINT4:
+					case SYBINT8:
+					case SYBBITN:
+					case SYBBIT:
+						vals += to_string((signed long long)col);
+					break;
+
+					case SYBFLT8:
+					case SYBFLTN:
+						vals += to_string((double)col);
+					break;
+
+					default:
+						vals += "'" + sql_escape(string(col)) + "'";
+					break;
+				}
+			}
 		}
 
 		s += vals;
