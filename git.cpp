@@ -1,5 +1,6 @@
 #include <git2.h>
 #include <string>
+#include <vector>
 #include "git.h"
 
 using namespace std;

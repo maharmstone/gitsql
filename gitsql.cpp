@@ -1,5 +1,6 @@
 #define _CRT_SECURE_NO_WARNINGS
 
+#include <WinSock2.h>
 #include <windows.h>
 #include <shlwapi.h>
 #include <sqlext.h>
@@ -7,12 +8,12 @@
 #include <string>
 #include <vector>
 #include <map>
-#include "mercurysql.h"
+#include "tds.h"
 #include "git.h"
 
 using namespace std;
 
-HDBC hdbc;
+const string db_app = "GitSQL";
 
 static void replace_all(string& source, const string& from, const string& to);
 
@@ -59,17 +60,21 @@ static string sql_escape(string s) {
 	return s;
 }
 
-static string dump_table(const string& schema, const string& table) {
+static string dump_table(const TDSConn& tds, const string& schema, const string& table) {
 	string obj = "[" + schema + "].[" + table + "]"; // FIXME - do we need to escape?
 	string cols, s;
 
-	SQLQuery sq("SELECT * FROM " + obj);
+	TDSQuery sq(tds, "SELECT * FROM " + obj);
 
 	while (sq.fetch_row()) {
 		string vals;
 
 		if (cols == "") {
-			for (const auto& col : sq.cols) {
+			unsigned int column_count = sq.column_count();
+
+			for (unsigned int i = 0; i < column_count; i++) {
+				const auto& col = sq[i];
+
 				if (cols != "")
 					cols += ", ";
 
@@ -81,15 +86,19 @@ static string dump_table(const string& schema, const string& table) {
 
 		// FIXME - "Unicode" columns might break here: MS stores them as UTF-16, and we use UTF-8
 
-		for (const auto& col : sq.cols) {
+		unsigned int col_count = sq.column_count();
+
+		for (unsigned int i = 0; i < col_count; i++) {
+			const auto& col = sq[i];
+
 			if (vals != "")
 				vals += ", ";
 
-			if (col.null)
+			if (col.is_null())
 				vals += "NULL";
-			else if (col.datatype == SQL_INTEGER || col.datatype == SQL_BIT || col.datatype == SQL_NUMERIC || col.datatype == SQL_BIGINT)
+			else if (col.type == SYBINTN || col.type == SYBBITN)
 				vals += to_string((signed long long)col);
-			else if (col.datatype == SQL_FLOAT || col.datatype == SQL_DOUBLE)
+			else if (col.type == SYBFLT8 || col.type == SYBFLTN)
 				vals += to_string((double)col);
 			else
 				vals += "'" + sql_escape(string(col)) + "'";
@@ -103,25 +112,35 @@ static string dump_table(const string& schema, const string& table) {
 	return s;
 }
 
-static void dump_sql(const string& repo_dir, const string& db) {
+struct sql_obj {
+	sql_obj(const string& schema, const string& name, const string& def, const string& type, bool fulldump) : schema(schema), name(name), def(def), type(type), fulldump(fulldump) { }
+
+	string schema, name, def, type;
+	bool fulldump;
+};
+
+static void dump_sql(const TDSConn& tds, const string& repo_dir, const string& db) {
 	string s, dbs;
 
 	if (db != "")
 		dbs = db + ".";
 
-	SQLQuery sq("SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM " + dbs + "sys.objects LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN " + dbs + "sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN " + dbs + "sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
-
 	clear_dir(repo_dir, true);
 
-	while (sq.fetch_row()) {
-		string schema = sq.cols[0];
-		string dir = repo_dir + sanitize_fn(schema);
+	vector<sql_obj> objs;
+
+	{
+		TDSQuery sq(tds, "SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM " + dbs + "sys.objects LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN " + dbs + "sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN " + dbs + "sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
+
+		while (sq.fetch_row()) {
+			objs.emplace_back(sq[0], sq[1], sq[2], sq[3], (string)sq[4] == "true");
+		}
+	}
+
+	for (auto& obj : objs) {
+		string dir = repo_dir + sanitize_fn(obj.schema);
 		string subdir;
 		string fn;
-		string name = sq.cols[1];
-		string def = sq.cols[2];
-		string type = sq.cols[3];
-		bool fulldump = sq.cols[4] == "true";
 		HANDLE h;
 		DWORD written;
 
@@ -132,30 +151,32 @@ static void dump_sql(const string& repo_dir, const string& db) {
 				throw runtime_error("CreateDirectory for " + dir + " returned error " + to_string(last_error));
 		}
 
-		if (type == "V")
+		if (obj.type == "V")
 			subdir = "views";
-		else if (type == "P")
+		else if (obj.type == "P")
 			subdir = "procedures";
-		else if (type == "FN")
+		else if (obj.type == "FN")
 			subdir = "functions";
-		else if (type == "U")
+		else if (obj.type == "U")
 			subdir = "tables";
 
-		if (type == "U") {
-			SQLQuery sq2("SELECT CONVERT(VARBINARY(MAX), " + dbs + "dbo.func_GetDDL(?))",  schema + "." + name);
+		if (obj.type == "U") {
+			{
+				TDSQuery sq2(tds, "SELECT CONVERT(VARBINARY(MAX), " + dbs + "dbo.func_GetDDL(?))",  obj.schema + "." + obj.name);
 
-			if (!sq2.fetch_row())
-				throw runtime_error("Error calling dbo.func_GetDDL for " + dbs + schema + "." + name + ".");
+				if (!sq2.fetch_row())
+					throw runtime_error("Error calling dbo.func_GetDDL for " + dbs + obj.schema + "." + obj.name + ".");
 
-			def = sq2.cols[0];
+				obj.def = sq2[0];
+			}
 
-			if (fulldump)
-				def += "\n" + dump_table(schema, name);
+			if (obj.fulldump)
+				obj.def += "\n" + dump_table(tds, obj.schema, obj.name);
 		}
 
-		replace_all(def, "\r\n", "\n");
+		replace_all(obj.def, "\r\n", "\n");
 
-		def += "\n";
+		obj.def += "\n";
 
 		dir += "\\" + subdir;
 
@@ -166,14 +187,14 @@ static void dump_sql(const string& repo_dir, const string& db) {
 				throw runtime_error("CreateDirectory for " + dir + " returned error " + to_string(last_error));
 		}
 
-		fn = dir + "\\" + sanitize_fn(name) + ".sql";
+		fn = dir + "\\" + sanitize_fn(obj.name) + ".sql";
 
 		h = CreateFileA(fn.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
 		if (h == INVALID_HANDLE_VALUE)
 			throw runtime_error("CreateFile returned error " + to_string(GetLastError()));
 
-		if (!WriteFile(h, def.c_str(), def.size(), &written, NULL))
+		if (!WriteFile(h, obj.def.c_str(), obj.def.size(), &written, NULL))
 			throw runtime_error("WriteFile returned error " + to_string(GetLastError()));
 
 		SetEndOfFile(h);
@@ -308,16 +329,16 @@ static void do_update_git(const string& repo_dir) {
 	// FIXME - push to remote server?
 }
 
-static void flush_git() {
+static void flush_git(const TDSConn& tds) {
 	map<unsigned int, string> repos;
 
 	git_libgit2_init();
 
 	{
-		SQLQuery sq("SELECT Git.repo, GitRepo.dir FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
+		TDSQuery sq(tds, "SELECT Git.repo, GitRepo.dir FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
 
 		while (sq.fetch_row()) {
-			repos[(unsigned int)sq.cols[0]] = sq.cols[1];
+			repos[(unsigned int)sq[0]] = sq[1];
 		}
 
 		if (repos.size() == 0)
@@ -328,32 +349,40 @@ static void flush_git() {
 		GitRepo repo(r.second);
 
 		while (true) {
-			sql_transaction trans;
+			TDSTrans trans(tds);
+			unsigned int commit, dt;
+			int offset;
+			string name, email, description;
 
-			SQLQuery sq("SELECT TOP 1 Git.id, COALESCE(LDAP.givenName+' '+LDAP.sn, LDAP.name, Git.username), COALESCE(LDAP.mail,'business.intelligence@boltonft.nhs.uk'), Git.description, DATEDIFF(SECOND,'19700101',Git.dt), Git.offset FROM Restricted.Git LEFT JOIN AD.ldap ON LEFT(Git.username,5)='XRBH\\' AND ldap.sAMAccountName=RIGHT(Git.username,CASE WHEN LEN(Git.username)>=5 THEN LEN(Git.username)-5 END) WHERE Git.repo=? ORDER BY Git.id", r.first);
+			{
+				TDSQuery sq(tds, "SELECT TOP 1 Git.id, COALESCE(LDAP.givenName+' '+LDAP.sn, LDAP.name, Git.username), COALESCE(LDAP.mail,'business.intelligence@boltonft.nhs.uk'), Git.description, DATEDIFF(SECOND,'19700101',Git.dt), Git.offset FROM Restricted.Git LEFT JOIN AD.ldap ON LEFT(Git.username,5)='XRBH\\' AND ldap.sAMAccountName=RIGHT(Git.username,CASE WHEN LEN(Git.username)>=5 THEN LEN(Git.username)-5 END) WHERE Git.repo=? ORDER BY Git.id", r.first);
 
-			if (sq.fetch_row()) {
-				unsigned int commit = (signed long long)sq.cols[0];
-				string name = sq.cols[1];
-				string email = sq.cols[2];
-				string description = sq.cols[3];
-				unsigned int dt = (signed long long)sq.cols[4];
-				int offset = (signed long long)sq.cols[5];
-				vector<git_file> files;
+				if (!sq.fetch_row())
+					break;
 
-				SQLQuery sq2("SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit);
+				commit = (signed long long)sq[0];
+				name = sq[1];
+				email = sq[2];
+				description = sq[3];
+				dt = (signed long long)sq[4];
+				offset = (signed long long)sq[5];
+			}
+
+			vector<git_file> files;
+
+			{
+				TDSQuery sq2(tds, "SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit);
 
 				while (sq2.fetch_row()) {
-					files.push_back({ sq2.cols[0], sq2.cols[1] });
+					files.push_back({ sq2[0], sq2[1] });
 				}
+			}
 
-				if (files.size() > 0)
-					update_git(repo, name, email, description, dt, offset, files);
+			if (files.size() > 0)
+				update_git(repo, name, email, description, dt, offset, files);
 
-				run_sql("DELETE FROM Restricted.Git WHERE id=?", (signed long long)sq.cols[0]);
-				run_sql("DELETE FROM Restricted.GitFiles WHERE id=?", (signed long long)sq.cols[0]);
-			} else
-				break;
+			{ TDSQuery(tds, "DELETE FROM Restricted.Git WHERE id=?", commit); }
+			{ TDSQuery(tds, "DELETE FROM Restricted.GitFiles WHERE id=?", commit); }
 
 			trans.commit();
 		}
@@ -396,67 +425,56 @@ private:
 	HANDLE h = INVALID_HANDLE_VALUE;
 };
 
+static int tds_message_handler(const TDSCONTEXT*, TDSSOCKET*, TDSMESSAGE* msg) {
+	if (msg->severity > 10)
+		throw runtime_error(msg->message);
+
+	return 0;
+}
+
 int main(int argc, char** argv) {  
-	HENV henv;
-	string connexion_string, cmd, repo_dir, db;
+	string cmd, repo_dir, db;
 
-	if (argc < 2)
+	if (argc < 4)
 		return 1;
 
-	connexion_string = argv[1];
+	string db_server = argv[1];
+	string db_username = argv[2];
+	string db_password = argv[3];
 
-	if (argc > 2)
-		cmd = argv[2];
+	if (argc > 4)
+		cmd = argv[4];
 
-	if (cmd != "flush" && argc < 4)
+	if (cmd != "flush" && argc < 6)
 		return 1;
 
-	SQLAllocEnv(&henv);
-	SQLAllocConnect(henv, &hdbc);
+	TDSConn tds(db_server, db_username, db_password, db_app, tds_message_handler, tds_message_handler);
 
 	try {
-		try {
-			SQLRETURN rc;
-			string unixpath, def;
+		string unixpath, def;
 
-			rc = SQLDriverConnectA(hdbc, NULL, (SQLCHAR*)connexion_string.c_str(), (SQLSMALLINT)connexion_string.length(), NULL, 0, NULL, SQL_DRIVER_NOPROMPT);
+		{
+			lockfile lf;
 
-			if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
-				throw_sql_error("SQLDriverConnect", SQL_HANDLE_DBC, hdbc);
+			if (cmd == "flush")
+				flush_git(tds);
+			else {
+				string repo_dir = cmd;
+				string db = argv[5];
 
-			{
-				lockfile lf;
-
-				if (cmd == "flush")
-					flush_git();
-				else {
-					string repo_dir = cmd;
-					string db = argv[3];
-
-					dump_sql(repo_dir, db);
-					do_update_git(repo_dir);
-				}
+				dump_sql(tds, repo_dir, db);
+				do_update_git(repo_dir);
 			}
-		} catch (const exception& e) {
-			SQLQuery sq("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", e.what());
-			//MessageBoxA(0, s, "Error", MB_ICONERROR);
-			throw;
-		} catch (...) {
-			SQLQuery sq("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", "Unrecognized exception.");
-			//MessageBoxA(0, "Unrecognized exception.", "Error", MB_ICONERROR);
-			throw;
 		}
+	} catch (const exception& e) {
+		TDSQuery sq(tds, "INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", e.what());
+		//MessageBoxA(0, s, "Error", MB_ICONERROR);
+		throw;
 	} catch (...) {
-		SQLFreeConnect(henv);
-		SQLFreeEnv(henv);
-		SQLFreeConnect(hdbc);
-
-		return 0;
+		TDSQuery sq(tds, "INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", "Unrecognized exception.");
+		//MessageBoxA(0, "Unrecognized exception.", "Error", MB_ICONERROR);
+		throw;
 	}
-
-	SQLFreeConnect(henv);
-	SQLFreeEnv(henv);
-	SQLFreeConnect(hdbc);
 
 	return 0;
 }

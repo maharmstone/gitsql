@@ -3,7 +3,7 @@
 #include <git2.h>
 #include <string>
 #include <time.h>
-#include "mercurysql.h"
+#include "nullable.h"
 
 using namespace std;
 
