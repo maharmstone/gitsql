@@ -6,8 +6,6 @@
 #include <time.h>
 #include "nullable.h"
 
-using namespace std;
-
 class GitRepo;
 class GitDiff;
 class GitIndex;
@@ -17,8 +15,8 @@ class GitSignature {
 	friend class GitRepo;
 
 public:
-	GitSignature(const string& user, const string& email);
-	GitSignature::GitSignature(const string& user, const string& email, time_t dt, signed int offset);
+	GitSignature(const std::string& user, const std::string& email);
+	GitSignature::GitSignature(const std::string& user, const std::string& email, time_t dt, signed int offset);
 	~GitSignature();
 
 private:
@@ -38,11 +36,11 @@ class GitTree {
 public:
 	GitTree(const git_commit* commit);
 	GitTree(const GitRepo& repo, const git_oid& oid);
-	GitTree(const GitRepo& repo, const string& rev);
+	GitTree(const GitRepo& repo, const std::string& rev);
 	GitTree(const GitRepo& repo, const GitTreeEntry& gte);
 	~GitTree();
 	size_t entrycount();
-	bool entry_bypath(git_tree_entry** out, const string& path);
+	bool entry_bypath(git_tree_entry** out, const std::string& path);
 
 private:
 	git_tree* tree;
@@ -68,12 +66,12 @@ class GitRepo {
 	friend GitIndex;
 
 public:
-	GitRepo(const string& dir);
+	GitRepo(const std::string& dir);
 	~GitRepo();
-	void reference_name_to_id(git_oid* out, const string& name);
+	void reference_name_to_id(git_oid* out, const std::string& name);
 	void commit_lookup(git_commit** commit, const git_oid* oid);
-	git_oid commit_create(const string& update_ref, const GitSignature& author, const GitSignature& committer, const string& message, const GitTree& tree, git_commit* parent);
-	git_oid blob_create_frombuffer(const string& data);
+	git_oid commit_create(const std::string& update_ref, const GitSignature& author, const GitSignature& committer, const std::string& message, const GitTree& tree, git_commit* parent);
+	git_oid blob_create_frombuffer(const std::string& data);
 	git_oid tree_create_updated(const GitTree& baseline, size_t nupdates, const git_tree_update* updates);
 
 private:
@@ -89,8 +87,8 @@ public:
 	GitIndex(const GitRepo& repo);
 	~GitIndex();
 	void write_tree(git_oid* oid);
-	void add_bypath(const string& fn);
-	void remove_bypath(const string& fn);
+	void add_bypath(const std::string& fn);
+	void remove_bypath(const std::string& fn);
 	void clear();
 
 private:
@@ -100,7 +98,7 @@ private:
 class GitTreeEntry {
 public:
 	GitTreeEntry(GitTree& tree, size_t idx);
-	string name();
+	std::string name();
 	git_otype type();
 
 	friend class GitTree;
@@ -115,19 +113,19 @@ private:
 
 class GitBlob {
 public:
-	GitBlob(const GitTree& tree, const string& path);
+	GitBlob(const GitTree& tree, const std::string& path);
 	~GitBlob();
-	operator string() const;
+	operator std::string() const;
 
 private:
 	git_object* obj;
 };
 
 struct git_file {
-	git_file(const string& filename, const TDSField& data) : filename(filename), data(data) { }
+	git_file(const std::string& filename, const TDSField& data) : filename(filename), data(data) { }
 
-	string filename;
-	nullable<string> data;
+	std::string filename;
+	nullable<std::string> data;
 };
 
-void update_git(GitRepo& repo, const string& user, const string& email, const string& description, time_t dt, signed int offset, const list<git_file>& files);
+void update_git(GitRepo& repo, const std::string& user, const std::string& email, const std::string& description, time_t dt, signed int offset, const std::list<git_file>& files);
