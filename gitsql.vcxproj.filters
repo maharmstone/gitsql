@@ -21,18 +21,9 @@
     <ClCompile Include="git.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="tds.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="git.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="tds.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="nullable.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

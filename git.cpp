@@ -1,6 +1,7 @@
 #include <git2.h>
 #include <string>
 #include <vector>
+#include <stdexcept>
 #include "git.h"
 
 using namespace std;
@@ -154,7 +155,7 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 		unsigned int nu = 0;
 
 		for (const auto& f : files) {
-			if (f.data.is_null()) {
+			if (!f.data.has_value()) {
 				git_tree_entry* out;
 
 				if (!parent_tree.entry_bypath(&out, f.filename))
@@ -165,7 +166,7 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 				upd[nu].action = GIT_TREE_UPDATE_REMOVE;
 			} else {
 				upd[nu].action = GIT_TREE_UPDATE_UPSERT;
-				upd[nu].id = repo.blob_create_frombuffer(f.data);
+				upd[nu].id = repo.blob_create_frombuffer(f.data.value());
 			}
 
 			upd[nu].filemode = GIT_FILEMODE_BLOB;

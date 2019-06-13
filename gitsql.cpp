@@ -9,7 +9,9 @@
 #include <vector>
 #include <list>
 #include <map>
-#include "tds.h"
+#include <stdexcept>
+#include <iostream>
+#include <tdscpp.h>
 #include "git.h"
 
 using namespace std;
@@ -61,15 +63,15 @@ static string sql_escape(string s) {
 	return s;
 }
 
-static string dump_table(const TDSConn& tds, const string& schema, const string& table) {
+static string dump_table(const tds::Conn& tds, const string& schema, const string& table) {
 	string obj = "[" + schema + "].[" + table + "]"; // FIXME - do we need to escape?
 	string cols, s;
 
-	TDSQuery sq(tds, "SELECT * FROM " + obj);
+	tds::Query sq(tds, "SELECT * FROM " + obj);
 
 	while (sq.fetch_row()) {
 		string vals;
-		auto column_count = sq.column_count();
+		auto column_count = sq.num_columns();
 
 		if (cols == "") {
 			for (unsigned int i = 0; i < column_count; i++) {
@@ -94,18 +96,18 @@ static string dump_table(const TDSConn& tds, const string& schema, const string&
 				vals += "NULL";
 			else {
 				switch (col.type) {
-					case SYBINTN:
-					case SYBINT1:
-					case SYBINT2:
-					case SYBINT4:
-					case SYBINT8:
-					case SYBBITN:
-					case SYBBIT:
+					case tds::server_type::SYBINTN:
+					case tds::server_type::SYBINT1:
+					case tds::server_type::SYBINT2:
+					case tds::server_type::SYBINT4:
+					case tds::server_type::SYBINT8:
+					case tds::server_type::SYBBITN:
+					case tds::server_type::SYBBIT:
 						vals += to_string((signed long long)col);
 					break;
 
-					case SYBFLT8:
-					case SYBFLTN:
+					case tds::server_type::SYBFLT8:
+					case tds::server_type::SYBFLTN:
 						vals += to_string((double)col);
 					break;
 
@@ -131,7 +133,7 @@ struct sql_obj {
 	bool fulldump;
 };
 
-static void dump_sql(const TDSConn& tds, const string& repo_dir, const string& db) {
+static void dump_sql(const tds::Conn& tds, const string& repo_dir, const string& db) {
 	string s, dbs;
 
 	if (db != "")
@@ -142,7 +144,7 @@ static void dump_sql(const TDSConn& tds, const string& repo_dir, const string& d
 	vector<sql_obj> objs;
 
 	{
-		TDSQuery sq(tds, "SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM " + dbs + "sys.objects LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN " + dbs + "sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN " + dbs + "sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
+		tds::Query sq(tds, "SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM " + dbs + "sys.objects LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN " + dbs + "sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN " + dbs + "sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
 
 		while (sq.fetch_row()) {
 			objs.emplace_back(sq[0], sq[1], sq[2], sq[3], (string)sq[4] == "true");
@@ -174,7 +176,7 @@ static void dump_sql(const TDSConn& tds, const string& repo_dir, const string& d
 
 		if (obj.type == "U") {
 			{
-				TDSQuery sq2(tds, "SELECT " + dbs + "dbo.func_GetDDL(?)",  obj.schema + "." + obj.name);
+				tds::Query sq2(tds, "SELECT " + dbs + "dbo.func_GetDDL(?)",  obj.schema + "." + obj.name);
 
 				if (!sq2.fetch_row())
 					throw runtime_error("Error calling dbo.func_GetDDL for " + dbs + obj.schema + "." + obj.name + ".");
@@ -323,13 +325,13 @@ static void do_update_git(const string& repo_dir) {
 	// FIXME - push to remote server?
 }
 
-static void flush_git(const TDSConn& tds) {
+static void flush_git(const tds::Conn& tds) {
 	map<unsigned int, string> repos;
 
 	git_libgit2_init();
 
 	{
-		TDSQuery sq(tds, "SELECT Git.repo, GitRepo.dir FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
+		tds::Query sq(tds, "SELECT Git.repo, GitRepo.dir FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
 
 		while (sq.fetch_row()) {
 			repos[(unsigned int)sq[0]] = sq[1];
@@ -343,14 +345,14 @@ static void flush_git(const TDSConn& tds) {
 		GitRepo repo(r.second);
 
 		while (true) {
-			TDSTrans trans(tds);
+			tds::Trans trans(tds);
 			unsigned int commit, dt;
 			int tz_offset;
 			string name, email, description;
-			nullable<unsigned long long> transaction;
+			optional<signed long long> transaction;
 
 			{
-				TDSQuery sq(tds, "SELECT TOP 1 Git.id, COALESCE(LDAP.givenName+' '+LDAP.sn, LDAP.name, Git.username), COALESCE(LDAP.mail,'business.intelligence@boltonft.nhs.uk'), Git.description, DATEDIFF(SECOND,'19700101',Git.dt), Git.offset, Git.tran_id FROM Restricted.Git LEFT JOIN AD.ldap ON LEFT(Git.username,5)='XRBH\\' AND ldap.sAMAccountName=RIGHT(Git.username,CASE WHEN LEN(Git.username)>=5 THEN LEN(Git.username)-5 END) WHERE Git.repo=? ORDER BY Git.id", r.first);
+				tds::Query sq(tds, "SELECT TOP 1 Git.id, COALESCE([user].givenName+' '+[user].sn, [user].name, Git.username), COALESCE([user].mail,'business.intelligence@boltonft.nhs.uk'), Git.description, DATEDIFF(SECOND,'19700101',Git.dt), Git.offset, Git.tran_id FROM Restricted.Git LEFT JOIN AD.[user] ON LEFT(Git.username,5)='XRBH\\' AND [user].sAMAccountName=RIGHT(Git.username,CASE WHEN LEN(Git.username)>=5 THEN LEN(Git.username)-5 END) WHERE Git.repo=? ORDER BY Git.id", r.first);
 
 				if (!sq.fetch_row())
 					break;
@@ -361,13 +363,15 @@ static void flush_git(const TDSConn& tds) {
 				description = sq[3];
 				dt = (unsigned int)sq[4];
 				tz_offset = (int)sq[5];
-				transaction = sq[6];
+
+				if (!sq[6].is_null())
+					transaction = (signed long long)sq[6];
 			}
 
 			list<git_file> files;
 
 			{
-				TDSQuery sq2(tds, "SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit);
+				tds::Query sq2(tds, "SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit);
 
 				while (sq2.fetch_row()) {
 					files.emplace_back(sq2[0], sq2[1]);
@@ -375,14 +379,14 @@ static void flush_git(const TDSConn& tds) {
 			}
 
 			// merge together entries with the same transaction ID
-			if (!transaction.is_null()) {
+			if (transaction.has_value()) {
 				bool first = true;
 
 				while (true) {
 					unsigned int commit2;
 
 					{
-						TDSQuery sq(tds, "SELECT TOP 1 Git.id, Git.tran_id FROM Restricted.Git WHERE repo=? AND id!=? ORDER BY id", r.first, commit);
+						tds::Query sq(tds, "SELECT TOP 1 Git.id, Git.tran_id FROM Restricted.Git WHERE repo=? AND id!=? ORDER BY id", r.first, commit);
 
 						if (!sq.fetch_row())
 							break;
@@ -390,7 +394,7 @@ static void flush_git(const TDSConn& tds) {
 						if (sq[1].is_null())
 							break;
 
-						if ((signed long long)sq[1] != (signed long long)transaction)
+						if ((signed long long)sq[1] != transaction.value())
 							break;
 
 						commit2 = (unsigned int)sq[0];
@@ -400,7 +404,7 @@ static void flush_git(const TDSConn& tds) {
 						description += " (transaction)";
 
 					{
-						TDSQuery sq2(tds, "SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit2);
+						tds::Query sq2(tds, "SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit2);
 
 						while (sq2.fetch_row()) {
 							string fn = sq2[0];
@@ -416,8 +420,8 @@ static void flush_git(const TDSConn& tds) {
 						}
 					}
 
-					{ TDSQuery(tds, "UPDATE Restricted.GitFiles SET id=? WHERE id=?", commit, commit2); }
-					{ TDSQuery(tds, "DELETE FROM Restricted.Git WHERE id=?", commit2); }
+					tds.run("UPDATE Restricted.GitFiles SET id=? WHERE id=?", commit, commit2);
+					tds.run("DELETE FROM Restricted.Git WHERE id=?", commit2);
 
 					first = false;
 				}
@@ -426,8 +430,8 @@ static void flush_git(const TDSConn& tds) {
 			if (files.size() > 0)
 				update_git(repo, name, email, description, dt, tz_offset, files);
 
-			{ TDSQuery(tds, "DELETE FROM Restricted.Git WHERE id=?", commit); }
-			{ TDSQuery(tds, "DELETE FROM Restricted.GitFiles WHERE id=?", commit); }
+			tds.run("DELETE FROM Restricted.Git WHERE id=?", commit);
+			tds.run("DELETE FROM Restricted.GitFiles WHERE id=?", commit);
 
 			trans.commit();
 		}
@@ -470,13 +474,6 @@ private:
 	HANDLE h = INVALID_HANDLE_VALUE;
 };
 
-static int tds_message_handler(const TDSCONTEXT*, TDSSOCKET*, TDSMESSAGE* msg) {
-	if (msg->severity > 10)
-		throw runtime_error(msg->message);
-
-	return 0;
-}
-
 int main(int argc, char** argv) {  
 	string cmd;
 
@@ -493,7 +490,7 @@ int main(int argc, char** argv) {
 	if (cmd != "flush" && argc < 6)
 		return 1;
 
-	TDSConn tds(db_server, db_username, db_password, db_app, tds_message_handler, tds_message_handler);
+	tds::Conn tds(db_server, db_username, db_password, db_app);
 
 	try {
 		string unixpath, def;
@@ -512,12 +509,8 @@ int main(int argc, char** argv) {
 			}
 		}
 	} catch (const exception& e) {
-		TDSQuery sq(tds, "INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", e.what());
-		//MessageBoxA(0, s, "Error", MB_ICONERROR);
-		throw;
-	} catch (...) {
-		TDSQuery sq(tds, "INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", "Unrecognized exception.");
-		//MessageBoxA(0, "Unrecognized exception.", "Error", MB_ICONERROR);
+		cerr << e.what() << endl;
+		tds.run("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", string_view(e.what()));
 		throw;
 	}
 

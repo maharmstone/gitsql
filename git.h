@@ -3,8 +3,9 @@
 #include <git2.h>
 #include <string>
 #include <list>
+#include <optional>
 #include <time.h>
-#include "nullable.h"
+#include <tdscpp.h>
 
 class GitRepo;
 class GitDiff;
@@ -122,10 +123,10 @@ private:
 };
 
 struct git_file {
-	git_file(const std::string& filename, const TDSField& data) : filename(filename), data(data) { }
+	git_file(const std::string& filename, const tds::Field& data) : filename(filename), data(data) { }
 
 	std::string filename;
-	nullable<std::string> data;
+	std::optional<std::string> data;
 };
 
 void update_git(GitRepo& repo, const std::string& user, const std::string& email, const std::string& description, time_t dt, signed int offset, const std::list<git_file>& files);
