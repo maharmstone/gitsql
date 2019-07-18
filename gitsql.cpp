@@ -11,6 +11,7 @@
 #include <map>
 #include <stdexcept>
 #include <iostream>
+#include <fstream>
 #include <tdscpp.h>
 #include "git.h"
 
@@ -217,7 +218,7 @@ static void dump_sql(const tds::Conn& tds, const string& repo_dir, const string&
 	}
 }
 
-static void git_add_dir(GitIndex& index, const string& dir, const string& unixpath) {
+static void git_add_dir(list<git_file>& files, const string& dir, const string& unixpath) {
 	HANDLE h;
 	WIN32_FIND_DATAA fff;
 
@@ -229,9 +230,26 @@ static void git_add_dir(GitIndex& index, const string& dir, const string& unixpa
 	do {
 		if (fff.cFileName[0] != '.') {
 			if (fff.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-				git_add_dir(index, dir + fff.cFileName + "\\", unixpath + fff.cFileName + "/");
-			else
-				index.add_bypath(unixpath + fff.cFileName);
+				git_add_dir(files, dir + fff.cFileName + "\\", unixpath + fff.cFileName + "/");
+			else {
+				string data;
+
+				{
+					ifstream f(dir + fff.cFileName, ios::binary);
+
+					if (!f.good())
+						throw runtime_error("Could not open " + dir + fff.cFileName + " for reading.");
+
+					f.seekg(0, ios::end);
+					size_t size = f.tellg();
+					data = string(size, ' ');
+					f.seekg(0, ios::beg);
+
+					f.read(&data[0], size); 
+				}
+
+				files.emplace_back(unixpath + fff.cFileName, data);
+			}
 		}
 	} while (FindNextFileA(h, &fff));
 
@@ -276,51 +294,17 @@ static void replace_all(string& source, const string& from, const string& to) {
 }
 
 static void do_update_git(const string& repo_dir) {
-	git_oid tree_id;
-	git_commit* parent;
-	git_oid parent_id;
-	vector<string> deleted;
-
 	git_libgit2_init();
 
 	GitRepo repo(repo_dir);
 
-	GitSignature sig("System", "business.intelligence@boltonft.nhs.uk");
+	list<git_file> files;
 
-	repo.reference_name_to_id(&parent_id, "HEAD");
+	git_add_dir(files, repo_dir, "");
+	// FIXME -  loop through repo and remove anything that's been deleted
+	//git_remove_dir(repo, parent_tree, repo_dir, "", deleted);
 
-	repo.commit_lookup(&parent, &parent_id);
-
-	GitTree parent_tree(parent);
-
-	{
-		GitIndex index(repo);
-
-		index.clear();
-
-		// loop through saved files and add
-		git_add_dir(index, repo_dir, "");
-
-		// loop through repo and remove anything that's been deleted
-		git_remove_dir(repo, parent_tree, repo_dir, "", deleted);
-
-		for (const auto& d : deleted) {
-			index.remove_bypath(d);
-		}
-
-		index.write_tree(&tree_id);
-	}
-
-	GitTree tree(repo, tree_id);
-
-	{
-		GitDiff diff(repo, parent_tree, tree, nullptr);
-
-		if (diff.num_deltas() == 0) // no changes - avoid doing empty commit
-			return;
-	}
-
-	repo.commit_create("HEAD", sig, sig, "Update", tree, parent);
+	update_git(repo, "System", "business.intelligence@boltonft.nhs.uk", "Update", files);
 
 	// FIXME - push to remote server?
 }
@@ -428,7 +412,7 @@ static void flush_git(const tds::Conn& tds) {
 			}
 
 			if (files.size() > 0)
-				update_git(repo, name, email, description, dt, tz_offset, files);
+				update_git(repo, name, email, description, files, dt, tz_offset);
 
 			tds.run("DELETE FROM Restricted.Git WHERE id=?", commit);
 			tds.run("DELETE FROM Restricted.GitFiles WHERE id=?", commit);

@@ -69,11 +69,12 @@ class GitRepo {
 public:
 	GitRepo(const std::string& dir);
 	~GitRepo();
-	void reference_name_to_id(git_oid* out, const std::string& name);
+	bool reference_name_to_id(git_oid* out, const std::string& name);
 	void commit_lookup(git_commit** commit, const git_oid* oid);
-	git_oid commit_create(const std::string& update_ref, const GitSignature& author, const GitSignature& committer, const std::string& message, const GitTree& tree, git_commit* parent);
+	git_oid commit_create(const std::string& update_ref, const GitSignature& author, const GitSignature& committer, const std::string& message, const GitTree& tree, git_commit* parent = nullptr);
 	git_oid blob_create_frombuffer(const std::string& data);
 	git_oid tree_create_updated(const GitTree& baseline, size_t nupdates, const git_tree_update* updates);
+	git_oid index_tree_id() const;
 
 private:
 	git_repository* repo = nullptr;
@@ -124,9 +125,11 @@ private:
 
 struct git_file {
 	git_file(const std::string& filename, const tds::Field& data) : filename(filename), data(data) { }
+	git_file(const std::string& filename, const std::string_view& data) : filename(filename), data(data) { }
 
 	std::string filename;
 	std::optional<std::string> data;
 };
 
-void update_git(GitRepo& repo, const std::string& user, const std::string& email, const std::string& description, time_t dt, signed int offset, const std::list<git_file>& files);
+void update_git(GitRepo& repo, const std::string& user, const std::string& email, const std::string& description,
+				const std::list<git_file>& files, time_t dt = 0, signed int offset = 0);

@@ -78,10 +78,14 @@ GitRepo::~GitRepo() {
 	git_repository_free(repo);
 }
 
-void GitRepo::reference_name_to_id(git_oid* out, const string& name) {
-	unsigned int ret;
+bool GitRepo::reference_name_to_id(git_oid* out, const string& name) {
+	auto ret = git_reference_name_to_id(out, repo, name.c_str());
 
-	if ((ret = git_reference_name_to_id(out, repo, name.c_str())))
+	if (ret == 0)
+		return true;
+	else if (ret == GIT_ENOTFOUND)
+		return false;
+	else
 		throw_git_error(ret, "git_reference_name_to_id");
 }
 
@@ -96,8 +100,13 @@ git_oid GitRepo::commit_create(const string& update_ref, const GitSignature& aut
 	unsigned int ret;
 	git_oid id;
 
-	if ((ret = git_commit_create_v(&id, repo, update_ref.c_str(), author, committer, nullptr, message.c_str(), tree, 1, parent)))
-		throw_git_error(ret, "git_commit_create_v");
+	if (parent) {
+		if ((ret = git_commit_create_v(&id, repo, update_ref.c_str(), author, committer, nullptr, message.c_str(), tree, 1, parent)))
+			throw_git_error(ret, "git_commit_create_v");
+	} else {
+		if ((ret = git_commit_create_v(&id, repo, update_ref.c_str(), author, committer, nullptr, message.c_str(), tree, 0)))
+			throw_git_error(ret, "git_commit_create_v");
+	}
 
 	return id;
 }
@@ -137,13 +146,74 @@ size_t GitDiff::num_deltas() {
 	return git_diff_num_deltas(diff);
 }
 
-void update_git(GitRepo& repo, const string& user, const string& email, const string& description, time_t dt, signed int offset, const list<git_file>& files) {
+git_oid GitRepo::index_tree_id() const {
+	unsigned int ret;
+	git_index* index;
+	git_oid tree_id;
+
+	if ((ret = git_repository_index(&index, repo)))
+		throw_git_error(ret, "git_repository_index");
+
+	try {
+		if ((ret = git_index_write_tree(&tree_id, index)))
+			throw_git_error(ret, "git_index_write_tree");
+	} catch (...) {
+		git_index_free(index);
+		throw;
+	}
+
+	git_index_free(index);
+
+	return tree_id;
+}
+
+static void update_git_new_repo(GitRepo& repo, const GitSignature& sig, const string& description, const list<git_file>& files) {
+	git_oid oid;
+
+	GitTree empty_tree(repo, repo.index_tree_id());
+
+	{
+		git_tree_update* upd = new git_tree_update[files.size()];
+		unsigned int nu = 0;
+
+		for (const auto& f : files) {
+			if (f.data.has_value()) {
+				upd[nu].action = GIT_TREE_UPDATE_UPSERT;
+				upd[nu].id = repo.blob_create_frombuffer(f.data.value());
+			}
+
+			upd[nu].filemode = GIT_FILEMODE_BLOB;
+			upd[nu].path = f.filename.c_str();
+			nu++;
+		}
+
+		if (nu == 0) {
+			delete[] upd;
+			return;
+		}
+
+		oid = repo.tree_create_updated(empty_tree, nu, upd);
+
+		delete[] upd;
+	}
+
+	GitTree tree(repo, oid);
+
+	repo.commit_create("HEAD", sig, sig, description, tree);
+}
+
+void update_git(GitRepo& repo, const string& user, const string& email, const string& description, const list<git_file>& files, time_t dt, signed int offset) {
 	GitSignature sig(user, email, dt, offset);
 
 	git_commit* parent;
 	git_oid parent_id;
 
-	repo.reference_name_to_id(&parent_id, "HEAD");
+	bool head_found = repo.reference_name_to_id(&parent_id, "HEAD");
+
+	if (!head_found) {
+		update_git_new_repo(repo, sig, description, files);
+		return;
+	}
 
 	repo.commit_lookup(&parent, &parent_id);
 
