@@ -250,7 +250,7 @@ static void git_add_dir(list<git_file>& files, const filesystem::path& dir, cons
 	}
 }
 
-static void git_remove_dir(GitRepo& repo, GitTree& tree, const string& dir, const string& unixdir, vector<string>& deleted) {
+static void git_remove_dir(GitRepo& repo, GitTree& tree, const filesystem::path& dir, const string& unixdir, list<git_file>& files) {
 	size_t c = tree.entrycount();
 
 	for (size_t i = 0; i < c; i++) {
@@ -260,11 +260,11 @@ static void git_remove_dir(GitRepo& repo, GitTree& tree, const string& dir, cons
 		if (gte.type() == GIT_OBJ_TREE) {
 			GitTree subtree(repo, gte);
 
-			git_remove_dir(repo, subtree, dir + name + "\\", unixdir + name + "/", deleted);
+			git_remove_dir(repo, subtree, dir / name, unixdir + name + "/", files);
 		}
 
-		if (!PathFileExistsA((dir + name).c_str()))
-			deleted.push_back(unixdir + name);
+		if (!filesystem::exists(dir / name))
+			files.emplace_back(unixdir + name, nullopt);
 	}
 }
 
@@ -288,15 +288,25 @@ static void replace_all(string& source, const string& from, const string& to) {
 }
 
 static void do_update_git(const string& repo_dir) {
+	list<git_file> files;
+	git_oid parent_id;
+
 	git_libgit2_init();
 
 	GitRepo repo(repo_dir);
 
-	list<git_file> files;
-
 	git_add_dir(files, repo_dir, "");
-	// FIXME -  loop through repo and remove anything that's been deleted
-	//git_remove_dir(repo, parent_tree, repo_dir, "", deleted);
+
+	if (repo.reference_name_to_id(&parent_id, "HEAD")) {
+		git_commit* parent;
+
+		repo.commit_lookup(&parent, &parent_id);
+
+		GitTree parent_tree(parent);
+
+		// loop through repo and remove anything that's been deleted
+		git_remove_dir(repo, parent_tree, repo_dir, "", files);
+	}
 
 	update_git(repo, "System", "business.intelligence@boltonft.nhs.uk", "Update", files);
 

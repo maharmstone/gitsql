@@ -123,8 +123,7 @@ private:
 };
 
 struct git_file {
-	git_file(const std::string& filename, const tds::Field& data) : filename(filename), data(data) { }
-	git_file(const std::string& filename, const std::string_view& data) : filename(filename), data(data) { }
+	git_file(const std::string& filename, const std::optional<std::string>& data) : filename(filename), data(data) { }
 
 	std::string filename;
 	std::optional<std::string> data;
