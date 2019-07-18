@@ -16,8 +16,7 @@ class GitSignature {
 	friend class GitRepo;
 
 public:
-	GitSignature(const std::string& user, const std::string& email);
-	GitSignature::GitSignature(const std::string& user, const std::string& email, time_t dt, signed int offset);
+	GitSignature(const std::string& user, const std::string& email, std::optional<time_t> dt = std::nullopt, signed int offset = 0);
 	~GitSignature();
 
 private:
@@ -132,4 +131,4 @@ struct git_file {
 };
 
 void update_git(GitRepo& repo, const std::string& user, const std::string& email, const std::string& description,
-				const std::list<git_file>& files, time_t dt = 0, signed int offset = 0);
+				const std::list<git_file>& files, std::optional<time_t> dt = std::nullopt, signed int offset = 0);

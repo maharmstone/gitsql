@@ -15,18 +15,16 @@ static void throw_git_error(int error, const char* func) {
 	throw runtime_error(string(func) + " failed (error " + to_string(error) + ").");
 }
 
-GitSignature::GitSignature(const string& user, const string& email) {
+GitSignature::GitSignature(const string& user, const string& email, optional<time_t> dt, signed int offset) {
 	unsigned int ret;
 
-	if ((ret = git_signature_now(&sig, user.c_str(), email.c_str())))
-		throw_git_error(ret, "git_signature_now");
-}
-
-GitSignature::GitSignature(const string& user, const string& email, time_t dt, signed int offset) {
-	unsigned int ret;
-
-	if ((ret = git_signature_new(&sig, user.c_str(), email.c_str(), dt, offset)))
-		throw_git_error(ret, "git_signature_new");
+	if (dt.has_value()) {
+		if ((ret = git_signature_new(&sig, user.c_str(), email.c_str(), dt.value(), offset)))
+			throw_git_error(ret, "git_signature_new");
+	} else {
+		if ((ret = git_signature_now(&sig, user.c_str(), email.c_str())))
+			throw_git_error(ret, "git_signature_now");
+	}
 }
 
 GitSignature::~GitSignature() {
@@ -202,7 +200,7 @@ static void update_git_new_repo(GitRepo& repo, const GitSignature& sig, const st
 	repo.commit_create("HEAD", sig, sig, description, tree);
 }
 
-void update_git(GitRepo& repo, const string& user, const string& email, const string& description, const list<git_file>& files, time_t dt, signed int offset) {
+void update_git(GitRepo& repo, const string& user, const string& email, const string& description, const list<git_file>& files, optional<time_t> dt, signed int offset) {
 	GitSignature sig(user, email, dt, offset);
 
 	git_commit* parent;
