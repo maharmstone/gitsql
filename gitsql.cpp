@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 #include <tdscpp.h>
 #include "git.h"
 
@@ -218,27 +219,22 @@ static void dump_sql(const tds::Conn& tds, const string& repo_dir, const string&
 	}
 }
 
-static void git_add_dir(list<git_file>& files, const string& dir, const string& unixpath) {
-	HANDLE h;
-	WIN32_FIND_DATAA fff;
+static void git_add_dir(list<git_file>& files, const filesystem::path& dir, const string& unixpath) {
+	for (const auto& de : filesystem::directory_iterator(dir)) {
+		const auto& p = de.path();
+		auto name = p.filename().u8string();
 
-	h = FindFirstFileA((dir + "*").c_str(), &fff);
-
-	if (h == INVALID_HANDLE_VALUE)
-		return;
-
-	do {
-		if (fff.cFileName[0] != '.') {
-			if (fff.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-				git_add_dir(files, dir + fff.cFileName + "\\", unixpath + fff.cFileName + "/");
+		if (!name.empty() && name[0] != '.') {
+			if (de.is_directory())
+				git_add_dir(files, p, unixpath + name + "/");
 			else {
 				string data;
 
 				{
-					ifstream f(dir + fff.cFileName, ios::binary);
+					ifstream f(p, ios::binary);
 
 					if (!f.good())
-						throw runtime_error("Could not open " + dir + fff.cFileName + " for reading.");
+						throw runtime_error("Could not open " + p.u8string() + " for reading.");
 
 					f.seekg(0, ios::end);
 					size_t size = f.tellg();
@@ -248,12 +244,10 @@ static void git_add_dir(list<git_file>& files, const string& dir, const string& 
 					f.read(&data[0], size); 
 				}
 
-				files.emplace_back(unixpath + fff.cFileName, data);
+				files.emplace_back(unixpath + name, data);
 			}
 		}
-	} while (FindNextFileA(h, &fff));
-
-	FindClose(h);
+	}
 }
 
 static void git_remove_dir(GitRepo& repo, GitTree& tree, const string& dir, const string& unixdir, vector<string>& deleted) {
