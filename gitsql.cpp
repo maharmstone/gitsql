@@ -141,6 +141,14 @@ static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, con
 		}
 	}
 
+	{
+		tds::Query sq(tds, "SELECT triggers.name, sql_modules.definition FROM " + dbs + "sys.triggers LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=triggers.object_id WHERE triggers.parent_class_desc = 'DATABASE'");
+
+		while (sq.fetch_row()) {
+			objs.emplace_back("db_triggers", sq[0], sq[1], "", false);
+		}
+	}
+
 	for (auto& obj : objs) {
 		filesystem::path dir = repo_dir / sanitize_fn(obj.schema);
 
@@ -157,6 +165,8 @@ static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, con
 			subdir = "functions";
 		else if (obj.type == "U")
 			subdir = "tables";
+		else
+			subdir = "";
 
 		if (obj.type == "U") {
 			{
@@ -176,14 +186,16 @@ static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, con
 
 		obj.def += "\n";
 
-		dir /= subdir;
+		if (subdir != "") {
+			dir /= subdir;
 
-		if (!filesystem::exists(dir) && !filesystem::create_directory(dir))
-			throw runtime_error("Error creating directory " + dir.u8string() + ".");
+			if (!filesystem::exists(dir) && !filesystem::create_directory(dir))
+				throw runtime_error("Error creating directory " + dir.u8string() + ".");
+		}
 
 		filesystem::path fn = dir / (sanitize_fn(obj.name) + ".sql");
 
-		ofstream f(fn);
+		ofstream f(fn, ios::binary);
 
 		if (!f.good())
 			throw runtime_error("Error creating file " + fn.u8string() + ".");
