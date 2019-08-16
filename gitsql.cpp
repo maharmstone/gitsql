@@ -34,29 +34,17 @@ static string sanitize_fn(const string& fn) {
 	return s;
 }
 
-static void clear_dir(const string& dir, bool top) {
-	HANDLE h;
-	WIN32_FIND_DATAA fff;
+static void clear_dir(const filesystem::path& dir) {
+	vector<filesystem::path> children;
 
-	h = FindFirstFileA((dir + "*").c_str(), &fff);
+	for (const auto& p : filesystem::directory_iterator(dir)) {
+		children.emplace_back(p);
+	}
 
-	if (h == INVALID_HANDLE_VALUE)
-		return;
-
-	do {
-		if (!strcmp(fff.cFileName, ".") || !strcmp(fff.cFileName, ".."))
-			continue;
-
-		if (!top || fff.cFileName[0] != '.') {
-			if (fff.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-				clear_dir(dir + fff.cFileName + "\\", false);
-				RemoveDirectoryA((dir + fff.cFileName).c_str());
-			} else
-				DeleteFileA((dir + fff.cFileName).c_str());
-		}
-	} while (FindNextFileA(h, &fff));
-
-	FindClose(h);
+	for (const auto& p : children) {
+		if (p.filename().u8string()[0] != '.')
+			filesystem::remove_all(p);
+	}
 }
 
 static string sql_escape(string s) {
@@ -135,13 +123,13 @@ struct sql_obj {
 	bool fulldump;
 };
 
-static void dump_sql(const tds::Conn& tds, const string& repo_dir, const string& db) {
+static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, const string& db) {
 	string s, dbs;
 
 	if (db != "")
 		dbs = db + ".";
 
-	clear_dir(repo_dir, true);
+	clear_dir(repo_dir);
 
 	vector<sql_obj> objs;
 
@@ -154,18 +142,12 @@ static void dump_sql(const tds::Conn& tds, const string& repo_dir, const string&
 	}
 
 	for (auto& obj : objs) {
-		string dir = repo_dir + sanitize_fn(obj.schema);
+		filesystem::path dir = repo_dir / sanitize_fn(obj.schema);
+
+		if (!filesystem::exists(dir) && !filesystem::create_directory(dir))
+			throw runtime_error("Error creating directory " + dir.u8string() + ".");
+
 		string subdir;
-		string fn;
-		HANDLE h;
-		DWORD written;
-
-		if (!CreateDirectoryA(dir.c_str(), NULL)) {
-			auto last_error = GetLastError();
-
-			if (last_error != ERROR_ALREADY_EXISTS)
-				throw runtime_error("CreateDirectory for " + dir + " returned error " + to_string(last_error));
-		}
 
 		if (obj.type == "V")
 			subdir = "views";
@@ -194,28 +176,19 @@ static void dump_sql(const tds::Conn& tds, const string& repo_dir, const string&
 
 		obj.def += "\n";
 
-		dir += "\\" + subdir;
+		dir /= subdir;
 
-		if (!CreateDirectoryA(dir.c_str(), NULL)) {
-			auto last_error = GetLastError();
+		if (!filesystem::exists(dir) && !filesystem::create_directory(dir))
+			throw runtime_error("Error creating directory " + dir.u8string() + ".");
 
-			if (last_error != ERROR_ALREADY_EXISTS)
-				throw runtime_error("CreateDirectory for " + dir + " returned error " + to_string(last_error));
-		}
+		filesystem::path fn = dir / (sanitize_fn(obj.name) + ".sql");
 
-		fn = dir + "\\" + sanitize_fn(obj.name) + ".sql";
+		ofstream f(fn);
 
-		h = CreateFileA(fn.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+		if (!f.good())
+			throw runtime_error("Error creating file " + fn.u8string() + ".");
 
-		if (h == INVALID_HANDLE_VALUE)
-			throw runtime_error("CreateFile returned error " + to_string(GetLastError()));
-
-		if (!WriteFile(h, obj.def.c_str(), static_cast<DWORD>(obj.def.size()), &written, NULL))
-			throw runtime_error("WriteFile returned error " + to_string(GetLastError()));
-
-		SetEndOfFile(h);
-
-		CloseHandle(h);
+		f.write(obj.def.c_str(), obj.def.size());
 	}
 }
 
