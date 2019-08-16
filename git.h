@@ -39,7 +39,7 @@ public:
 	GitTree(const GitRepo& repo, const std::string& rev);
 	GitTree(const GitRepo& repo, const GitTreeEntry& gte);
 	~GitTree();
-	size_t entrycount();
+	size_t entrycount() const;
 	bool entry_bypath(git_tree_entry** out, const std::string& path);
 
 private:
@@ -98,7 +98,7 @@ private:
 
 class GitTreeEntry {
 public:
-	GitTreeEntry(GitTree& tree, size_t idx);
+	GitTreeEntry(const GitTree& tree, size_t idx);
 	std::string name();
 	git_otype type();
 
@@ -130,4 +130,5 @@ struct git_file {
 };
 
 void update_git(GitRepo& repo, const std::string& user, const std::string& email, const std::string& description,
-				const std::list<git_file>& files, std::optional<time_t> dt = std::nullopt, signed int offset = 0);
+				std::list<git_file>& files, bool clear_all = false, std::optional<time_t> dt = std::nullopt,
+				signed int offset = 0);

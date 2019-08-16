@@ -200,7 +200,35 @@ static void update_git_new_repo(GitRepo& repo, const GitSignature& sig, const st
 	repo.commit_create("HEAD", sig, sig, description, tree);
 }
 
-void update_git(GitRepo& repo, const string& user, const string& email, const string& description, const list<git_file>& files, optional<time_t> dt, signed int offset) {
+static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string& prefix, list<git_file>& files) {
+	auto c = tree.entrycount();
+
+	for (size_t i = 0; i < c; i++) {
+		GitTreeEntry gte(tree, i);
+		string name = gte.name();
+
+		if (gte.type() == GIT_OBJ_TREE) {
+			GitTree subtree(repo, gte);
+
+			do_clear_all(repo, subtree, prefix + name + "/", files);
+		} else {
+			bool found = false;
+
+			for (auto& f : files) {
+				if (f.filename == prefix + name) {
+					found = true;
+					break;
+				}
+			}
+
+			if (!found)
+				files.emplace_back(prefix + name, nullopt);
+		}
+	}
+}
+
+void update_git(GitRepo& repo, const string& user, const string& email, const string& description, list<git_file>& files,
+				bool clear_all, optional<time_t> dt, signed int offset) {
 	GitSignature sig(user, email, dt, offset);
 
 	git_commit* parent;
@@ -217,6 +245,9 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 
 	GitTree parent_tree(parent);
 	git_oid oid;
+
+	if (clear_all)
+		do_clear_all(repo, parent_tree, "", files);
 
 	{
 		git_tree_update* upd = new git_tree_update[files.size()];
@@ -303,11 +334,11 @@ void GitIndex::clear() {
 		throw_git_error(ret, "git_index_clear");
 }
 
-size_t GitTree::entrycount() {
+size_t GitTree::entrycount() const {
 	return git_tree_entrycount(tree);
 }
 
-GitTreeEntry::GitTreeEntry(GitTree& tree, size_t idx) {
+GitTreeEntry::GitTreeEntry(const GitTree& tree, size_t idx) {
 	gte = git_tree_entry_byindex(tree, idx);
 
 	if (!gte)

@@ -357,12 +357,16 @@ static void flush_git(const tds::Conn& tds) {
 			}
 
 			list<git_file> files;
+			bool clear_all = false;
 
 			{
 				tds::Query sq2(tds, "SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit);
 
 				while (sq2.fetch_row()) {
-					files.emplace_back(sq2[0], sq2[1]);
+					if (sq2[0].is_null())
+						clear_all = true;
+					else
+						files.emplace_back(sq2[0], sq2[1]);
 				}
 			}
 
@@ -395,16 +399,20 @@ static void flush_git(const tds::Conn& tds) {
 						tds::Query sq2(tds, "SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit2);
 
 						while (sq2.fetch_row()) {
-							string fn = sq2[0];
+							if (sq2[0].is_null())
+								clear_all = true;
+							else {
+								string fn = sq2[0];
 							
-							for (auto it = files.begin(); it != files.end(); it++) {
-								if (it->filename == fn) {
-									files.erase(it);
-									break;
+								for (auto it = files.begin(); it != files.end(); it++) {
+									if (it->filename == fn) {
+										files.erase(it);
+										break;
+									}
 								}
-							}
 
-							files.emplace_back(fn, sq2[1]);
+								files.emplace_back(fn, sq2[1]);
+							}
 						}
 					}
 
@@ -415,8 +423,8 @@ static void flush_git(const tds::Conn& tds) {
 				}
 			}
 
-			if (files.size() > 0)
-				update_git(repo, name, email, description, files, dt, tz_offset);
+			if (files.size() > 0 || clear_all)
+				update_git(repo, name, email, description, files, clear_all, dt, tz_offset);
 
 			tds.run("DELETE FROM Restricted.Git WHERE id=?", commit);
 			tds.run("DELETE FROM Restricted.GitFiles WHERE id=?", commit);
