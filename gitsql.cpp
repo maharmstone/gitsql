@@ -246,9 +246,7 @@ static void git_remove_dir(GitRepo& repo, GitTree& tree, const filesystem::path&
 			GitTree subtree(repo, gte);
 
 			git_remove_dir(repo, subtree, dir / name, unixdir + name + "/", files);
-		}
-
-		if (!filesystem::exists(dir / name))
+		} else if (!filesystem::exists(dir / name))
 			files.emplace_back(unixdir + name, nullopt);
 	}
 }
