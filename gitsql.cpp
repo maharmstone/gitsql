@@ -184,6 +184,19 @@ static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, con
 
 		replace_all(obj.def, "\r\n", "\n");
 
+		if (!obj.def.empty() && obj.def[0] == '\n') {
+			auto pos = obj.def.find_first_not_of("\n");
+
+			if (pos == string::npos)
+				obj.def.clear();
+			else
+				obj.def = obj.def.substr(pos);
+		}
+
+		while (!obj.def.empty() && obj.def.back() == '\n') {
+			obj.def.pop_back();
+		}
+
 		obj.def += "\n";
 
 		if (subdir != "") {
