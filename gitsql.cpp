@@ -134,7 +134,7 @@ static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, con
 	vector<sql_obj> objs;
 
 	{
-		tds::Query sq(tds, "SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM " + dbs + "sys.objects LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN " + dbs + "sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN " + dbs + "sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type='V' OR objects.type='P' OR objects.type='FN' OR objects.type='U' ORDER BY schemas.name, objects.name");
+		tds::Query sq(tds, "SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM " + dbs + "sys.objects LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN " + dbs + "sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN " + dbs + "sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type IN ('V','P','FN','TF','U') ORDER BY schemas.name, objects.name");
 
 		while (sq.fetch_row()) {
 			objs.emplace_back(sq[0], sq[1], sq[2], sq[3], (string)sq[4] == "true");
@@ -161,7 +161,7 @@ static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, con
 			subdir = "views";
 		else if (obj.type == "P")
 			subdir = "procedures";
-		else if (obj.type == "FN")
+		else if (obj.type == "FN" || obj.type == "TF")
 			subdir = "functions";
 		else if (obj.type == "U")
 			subdir = "tables";
