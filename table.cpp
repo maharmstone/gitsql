@@ -81,11 +81,19 @@ struct constraint {
 	unsigned int column_id;
 };
 
+struct foreign_key_column {
+	foreign_key_column(const column& col, const string& schema, const string& table, const string& other_column) : col(col), schema(schema), table(table), other_column(other_column) { }
+
+	const column& col;
+	string schema, table, other_column;
+};
+
 void table_test(tds::Conn& tds, const string_view& schema, const string_view& table) {
 	int64_t id, seed_value, increment_value;
 	vector<column> columns;
 	vector<index> indices;
 	vector<constraint> constraints;
+	vector<vector<foreign_key_column>> foreign_keys;
 	string escaped_name, ddl;
 	bool has_included_indices = false;
 
@@ -169,6 +177,32 @@ ORDER BY columns.column_id
 		}
 	}
 
+	{
+		int64_t last_num = 0;
+
+		tds::Query sq(tds, R"(
+SELECT foreign_key_columns.constraint_object_id, foreign_key_columns.parent_column_id, OBJECT_SCHEMA_NAME(foreign_key_columns.referenced_object_id), OBJECT_NAME(foreign_key_columns.referenced_object_id), columns.name
+FROM sys.foreign_key_columns
+JOIN sys.columns ON columns.object_id = foreign_key_columns.referenced_object_id AND columns.column_id = foreign_key_columns.referenced_column_id
+WHERE foreign_key_columns.parent_object_id = ?
+ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constraint_column_id
+)", id);
+
+		while (sq.fetch_row()) {
+			if (last_num != (int64_t)sq[0]) {
+				foreign_keys.emplace_back();
+				last_num = (int64_t)sq[0];
+			}
+
+			for (const auto& col : columns) {
+				if (col.column_id == (unsigned int)sq[1]) {
+					foreign_keys.back().emplace_back(col, sq[2], sq[3], sq[4]);
+					break;
+				}
+			}
+		}
+	}
+
 	escaped_name = brackets_escape(schema) + "." + brackets_escape(table);
 
 	ddl = "DROP TABLE IF EXISTS " + escaped_name + ";\n\n";
@@ -224,6 +258,15 @@ ORDER BY columns.column_id
 							ddl += " CHECK" + con.definition;
 						}
 					}
+
+					for (const auto& fk : foreign_keys) {
+						if (fk.size() == 1 && &fk.front().col == &col) {
+							if (!first_con)
+								ddl += ", ";
+
+							ddl += " FOREIGN KEY REFERENCES " + brackets_escape(fk.front().schema) + "." + brackets_escape(fk.front().table) + "(" + brackets_escape(fk.front().other_column) + ")";
+						}
+					}
 				}
 
 				for (const auto& ind : indices) {
@@ -246,8 +289,6 @@ ORDER BY columns.column_id
 			}
 		}
 	}
-
-	// FIXME - foreign keys
 
 	for (const auto& ind : indices) {
 		bool has_included_columns = false;
@@ -291,6 +332,38 @@ ORDER BY columns.column_id
 	for (const auto& con : constraints) {
 		if (con.column_id == 0)
 			ddl += ",\n    CHECK" + con.definition;
+	}
+
+	for (const auto& fk : foreign_keys) {
+		if (fk.size() > 1) {
+			bool first = true;
+
+			ddl += ",\n    FOREIGN KEY (";
+
+			for (const auto& c : fk) {
+				if (!first)
+					ddl += ", ";
+
+				first = false;
+
+				ddl += brackets_escape(c.col.name);
+			}
+
+			ddl += ") REFERENCES " + brackets_escape(fk.front().schema) + "." + brackets_escape(fk.front().table) + "(";
+
+			first = true;
+
+			for (const auto& c : fk) {
+				if (!first)
+					ddl += ", ";
+
+				first = false;
+
+				ddl += brackets_escape(c.other_column);
+			}
+
+			ddl += ")";
+		}
 	}
 
 	ddl += "\n";
