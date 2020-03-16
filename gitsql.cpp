@@ -534,10 +534,18 @@ struct index {
 	vector<index_column> columns;
 };
 
+struct constraint {
+	constraint(const string& definition, unsigned int column_id) : definition(definition), column_id(column_id) { }
+
+	string definition;
+	unsigned int column_id;
+};
+
 static void table_test(tds::Conn& tds, const string_view& schema, const string_view& table) {
 	int64_t id, seed_value, increment_value;
 	vector<column> columns;
 	vector<index> indices;
+	vector<constraint> constraints;
 	string escaped_name, ddl;
 	bool has_included_indices = false;
 
@@ -613,6 +621,14 @@ ORDER BY columns.column_id
 		}
 	}
 
+	{
+		tds::Query sq(tds, "SELECT definition, parent_column_id FROM sys.check_constraints WHERE parent_object_id = ? ORDER BY name", id);
+
+		while (sq.fetch_row()) {
+			constraints.emplace_back(sq[0], (unsigned int)sq[1]);
+		}
+	}
+
 	escaped_name = brackets_escape(schema) + "." + brackets_escape(table);
 
 	ddl = "DROP TABLE IF EXISTS " + escaped_name + ";\n\n";
@@ -655,6 +671,21 @@ ORDER BY columns.column_id
 
 				ddl += " " + (col.nullable ? "NULL"s : "NOT NULL"s);
 
+				{
+					bool first_con = true;
+
+					for (const auto& con : constraints) {
+						if (con.column_id == col.column_id) {
+							if (!first_con)
+								ddl += ", ";
+
+							first_con = false;
+
+							ddl += " CHECK" + con.definition;
+						}
+					}
+				}
+
 				for (const auto& ind : indices) {
 					if (ind.is_primary_key) {
 						if (ind.columns.size() == 1 && &ind.columns.front().col == &col) {
@@ -673,8 +704,6 @@ ORDER BY columns.column_id
 				if (col.is_persisted)
 					ddl += " PERSISTED";
 			}
-
-			// FIXME - constraints
 		}
 	}
 
@@ -717,6 +746,11 @@ ORDER BY columns.column_id
 			ddl += ")";
 		} else
 			has_included_indices = true;
+	}
+
+	for (const auto& con : constraints) {
+		if (con.column_id == 0)
+			ddl += ",\n    CHECK" + con.definition;
 	}
 
 	ddl += "\n";
@@ -801,7 +835,7 @@ int main(int argc, char** argv) {
 
 	tds::Conn tds(db_server, db_username, db_password, db_app);
 
-	table_test(tds, "Restricted", "AeAttendance");
+	table_test(tds, "WTS", "jobs");
 
 	/*try {
 		string unixpath, def;
