@@ -508,12 +508,12 @@ static string brackets_escape(const string_view& s) {
 }
 
 struct column {
-	column(const string& name, const string& type, int max_length, bool nullable, int precision, int scale, const optional<string>& default, int column_id) : name(name), type(type), max_length(max_length), nullable(nullable), precision(precision), scale(scale), default(default), column_id(column_id) { }
+	column(const string& name, const string& type, int max_length, bool nullable, int precision, int scale, const optional<string>& default, int column_id, bool is_identity) : name(name), type(type), max_length(max_length), nullable(nullable), precision(precision), scale(scale), default(default), column_id(column_id), is_identity(is_identity) { }
 
 	string name, type;
 	int max_length, precision, scale;
 	unsigned int column_id;
-	bool nullable;
+	bool nullable, is_identity;
 	optional<string> default;
 };
 
@@ -535,26 +535,33 @@ struct index {
 };
 
 static void table_test(tds::Conn& tds, const string_view& schema, const string_view& table) {
-	int64_t id;
+	int64_t id, seed_value, increment_value;
 	vector<column> columns;
 	vector<index> indices;
 	string escaped_name, ddl;
 	bool has_included_indices = false;
 
 	{
-		tds::Query sq(tds, "SELECT object_id FROM sys.objects JOIN sys.schemas ON schemas.schema_id = objects.schema_id WHERE objects.name = ? AND schemas.name = ?", table, schema);
+		tds::Query sq(tds, R"(SELECT objects.object_id, identity_columns.seed_value, identity_columns.increment_value
+FROM sys.objects
+JOIN sys.schemas ON schemas.schema_id = objects.schema_id
+LEFT JOIN sys.identity_columns ON identity_columns.object_id = objects.object_id
+WHERE objects.name = ? AND schemas.name = ?
+)", table, schema);
 
 		if (!sq.fetch_row())
 			throw runtime_error("Cannot find object ID for "s + string(schema) + "."s + string(table) + "."s);
 
 		id = (int64_t)sq[0];
+		seed_value = (int64_t)sq[1];
+		increment_value = (int64_t)sq[2];
 	}
 
 	{
-		tds::Query sq (tds, "SELECT columns.name, CASE WHEN types.is_user_defined = 0 THEN UPPER(types.name) ELSE types.name END, columns.max_length, columns.is_nullable, columns.precision, columns.scale, default_constraints.definition, columns.column_id FROM sys.columns JOIN sys.types ON types.user_type_id = columns.user_type_id LEFT JOIN sys.default_constraints ON default_constraints.parent_object_id = columns.object_id AND default_constraints.parent_column_id  = columns.column_id WHERE columns.object_id = ? ORDER BY columns.column_id", id);
+		tds::Query sq (tds, "SELECT columns.name, CASE WHEN types.is_user_defined = 0 THEN UPPER(types.name) ELSE types.name END, columns.max_length, columns.is_nullable, columns.precision, columns.scale, default_constraints.definition, columns.column_id, columns.is_identity FROM sys.columns JOIN sys.types ON types.user_type_id = columns.user_type_id LEFT JOIN sys.default_constraints ON default_constraints.parent_object_id = columns.object_id AND default_constraints.parent_column_id  = columns.column_id WHERE columns.object_id = ? ORDER BY columns.column_id", id);
 
 		while (sq.fetch_row()) {
-			columns.emplace_back(sq[0], sq[1], (int)sq[2], (int)sq[3] != 0, (int)sq[4], (int)sq[5], sq[6], (unsigned int)sq[7]);
+			columns.emplace_back(sq[0], sq[1], (int)sq[2], (int)sq[3] != 0, (int)sq[4], (int)sq[5], sq[6], (unsigned int)sq[7], (unsigned int)sq[8] != 0);
 		}
 	}
 
@@ -614,6 +621,13 @@ static void table_test(tds::Conn& tds, const string_view& schema, const string_v
 			if (col.default.has_value())
 				ddl += " DEFAULT" + col.default.value();
 
+			if (col.is_identity) {
+				ddl += " IDENTITY";
+
+				if (seed_value != 1 || increment_value != 1)
+					ddl += "(" + to_string(seed_value) + "," + to_string(increment_value) + ")";
+			}
+
 			ddl += " " + (col.nullable ? "NULL"s : "NOT NULL"s);
 
 			for (const auto& ind : indices) {
@@ -629,7 +643,6 @@ static void table_test(tds::Conn& tds, const string_view& schema, const string_v
 				}
 			}
 		
-			// FIXME - identity
 			// FIXME - computed columns
 
 			// FIXME - constraints
