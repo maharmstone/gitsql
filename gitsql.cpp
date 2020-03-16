@@ -466,6 +466,106 @@ private:
 	HANDLE h = INVALID_HANDLE_VALUE;
 };
 
+static bool need_escaping(const string_view& s) {
+	// see https://docs.microsoft.com/en-us/previous-versions/sql/sql-server-2008-r2/ms175874(v=sql.105)
+
+	if (s.empty())
+		return true;
+
+	for (const auto& c : s) {
+		if ((c < 'A' || c > 'Z') && (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' && c != '@' && c != '#' && c != '$')
+			return true;
+	}
+
+	// can't have number or dollar sign at beginning
+	
+	if ((s.front() >= '0' && s.front() <= '9') || s.front() == '$')
+		return true;
+
+	return false;
+}
+
+static string brackets_escape(const string_view& s) {
+	string ret;
+
+	if (!need_escaping(s))
+		return string(s);
+
+	ret = "[";
+
+	for (const auto& c : s) {
+		if (c == ']')
+			ret += "]]";
+		else
+			ret += c;
+	}
+
+	ret += "]";
+
+	return ret;
+}
+
+struct column {
+	column(const string& name, const string& type, int max_length, bool nullable) : name(name), type(type), max_length(max_length), nullable(nullable) { }
+
+	string name, type;
+	int max_length;
+	bool nullable;
+};
+
+static void table_test(tds::Conn& tds, const string_view& schema, const string_view& table) {
+	int64_t id;
+	vector<column> columns;
+	string escaped_name, ddl;
+
+	{
+		tds::Query sq(tds, "SELECT object_id FROM sys.objects JOIN sys.schemas ON schemas.schema_id = objects.schema_id WHERE objects.name = ? AND schemas.name = ?", table, schema);
+
+		if (!sq.fetch_row())
+			throw runtime_error("Cannot find object ID for "s + string(schema) + "."s + string(table) + "."s);
+
+		id = (int64_t)sq[0];
+	}
+
+	{
+		tds::Query sq (tds, "SELECT columns.name, CASE WHEN types.is_user_defined = 0 THEN UPPER(types.name) ELSE types.name END, columns.max_length, columns.is_nullable FROM sys.columns JOIN sys.types ON types.user_type_id = columns.user_type_id WHERE columns.object_id = ? ORDER BY columns.column_id", id);
+
+		while (sq.fetch_row()) {
+			columns.emplace_back(sq[0], sq[1], (int)sq[2], (int)sq[3] != 0);
+		}
+	}
+
+	escaped_name = brackets_escape(schema) + "." + brackets_escape(table);
+
+	ddl = "DROP TABLE IF EXISTS " + escaped_name + ";\n\n";
+	ddl += "CREATE TABLE " + escaped_name + " (\n";
+
+	for (const auto& col : columns) {
+		ddl += "    " + brackets_escape(col.name) + " " + brackets_escape(col.type);
+		// FIXME - length
+		// FIXME - precision
+		// FIXME - scale
+		// FIXME - collation?
+
+		ddl += " " + (col.nullable ? "NULL"s : "NOT NULL"s);
+		
+		// FIXME - identity
+		// FIXME - computed columns
+		// FIXME - defaults
+		// FIXME - constraints
+
+		ddl += ",\n";
+	}
+
+	// FIXME - primary keys
+	// FIXME - indices
+	// FIXME - foreign keys
+
+	ddl += ");\n";
+
+	cout << ddl << endl;
+}
+
 int main(int argc, char** argv) {  
 	string cmd;
 
@@ -484,7 +584,9 @@ int main(int argc, char** argv) {
 
 	tds::Conn tds(db_server, db_username, db_password, db_app);
 
-	try {
+	table_test(tds, "Restricted", "AeAttendance");
+
+	/*try {
 		string unixpath, def;
 
 		{
@@ -504,7 +606,7 @@ int main(int argc, char** argv) {
 		cerr << e.what() << endl;
 		tds.run("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", string_view(e.what()));
 		throw;
-	}
+	}*/
 
 	return 0;
 }
