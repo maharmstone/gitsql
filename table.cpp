@@ -427,5 +427,17 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 		}
 	}
 
+	{
+		tds::Query sq(tds, R"(
+SELECT sql_modules.definition
+FROM sys.triggers
+JOIN sys.sql_modules ON sql_modules.object_id = triggers.object_id
+WHERE triggers.parent_id = ?)", id);
+
+		while (sq.fetch_row()) {
+			ddl += (string)sq[0] + "\nGO\n";
+		}
+	}
+
 	cout << ddl << endl;
 }
