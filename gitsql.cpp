@@ -508,12 +508,12 @@ static string brackets_escape(const string_view& s) {
 }
 
 struct column {
-	column(const string& name, const string& type, int max_length, bool nullable, int precision, int scale, const optional<string>& default, int column_id, bool is_identity) : name(name), type(type), max_length(max_length), nullable(nullable), precision(precision), scale(scale), default(default), column_id(column_id), is_identity(is_identity) { }
+	column(const string& name, const string& type, int max_length, bool nullable, int precision, int scale, const optional<string>& default, int column_id, bool is_identity, bool is_computed, bool is_persisted, const string& computed_definition) : name(name), type(type), max_length(max_length), nullable(nullable), precision(precision), scale(scale), default(default), column_id(column_id), is_identity(is_identity), is_computed(is_computed), is_persisted(is_persisted), computed_definition(computed_definition) { }
 
-	string name, type;
+	string name, type, computed_definition;
 	int max_length, precision, scale;
 	unsigned int column_id;
-	bool nullable, is_identity;
+	bool nullable, is_identity, is_computed, is_persisted;
 	optional<string> default;
 };
 
@@ -542,7 +542,10 @@ static void table_test(tds::Conn& tds, const string_view& schema, const string_v
 	bool has_included_indices = false;
 
 	{
-		tds::Query sq(tds, R"(SELECT objects.object_id, identity_columns.seed_value, identity_columns.increment_value
+		tds::Query sq(tds, R"(
+SELECT objects.object_id,
+	identity_columns.seed_value,
+	identity_columns.increment_value
 FROM sys.objects
 JOIN sys.schemas ON schemas.schema_id = objects.schema_id
 LEFT JOIN sys.identity_columns ON identity_columns.object_id = objects.object_id
@@ -558,10 +561,29 @@ WHERE objects.name = ? AND schemas.name = ?
 	}
 
 	{
-		tds::Query sq (tds, "SELECT columns.name, CASE WHEN types.is_user_defined = 0 THEN UPPER(types.name) ELSE types.name END, columns.max_length, columns.is_nullable, columns.precision, columns.scale, default_constraints.definition, columns.column_id, columns.is_identity FROM sys.columns JOIN sys.types ON types.user_type_id = columns.user_type_id LEFT JOIN sys.default_constraints ON default_constraints.parent_object_id = columns.object_id AND default_constraints.parent_column_id  = columns.column_id WHERE columns.object_id = ? ORDER BY columns.column_id", id);
+		tds::Query sq (tds, R"(
+SELECT columns.name,
+	CASE WHEN types.is_user_defined = 0 THEN UPPER(types.name) ELSE types.name END,
+	columns.max_length,
+	columns.is_nullable,
+	columns.precision,
+	columns.scale,
+	default_constraints.definition,
+	columns.column_id,
+	columns.is_identity,
+	columns.is_computed,
+	computed_columns.is_persisted,
+	computed_columns.definition
+FROM sys.columns
+JOIN sys.types ON types.user_type_id = columns.user_type_id
+LEFT JOIN sys.default_constraints ON default_constraints.parent_object_id = columns.object_id AND default_constraints.parent_column_id  = columns.column_id
+LEFT JOIN sys.computed_columns ON computed_columns.object_id = columns.object_id AND computed_columns.column_id = columns.column_id
+WHERE columns.object_id = ?
+ORDER BY columns.column_id
+)", id);
 
 		while (sq.fetch_row()) {
-			columns.emplace_back(sq[0], sq[1], (int)sq[2], (int)sq[3] != 0, (int)sq[4], (int)sq[5], sq[6], (unsigned int)sq[7], (unsigned int)sq[8] != 0);
+			columns.emplace_back(sq[0], sq[1], (int)sq[2], (int)sq[3] != 0, (int)sq[4], (int)sq[5], sq[6], (unsigned int)sq[7], (unsigned int)sq[8] != 0, (unsigned int)sq[9] != 0, (unsigned int)sq[10] != 0, sq[11]);
 		}
 	}
 
@@ -605,45 +627,52 @@ WHERE objects.name = ? AND schemas.name = ?
 		
 			first = false;
 
-			ddl += "    " + brackets_escape(col.name) + " " + brackets_escape(col.type);
+			ddl += "    " + brackets_escape(col.name);
+			
+			if (!col.is_computed) {
+				ddl += " " + brackets_escape(col.type);
 
-			if (col.type == "CHAR" || col.type == "VARCHAR" || col.type == "BINARY" || col.type == "VARBINARY" || col.type == "NCHAR" || col.type == "NVARCHAR")
-				ddl += "(" + (col.max_length == -1 ? "MAX" : to_string(col.max_length)) + ")";
-			else if (col.type == "DECIMAL" || col.type == "NUMERIC")
-				ddl += "(" + to_string(col.precision) +"," + to_string(col.scale) + ")";
-			else if ((col.type == "TIME" || col.type == "DATETIME2") && col.scale != 7)
-				ddl += "(" + to_string(col.scale) + ")";
-			else if (col.type == "DATETIMEOFFSET")
-				ddl += "(" + to_string(col.scale) + ")"; // FIXME - what's the default for this?
+				if (col.type == "CHAR" || col.type == "VARCHAR" || col.type == "BINARY" || col.type == "VARBINARY" || col.type == "NCHAR" || col.type == "NVARCHAR")
+					ddl += "(" + (col.max_length == -1 ? "MAX" : to_string(col.max_length)) + ")";
+				else if (col.type == "DECIMAL" || col.type == "NUMERIC")
+					ddl += "(" + to_string(col.precision) +"," + to_string(col.scale) + ")";
+				else if ((col.type == "TIME" || col.type == "DATETIME2") && col.scale != 7)
+					ddl += "(" + to_string(col.scale) + ")";
+				else if (col.type == "DATETIMEOFFSET")
+					ddl += "(" + to_string(col.scale) + ")"; // FIXME - what's the default for this?
 
-			// FIXME - collation?
+				// FIXME - collation?
 
-			if (col.default.has_value())
-				ddl += " DEFAULT" + col.default.value();
+				if (col.default.has_value())
+					ddl += " DEFAULT" + col.default.value();
 
-			if (col.is_identity) {
-				ddl += " IDENTITY";
+				if (col.is_identity) {
+					ddl += " IDENTITY";
 
-				if (seed_value != 1 || increment_value != 1)
-					ddl += "(" + to_string(seed_value) + "," + to_string(increment_value) + ")";
-			}
-
-			ddl += " " + (col.nullable ? "NULL"s : "NOT NULL"s);
-
-			for (const auto& ind : indices) {
-				if (ind.is_primary_key) {
-					if (ind.columns.size() == 1 && &ind.columns.front().col == &col) {
-						ddl += " PRIMARY KEY";
-
-						if (ind.type == 2)
-							ddl += " NONCLUSTERED";
-					}
-
-					break;
+					if (seed_value != 1 || increment_value != 1)
+						ddl += "(" + to_string(seed_value) + "," + to_string(increment_value) + ")";
 				}
+
+				ddl += " " + (col.nullable ? "NULL"s : "NOT NULL"s);
+
+				for (const auto& ind : indices) {
+					if (ind.is_primary_key) {
+						if (ind.columns.size() == 1 && &ind.columns.front().col == &col) {
+							ddl += " PRIMARY KEY";
+
+							if (ind.type == 2)
+								ddl += " NONCLUSTERED";
+						}
+
+						break;
+					}
+				}
+			} else {
+				ddl += " AS " + col.computed_definition;
+
+				if (col.is_persisted)
+					ddl += " PERSISTED";
 			}
-		
-			// FIXME - computed columns
 
 			// FIXME - constraints
 		}
