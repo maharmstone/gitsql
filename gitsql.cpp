@@ -23,7 +23,7 @@ const string db_app = "GitSQL";
 static void replace_all(string& source, const string& from, const string& to);
 
 // table.cpp
-void table_test(tds::Conn& tds, const string_view& schema, const string_view& table);
+string table_ddl(const tds::Conn& tds, const string_view& schema, const string_view& table);
 
 // strip out characters that NTFS doesn't like
 static string sanitize_fn(const string& fn) {
@@ -172,14 +172,7 @@ static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, con
 			subdir = "";
 
 		if (obj.type == "U") {
-			{
-				tds::Query sq2(tds, "SELECT " + dbs + "dbo.func_GetDDL(?)",  obj.schema + "." + obj.name);
-
-				if (!sq2.fetch_row())
-					throw runtime_error("Error calling dbo.func_GetDDL for " + dbs + obj.schema + "." + obj.name + ".");
-
-				obj.def = sq2[0];
-			}
+			obj.def = table_ddl(tds, obj.schema, obj.name);
 
 			if (obj.fulldump)
 				obj.def += "\n" + dump_table(tds, obj.schema, obj.name);
@@ -487,9 +480,7 @@ int main(int argc, char** argv) {
 
 	tds::Conn tds(db_server, db_username, db_password, db_app);
 
-	table_test(tds, "WTS", "jobs");
-
-	/*try {
+	try {
 		string unixpath, def;
 
 		{
@@ -509,7 +500,7 @@ int main(int argc, char** argv) {
 		cerr << e.what() << endl;
 		tds.run("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", string_view(e.what()));
 		throw;
-	}*/
+	}
 
 	return 0;
 }

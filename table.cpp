@@ -1,7 +1,7 @@
 #include <string>
 #include <optional>
 #include <vector>
-#include <iostream>
+#include <stdexcept>
 #include <tdscpp.h>
 
 using namespace std;
@@ -109,7 +109,7 @@ struct foreign_key {
 	vector<foreign_key_column> cols;
 };
 
-void table_test(tds::Conn& tds, const string_view& schema, const string_view& table) {
+string table_ddl(const tds::Conn& tds, const string_view& schema, const string_view& table) {
 	int64_t id, seed_value, increment_value;
 	vector<column> columns;
 	vector<index> indices;
@@ -517,5 +517,5 @@ WHERE triggers.parent_id = ?)", id);
 		}
 	}
 
-	cout << ddl << endl;
+	return ddl;
 }
