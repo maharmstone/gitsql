@@ -542,7 +542,10 @@ static void table_test(tds::Conn& tds, const string_view& schema, const string_v
 
 	for (const auto& col : columns) {
 		ddl += "    " + brackets_escape(col.name) + " " + brackets_escape(col.type);
-		// FIXME - length
+
+		if (col.type == "CHAR" || col.type == "VARCHAR" || col.type == "BINARY" || col.type == "VARBINARY")
+			ddl += "(" + (col.max_length == -1 ? "MAX" : to_string(col.max_length)) + ")";
+
 		// FIXME - precision
 		// FIXME - scale
 		// FIXME - collation?
