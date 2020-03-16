@@ -6,6 +6,22 @@
 
 using namespace std;
 
+static const vector<string> reserved_words{"ADD", "ALL", "ALTER", "AND", "ANY", "AS", "ASC", "AUTHORIZATION", "BACKUP", "BEGIN", "BETWEEN", "BREAK", "BROWSE", "BULK", "BY", "CASCADE", "CASE", "CHECK", "CHECKPOINT", "CLOSE", "CLUSTERED", "COALESCE", "COLLATE", "COLUMN", "COMMIT", "COMPUTE", "CONSTRAINT", "CONTAINS", "CONTAINSTABLE", "CONTINUE", "CONVERT", "CREATE", "CROSS", "CURRENT", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "CURRENT_USER", "CURSOR", "DATABASE", "DBCC", "DEALLOCATE", "DECLARE", "DEFAULT", "DELETE", "DENY", "DESC", "DISTINCT", "DISTRIBUTED", "DOUBLE", "DROP", "ELSE", "END", "ERRLVL", "ESCAPE", "EXCEPT", "EXEC", "EXECUTE", "EXISTS", "EXIT", "EXTERNAL", "FETCH", "FILE", "FILLFACTOR", "FOR", "FOREIGN", "FREETEXT", "FREETEXTTABLE", "FROM", "FULL", "FUNCTION", "GOTO", "GRANT", "GROUP", "HAVING", "HOLDLOCK", "IDENTITY", "IDENTITY_INSERT", "IDENTITYCOL", "IF", "IN", "INDEX", "INNER", "INSERT", "INTERSECT", "INTO", "IS", "JOIN", "KEY", "KILL", "LEFT", "LIKE", "LINENO", "MERGE", "NATIONAL", "NOCHECK", "NONCLUSTERED", "NOT", "SQL_NULL", "NULLIF", "OF", "OFF", "OFFSETS", "ON", "OPEN", "OPENDATASOURCE", "OPENQUERY", "OPENROWSET", "OPENXML", "OPTION", "OR", "ORDER", "OUTER", "OVER", "PERCENT", "PIVOT", "PLAN", "PRIMARY", "PRINT", "PROC", "PROCEDURE", "PUBLIC", "RAISERROR", "READ", "READTEXT", "RECONFIGURE", "REFERENCES", "REPLICATION", "RESTORE", "RESTRICT", "RETURN", "REVERT", "REVOKE", "RIGHT", "ROLLBACK", "ROWCOUNT", "ROWGUIDCOL", "RULE", "SAVE", "SCHEMA", "SELECT", "SEMANTICKEYPHRASETABLE", "SEMANTICSIMILARITYDETAILSTABLE", "SEMANTICSIMILARITYTABLE", "SESSION_USER", "SET", "SETUSER", "SHUTDOWN", "SOME", "STATISTICS", "SYSTEM_USER", "TABLE", "TABLESAMPLE", "TEXTSIZE", "THEN", "TO", "TOP", "TRAN", "TRANSACTION", "TRIGGER", "TRUNCATE", "TRY_CONVERT", "TSEQUAL", "UNION", "UNIQUE", "UNPIVOT", "UPDATE", "UPDATETEXT", "USE", "USER", "VALUES", "VARYING", "VIEW", "WAITFOR", "WHEN", "WHERE", "WHILE", "WITH", "WRITETEXT"};
+
+static bool is_reserved_word(string s) {
+	for (auto& c : s) {
+		if (c >= 'a' && c <= 'z')
+			c += 'A' - 'a';
+	}
+
+	for (const auto& w : reserved_words) {
+		if (w == s)
+			return true;
+	}
+
+	return false;
+}
+
 static bool need_escaping(const string_view& s) {
 	// see https://docs.microsoft.com/en-us/previous-versions/sql/sql-server-2008-r2/ms175874(v=sql.105)
 
@@ -22,9 +38,7 @@ static bool need_escaping(const string_view& s) {
 	if ((s.front() >= '0' && s.front() <= '9') || s.front() == '$')
 		return true;
 
-	// FIXME - check not reserved word
-
-	return false;
+	return is_reserved_word(string(s));
 }
 
 static string brackets_escape(const string_view& s) {
@@ -191,7 +205,7 @@ ORDER BY columns.column_id
 SELECT foreign_key_columns.constraint_object_id, foreign_key_columns.parent_column_id, OBJECT_SCHEMA_NAME(foreign_key_columns.referenced_object_id), OBJECT_NAME(foreign_key_columns.referenced_object_id), columns.name, foreign_keys.delete_referential_action, foreign_keys.update_referential_action
 FROM sys.foreign_key_columns
 JOIN sys.columns ON columns.object_id = foreign_key_columns.referenced_object_id AND columns.column_id = foreign_key_columns.referenced_column_id
-JOIN sys.foreign_keys ON foreign_keys.object_id = foreign_key_columns.object_id
+JOIN sys.foreign_keys ON foreign_keys.object_id = foreign_key_columns.constraint_object_id
 WHERE foreign_key_columns.parent_object_id = ?
 ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constraint_column_id
 )", id);
