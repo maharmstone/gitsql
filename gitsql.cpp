@@ -482,6 +482,8 @@ static bool need_escaping(const string_view& s) {
 	if ((s.front() >= '0' && s.front() <= '9') || s.front() == '$')
 		return true;
 
+	// FIXME - check not reserved word
+
 	return false;
 }
 
@@ -506,10 +508,10 @@ static string brackets_escape(const string_view& s) {
 }
 
 struct column {
-	column(const string& name, const string& type, int max_length, bool nullable) : name(name), type(type), max_length(max_length), nullable(nullable) { }
+	column(const string& name, const string& type, int max_length, bool nullable, int precision, int scale) : name(name), type(type), max_length(max_length), nullable(nullable), precision(precision), scale(scale) { }
 
 	string name, type;
-	int max_length;
+	int max_length, precision, scale;
 	bool nullable;
 };
 
@@ -517,6 +519,7 @@ static void table_test(tds::Conn& tds, const string_view& schema, const string_v
 	int64_t id;
 	vector<column> columns;
 	string escaped_name, ddl;
+	bool first = true;
 
 	{
 		tds::Query sq(tds, "SELECT object_id FROM sys.objects JOIN sys.schemas ON schemas.schema_id = objects.schema_id WHERE objects.name = ? AND schemas.name = ?", table, schema);
@@ -528,10 +531,10 @@ static void table_test(tds::Conn& tds, const string_view& schema, const string_v
 	}
 
 	{
-		tds::Query sq (tds, "SELECT columns.name, CASE WHEN types.is_user_defined = 0 THEN UPPER(types.name) ELSE types.name END, columns.max_length, columns.is_nullable FROM sys.columns JOIN sys.types ON types.user_type_id = columns.user_type_id WHERE columns.object_id = ? ORDER BY columns.column_id", id);
+		tds::Query sq (tds, "SELECT columns.name, CASE WHEN types.is_user_defined = 0 THEN UPPER(types.name) ELSE types.name END, columns.max_length, columns.is_nullable, columns.precision, columns.scale FROM sys.columns JOIN sys.types ON types.user_type_id = columns.user_type_id WHERE columns.object_id = ? ORDER BY columns.column_id", id);
 
 		while (sq.fetch_row()) {
-			columns.emplace_back(sq[0], sq[1], (int)sq[2], (int)sq[3] != 0);
+			columns.emplace_back(sq[0], sq[1], (int)sq[2], (int)sq[3] != 0, (int)sq[4], (int)sq[5]);
 		}
 	}
 
@@ -541,13 +544,22 @@ static void table_test(tds::Conn& tds, const string_view& schema, const string_v
 	ddl += "CREATE TABLE " + escaped_name + " (\n";
 
 	for (const auto& col : columns) {
+		if (!first)
+			ddl += ",\n";
+		
+		first = false;
+
 		ddl += "    " + brackets_escape(col.name) + " " + brackets_escape(col.type);
 
-		if (col.type == "CHAR" || col.type == "VARCHAR" || col.type == "BINARY" || col.type == "VARBINARY")
+		if (col.type == "CHAR" || col.type == "VARCHAR" || col.type == "BINARY" || col.type == "VARBINARY" || col.type == "NCHAR" || col.type == "NVARCHAR")
 			ddl += "(" + (col.max_length == -1 ? "MAX" : to_string(col.max_length)) + ")";
+		else if (col.type == "DECIMAL" || col.type == "NUMERIC")
+			ddl += "(" + to_string(col.precision) +"," + to_string(col.scale) + ")";
+		else if ((col.type == "TIME" || col.type == "DATETIME2") && col.scale != 7)
+			ddl += "(" + to_string(col.scale) + ")";
+		else if (col.type == "DATETIMEOFFSET")
+			ddl += "(" + to_string(col.scale) + ")"; // FIXME - what's the default for this?
 
-		// FIXME - precision
-		// FIXME - scale
 		// FIXME - collation?
 
 		ddl += " " + (col.nullable ? "NULL"s : "NOT NULL"s);
@@ -556,9 +568,9 @@ static void table_test(tds::Conn& tds, const string_view& schema, const string_v
 		// FIXME - computed columns
 		// FIXME - defaults
 		// FIXME - constraints
-
-		ddl += ",\n";
 	}
+
+	ddl += "\n";
 
 	// FIXME - primary keys
 	// FIXME - indices
