@@ -88,12 +88,19 @@ struct foreign_key_column {
 	string schema, table, other_column;
 };
 
+struct foreign_key {
+	foreign_key(unsigned int delete_referential_action, unsigned int update_referential_action) : delete_referential_action(delete_referential_action), update_referential_action(update_referential_action) { }
+
+	unsigned int delete_referential_action, update_referential_action;
+	vector<foreign_key_column> cols;
+};
+
 void table_test(tds::Conn& tds, const string_view& schema, const string_view& table) {
 	int64_t id, seed_value, increment_value;
 	vector<column> columns;
 	vector<index> indices;
 	vector<constraint> constraints;
-	vector<vector<foreign_key_column>> foreign_keys;
+	vector<foreign_key> foreign_keys;
 	string escaped_name, ddl;
 	bool has_included_indices = false;
 
@@ -181,22 +188,23 @@ ORDER BY columns.column_id
 		int64_t last_num = 0;
 
 		tds::Query sq(tds, R"(
-SELECT foreign_key_columns.constraint_object_id, foreign_key_columns.parent_column_id, OBJECT_SCHEMA_NAME(foreign_key_columns.referenced_object_id), OBJECT_NAME(foreign_key_columns.referenced_object_id), columns.name
+SELECT foreign_key_columns.constraint_object_id, foreign_key_columns.parent_column_id, OBJECT_SCHEMA_NAME(foreign_key_columns.referenced_object_id), OBJECT_NAME(foreign_key_columns.referenced_object_id), columns.name, foreign_keys.delete_referential_action, foreign_keys.update_referential_action
 FROM sys.foreign_key_columns
 JOIN sys.columns ON columns.object_id = foreign_key_columns.referenced_object_id AND columns.column_id = foreign_key_columns.referenced_column_id
+JOIN sys.foreign_keys ON foreign_keys.object_id = foreign_key_columns.object_id
 WHERE foreign_key_columns.parent_object_id = ?
 ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constraint_column_id
 )", id);
 
 		while (sq.fetch_row()) {
 			if (last_num != (int64_t)sq[0]) {
-				foreign_keys.emplace_back();
+				foreign_keys.emplace_back((unsigned int)sq[5], (unsigned int)sq[6]);
 				last_num = (int64_t)sq[0];
 			}
 
 			for (const auto& col : columns) {
 				if (col.column_id == (unsigned int)sq[1]) {
-					foreign_keys.back().emplace_back(col, sq[2], sq[3], sq[4]);
+					foreign_keys.back().cols.emplace_back(col, sq[2], sq[3], sq[4]);
 					break;
 				}
 			}
@@ -260,11 +268,39 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 					}
 
 					for (const auto& fk : foreign_keys) {
-						if (fk.size() == 1 && &fk.front().col == &col) {
+						if (fk.cols.size() == 1 && &fk.cols.front().col == &col) {
 							if (!first_con)
 								ddl += ", ";
 
-							ddl += " FOREIGN KEY REFERENCES " + brackets_escape(fk.front().schema) + "." + brackets_escape(fk.front().table) + "(" + brackets_escape(fk.front().other_column) + ")";
+							ddl += " FOREIGN KEY REFERENCES " + brackets_escape(fk.cols.front().schema) + "." + brackets_escape(fk.cols.front().table) + "(" + brackets_escape(fk.cols.front().other_column) + ")";
+
+							switch (fk.delete_referential_action) {
+								case 1:
+									ddl += " ON DELETE CASCADE";
+								break;
+
+								case 2:
+									ddl += " ON DELETE SET NULL";
+								break;
+
+								case 3:
+									ddl += " ON DELETE SET DEFAULT";
+								break;
+							}
+
+							switch (fk.update_referential_action) {
+								case 1:
+									ddl += " ON UPDATE CASCADE";
+								break;
+
+								case 2:
+									ddl += " ON UPDATE SET NULL";
+								break;
+
+								case 3:
+									ddl += " ON UPDATE SET DEFAULT";
+								break;
+							}
 						}
 					}
 				}
@@ -335,12 +371,12 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 	}
 
 	for (const auto& fk : foreign_keys) {
-		if (fk.size() > 1) {
+		if (fk.cols.size() > 1) {
 			bool first = true;
 
 			ddl += ",\n    FOREIGN KEY (";
 
-			for (const auto& c : fk) {
+			for (const auto& c : fk.cols) {
 				if (!first)
 					ddl += ", ";
 
@@ -349,11 +385,11 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 				ddl += brackets_escape(c.col.name);
 			}
 
-			ddl += ") REFERENCES " + brackets_escape(fk.front().schema) + "." + brackets_escape(fk.front().table) + "(";
+			ddl += ") REFERENCES " + brackets_escape(fk.cols.front().schema) + "." + brackets_escape(fk.cols.front().table) + "(";
 
 			first = true;
 
-			for (const auto& c : fk) {
+			for (const auto& c : fk.cols) {
 				if (!first)
 					ddl += ", ";
 
@@ -363,6 +399,34 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 			}
 
 			ddl += ")";
+
+			switch (fk.delete_referential_action) {
+				case 1:
+					ddl += " ON DELETE CASCADE";
+				break;
+
+				case 2:
+					ddl += " ON DELETE SET NULL";
+				break;
+
+				case 3:
+					ddl += " ON DELETE SET DEFAULT";
+				break;
+			}
+
+			switch (fk.update_referential_action) {
+				case 1:
+					ddl += " ON UPDATE CASCADE";
+				break;
+
+				case 2:
+					ddl += " ON UPDATE SET NULL";
+				break;
+
+				case 3:
+					ddl += " ON UPDATE SET DEFAULT";
+				break;
+			}
 		}
 	}
 
