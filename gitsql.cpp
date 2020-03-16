@@ -508,11 +508,12 @@ static string brackets_escape(const string_view& s) {
 }
 
 struct column {
-	column(const string& name, const string& type, int max_length, bool nullable, int precision, int scale) : name(name), type(type), max_length(max_length), nullable(nullable), precision(precision), scale(scale) { }
+	column(const string& name, const string& type, int max_length, bool nullable, int precision, int scale, const optional<string>& default) : name(name), type(type), max_length(max_length), nullable(nullable), precision(precision), scale(scale), default(default) { }
 
 	string name, type;
 	int max_length, precision, scale;
 	bool nullable;
+	optional<string> default;
 };
 
 static void table_test(tds::Conn& tds, const string_view& schema, const string_view& table) {
@@ -531,10 +532,10 @@ static void table_test(tds::Conn& tds, const string_view& schema, const string_v
 	}
 
 	{
-		tds::Query sq (tds, "SELECT columns.name, CASE WHEN types.is_user_defined = 0 THEN UPPER(types.name) ELSE types.name END, columns.max_length, columns.is_nullable, columns.precision, columns.scale FROM sys.columns JOIN sys.types ON types.user_type_id = columns.user_type_id WHERE columns.object_id = ? ORDER BY columns.column_id", id);
+		tds::Query sq (tds, "SELECT columns.name, CASE WHEN types.is_user_defined = 0 THEN UPPER(types.name) ELSE types.name END, columns.max_length, columns.is_nullable, columns.precision, columns.scale, default_constraints.definition FROM sys.columns JOIN sys.types ON types.user_type_id = columns.user_type_id LEFT JOIN sys.default_constraints ON default_constraints.parent_object_id = columns.object_id AND default_constraints.parent_column_id  = columns.column_id WHERE columns.object_id = ? ORDER BY columns.column_id", id);
 
 		while (sq.fetch_row()) {
-			columns.emplace_back(sq[0], sq[1], (int)sq[2], (int)sq[3] != 0, (int)sq[4], (int)sq[5]);
+			columns.emplace_back(sq[0], sq[1], (int)sq[2], (int)sq[3] != 0, (int)sq[4], (int)sq[5], sq[6]);
 		}
 	}
 
@@ -566,7 +567,10 @@ static void table_test(tds::Conn& tds, const string_view& schema, const string_v
 		
 		// FIXME - identity
 		// FIXME - computed columns
-		// FIXME - defaults
+
+		if (col.default.has_value())
+			ddl += " DEFAULT" + col.default.value();
+
 		// FIXME - constraints
 	}
 
