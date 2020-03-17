@@ -363,7 +363,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 				if (ind.is_primary_key)
 					ddl += "    PRIMARY KEY "s + (ind.type == 2 ? "NONCLUSTERED " : "") + "(";
 				else
- 					ddl += "    INDEX "s + (ind.is_unique ? "UNIQUE " : "") + (ind.type == 1 ? "CLUSTERED " : "") + brackets_escape(ind.name) + " (";
+ 					ddl += "    INDEX "s + brackets_escape(ind.name) + " " + (ind.is_unique ? "UNIQUE " : "") + (ind.type == 1 ? "CLUSTERED " : "") + "(";
 
 				for (const auto& col : ind.columns) {
 					if (!first)
