@@ -244,8 +244,10 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 			if (!col.is_computed) {
 				ddl += " " + brackets_escape(col.type);
 
-				if (col.type == "CHAR" || col.type == "VARCHAR" || col.type == "BINARY" || col.type == "VARBINARY" || col.type == "NCHAR" || col.type == "NVARCHAR")
+				if (col.type == "CHAR" || col.type == "VARCHAR" || col.type == "BINARY" || col.type == "VARBINARY")
 					ddl += "(" + (col.max_length == -1 ? "MAX" : to_string(col.max_length)) + ")";
+				else if (col.type == "NCHAR" || col.type == "NVARCHAR")
+					ddl += "(" + (col.max_length == -1 ? "MAX" : to_string(col.max_length / 2)) + ")";
 				else if (col.type == "DECIMAL" || col.type == "NUMERIC")
 					ddl += "(" + to_string(col.precision) +"," + to_string(col.scale) + ")";
 				else if ((col.type == "TIME" || col.type == "DATETIME2") && col.scale != 7)
