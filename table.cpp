@@ -501,7 +501,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 						}
 					}
 
-					ddl += ");";
+					ddl += ");\n";
 				}
 			}
 		}
