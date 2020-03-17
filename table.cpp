@@ -517,7 +517,7 @@ JOIN sys.sql_modules ON sql_modules.object_id = triggers.object_id
 WHERE triggers.parent_id = ?)", id);
 
 		while (sq.fetch_row()) {
-			ddl += (string)sq[0] + "\nGO\n";
+			ddl += "\nGO\n" + (string)sq[0];
 		}
 	}
 
