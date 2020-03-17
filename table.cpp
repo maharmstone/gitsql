@@ -354,29 +354,31 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 			}
 		}
 
-		if (!has_included_columns && (!ind.is_primary_key || ind.columns.size() > 1)) {
-			bool first = true;
+		if (!has_included_columns) {
+			if (!ind.is_primary_key || ind.columns.size() > 1) {
+				bool first = true;
 
-			ddl += ",\n";
+				ddl += ",\n";
 
-			if (ind.is_primary_key)
-				ddl += "    PRIMARY KEY "s + (ind.type == 2 ? "NONCLUSTERED " : "") + "(";
-			else
- 				ddl += "    INDEX "s + (ind.is_unique ? "UNIQUE " : "") + (ind.type == 1 ? "CLUSTERED " : "") + brackets_escape(ind.name) + " (";
+				if (ind.is_primary_key)
+					ddl += "    PRIMARY KEY "s + (ind.type == 2 ? "NONCLUSTERED " : "") + "(";
+				else
+ 					ddl += "    INDEX "s + (ind.is_unique ? "UNIQUE " : "") + (ind.type == 1 ? "CLUSTERED " : "") + brackets_escape(ind.name) + " (";
 
-			for (const auto& col : ind.columns) {
-				if (!first)
-					ddl += ", ";
+				for (const auto& col : ind.columns) {
+					if (!first)
+						ddl += ", ";
 
-				first = false;
+					first = false;
 
-				ddl += brackets_escape(col.col.name);
+					ddl += brackets_escape(col.col.name);
 
-				if (col.is_desc)
-					ddl += " DESC";
+					if (col.is_desc)
+						ddl += " DESC";
+				}
+
+				ddl += ")";
 			}
-
-			ddl += ")";
 		} else
 			has_included_indices = true;
 	}
