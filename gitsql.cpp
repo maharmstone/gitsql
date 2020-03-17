@@ -462,6 +462,19 @@ private:
 	HANDLE h = INVALID_HANDLE_VALUE;
 };
 
+static void write_table_ddl(tds::Conn& tds, const string_view& schema, const string_view& table, const string_view& bind_token,
+							unsigned int commit_id, const string_view& filename) {
+	tds::Trans trans(tds); // not a real transaction - just to stop MSSQL moaning
+
+	trans.committed = true;
+
+	tds.run("BEGIN TRANSACTION; DECLARE @token VARCHAR(255) = ?; EXEC sp_bindsession @token;", bind_token);
+
+	auto ddl = table_ddl(tds, schema, table);
+
+	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, tds::binary_string(ddl));
+}
+
 int main(int argc, char** argv) {  
 	string cmd;
 
@@ -475,7 +488,7 @@ int main(int argc, char** argv) {
 	if (argc > 4)
 		cmd = argv[4];
 
-	if (cmd != "flush" && argc < 6)
+	if (cmd != "flush" && cmd != "table" && argc < 6)
 		return 1;
 
 	tds::Conn tds(db_server, db_username, db_password, db_app);
@@ -488,7 +501,19 @@ int main(int argc, char** argv) {
 
 			if (cmd == "flush")
 				flush_git(tds);
-			else {
+			else if (cmd == "table") {
+				if (argc < 10)
+					throw runtime_error("Too few arguments.");
+
+				// FIXME - also specify DB?
+				string schema = argv[5];
+				string table = argv[6];
+				string bind_token = argv[7];
+				auto commit_id = stoi(argv[8]);
+				string filename = argv[9];
+
+				write_table_ddl(tds, schema, table, bind_token, commit_id, filename);
+			} else {
 				string repo_dir = cmd;
 				string db = argv[5];
 
