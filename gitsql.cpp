@@ -20,11 +20,10 @@ using namespace std;
 
 const string db_app = "GitSQL";
 
-static void replace_all(string& source, const string& from, const string& to);
+void replace_all(string& source, const string& from, const string& to);
 
 // table.cpp
 string table_ddl(const tds::Conn& tds, const string_view& schema, const string_view& table);
-string brackets_escape(const string_view& s);
 
 // strip out characters that NTFS doesn't like
 static string sanitize_fn(const string& fn) {
@@ -51,82 +50,10 @@ static void clear_dir(const filesystem::path& dir) {
 	}
 }
 
-static string sql_escape(string s) {
-	replace_all(s, "'", "''");
-
-	return s;
-}
-
-static string dump_table(const tds::Conn& tds, const string& schema, const string& table) {
-	string obj = brackets_escape(schema) + "." + brackets_escape(table);
-	string cols, s;
-
-	tds::Query sq(tds, "SELECT * FROM " + obj);
-
-	while (sq.fetch_row()) {
-		string vals;
-		auto column_count = sq.num_columns();
-
-		if (cols == "") {
-			for (unsigned int i = 0; i < column_count; i++) {
-				const auto& col = sq[i];
-
-				if (cols != "")
-					cols += ", ";
-
-				cols += brackets_escape(col.name);
-			}
-		}
-
-		s += "INSERT INTO " + obj + "(" + cols + ") VALUES(";
-
-		for (unsigned int i = 0; i < column_count; i++) {
-			const auto& col = sq[i];
-
-			if (vals != "")
-				vals += ", ";
-
-			if (col.is_null())
-				vals += "NULL";
-			else {
-				switch (col.type) {
-					case tds::server_type::SYBINTN:
-					case tds::server_type::SYBINT1:
-					case tds::server_type::SYBINT2:
-					case tds::server_type::SYBINT4:
-					case tds::server_type::SYBINT8:
-					case tds::server_type::SYBBITN:
-					case tds::server_type::SYBBIT:
-						vals += to_string((signed long long)col);
-					break;
-
-					case tds::server_type::SYBFLT8:
-					case tds::server_type::SYBFLTN:
-						vals += to_string((double)col);
-					break;
-
-					// FIXME - VARBINARY
-
-					default:
-						vals += "'" + sql_escape(string(col)) + "'";
-					break;
-				}
-			}
-		}
-
-		s += vals;
-
-		s += ");\n";
-	}
-
-	return s;
-}
-
 struct sql_obj {
-	sql_obj(const string& schema, const string& name, const string& def, const string& type, bool fulldump) : schema(schema), name(name), def(def), type(type), fulldump(fulldump) { }
+	sql_obj(const string& schema, const string& name, const string& def, const string& type) : schema(schema), name(name), def(def), type(type) { }
 
 	string schema, name, def, type;
-	bool fulldump;
 };
 
 static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, const string& db) {
@@ -140,10 +67,10 @@ static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, con
 	vector<sql_obj> objs;
 
 	{
-		tds::Query sq(tds, "SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type), extended_properties.value FROM " + dbs + "sys.objects LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN " + dbs + "sys.schemas ON schemas.schema_id=objects.schema_id LEFT JOIN " + dbs + "sys.extended_properties ON extended_properties.major_id=objects.object_id AND extended_properties.minor_id=0 AND extended_properties.class=1 AND extended_properties.name='fulldump' WHERE objects.type IN ('V','P','FN','TF','IF','U') ORDER BY schemas.name, objects.name");
+		tds::Query sq(tds, "SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type) FROM " + dbs + "sys.objects LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN " + dbs + "sys.schemas ON schemas.schema_id=objects.schema_id WHERE objects.type IN ('V','P','FN','TF','IF','U') ORDER BY schemas.name, objects.name");
 
 		while (sq.fetch_row()) {
-			objs.emplace_back(sq[0], sq[1], sq[2], sq[3], (string)sq[4] == "true");
+			objs.emplace_back(sq[0], sq[1], sq[2], sq[3]);
 		}
 	}
 
@@ -151,7 +78,7 @@ static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, con
 		tds::Query sq(tds, "SELECT triggers.name, sql_modules.definition FROM " + dbs + "sys.triggers LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=triggers.object_id WHERE triggers.parent_class_desc = 'DATABASE'");
 
 		while (sq.fetch_row()) {
-			objs.emplace_back("db_triggers", sq[0], sq[1], "", false);
+			objs.emplace_back("db_triggers", sq[0], sq[1], "");
 		}
 	}
 
@@ -174,12 +101,8 @@ static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, con
 		else
 			subdir = "";
 
-		if (obj.type == "U") {
+		if (obj.type == "U")
 			obj.def = table_ddl(tds, obj.schema, obj.name);
-
-			if (obj.fulldump)
-				obj.def += "\n" + dump_table(tds, obj.schema, obj.name);
-		}
 
 		replace_all(obj.def, "\r\n", "\n");
 
@@ -264,7 +187,7 @@ static void git_remove_dir(GitRepo& repo, GitTree& tree, const filesystem::path&
 }
 
 // taken from Stack Overflow: https://stackoverflow.com/questions/2896600/how-to-replace-all-occurrences-of-a-character-in-string
-static void replace_all(string& source, const string& from, const string& to) {
+void replace_all(string& source, const string& from, const string& to) {
 	string new_string;
 	new_string.reserve(source.length());
 

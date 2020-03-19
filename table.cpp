@@ -8,6 +8,9 @@ using namespace std;
 
 static const vector<string> reserved_words{"ADD", "ALL", "ALTER", "AND", "ANY", "AS", "ASC", "AUTHORIZATION", "BACKUP", "BEGIN", "BETWEEN", "BREAK", "BROWSE", "BULK", "BY", "CASCADE", "CASE", "CHECK", "CHECKPOINT", "CLOSE", "CLUSTERED", "COALESCE", "COLLATE", "COLUMN", "COMMIT", "COMPUTE", "CONSTRAINT", "CONTAINS", "CONTAINSTABLE", "CONTINUE", "CONVERT", "CREATE", "CROSS", "CURRENT", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "CURRENT_USER", "CURSOR", "DATABASE", "DBCC", "DEALLOCATE", "DECLARE", "DEFAULT", "DELETE", "DENY", "DESC", "DISTINCT", "DISTRIBUTED", "DOUBLE", "DROP", "ELSE", "END", "ERRLVL", "ESCAPE", "EXCEPT", "EXEC", "EXECUTE", "EXISTS", "EXIT", "EXTERNAL", "FETCH", "FILE", "FILLFACTOR", "FOR", "FOREIGN", "FREETEXT", "FREETEXTTABLE", "FROM", "FULL", "FUNCTION", "GOTO", "GRANT", "GROUP", "HAVING", "HOLDLOCK", "IDENTITY", "IDENTITY_INSERT", "IDENTITYCOL", "IF", "IN", "INDEX", "INNER", "INSERT", "INTERSECT", "INTO", "IS", "JOIN", "KEY", "KILL", "LEFT", "LIKE", "LINENO", "MERGE", "NATIONAL", "NOCHECK", "NONCLUSTERED", "NOT", "SQL_NULL", "NULLIF", "OF", "OFF", "OFFSETS", "ON", "OPEN", "OPENDATASOURCE", "OPENQUERY", "OPENROWSET", "OPENXML", "OPTION", "OR", "ORDER", "OUTER", "OVER", "PERCENT", "PIVOT", "PLAN", "PRIMARY", "PRINT", "PROC", "PROCEDURE", "PUBLIC", "RAISERROR", "READ", "READTEXT", "RECONFIGURE", "REFERENCES", "REPLICATION", "RESTORE", "RESTRICT", "RETURN", "REVERT", "REVOKE", "RIGHT", "ROLLBACK", "ROWCOUNT", "ROWGUIDCOL", "RULE", "SAVE", "SCHEMA", "SELECT", "SEMANTICKEYPHRASETABLE", "SEMANTICSIMILARITYDETAILSTABLE", "SEMANTICSIMILARITYTABLE", "SESSION_USER", "SET", "SETUSER", "SHUTDOWN", "SOME", "STATISTICS", "SYSTEM_USER", "TABLE", "TABLESAMPLE", "TEXTSIZE", "THEN", "TO", "TOP", "TRAN", "TRANSACTION", "TRIGGER", "TRUNCATE", "TRY_CONVERT", "TSEQUAL", "UNION", "UNIQUE", "UNPIVOT", "UPDATE", "UPDATETEXT", "USE", "USER", "VALUES", "VARYING", "VIEW", "WAITFOR", "WHEN", "WHERE", "WHILE", "WITH", "WRITETEXT"};
 
+// gitsql.cpp
+void replace_all(string& source, const string& from, const string& to);
+
 static bool is_reserved_word(string s) {
 	for (auto& c : s) {
 		if (c >= 'a' && c <= 'z')
@@ -41,7 +44,7 @@ static bool need_escaping(const string_view& s) {
 	return is_reserved_word(string(s));
 }
 
-string brackets_escape(const string_view& s) {
+static string brackets_escape(const string_view& s) {
 	string ret;
 
 	if (!need_escaping(s))
@@ -109,6 +112,76 @@ struct foreign_key {
 	vector<foreign_key_column> cols;
 };
 
+static string quote_escape(string s) {
+	replace_all(s, "'", "''");
+
+	return s;
+}
+
+static string dump_table(const tds::Conn& tds, const string& escaped_name) {
+	string cols, s;
+
+	tds::Query sq(tds, "SELECT * FROM " + escaped_name);
+
+	while (sq.fetch_row()) {
+		string vals;
+		auto column_count = sq.num_columns();
+
+		if (cols == "") {
+			for (unsigned int i = 0; i < column_count; i++) {
+				const auto& col = sq[i];
+
+				if (cols != "")
+					cols += ", ";
+
+				cols += brackets_escape(col.name);
+			}
+		}
+
+		s += "INSERT INTO " + escaped_name + "(" + cols + ") VALUES(";
+
+		for (unsigned int i = 0; i < column_count; i++) {
+			const auto& col = sq[i];
+
+			if (vals != "")
+				vals += ", ";
+
+			if (col.is_null())
+				vals += "NULL";
+			else {
+				switch (col.type) {
+					case tds::server_type::SYBINTN:
+					case tds::server_type::SYBINT1:
+					case tds::server_type::SYBINT2:
+					case tds::server_type::SYBINT4:
+					case tds::server_type::SYBINT8:
+					case tds::server_type::SYBBITN:
+					case tds::server_type::SYBBIT:
+						vals += to_string((signed long long)col);
+						break;
+
+					case tds::server_type::SYBFLT8:
+					case tds::server_type::SYBFLTN:
+						vals += to_string((double)col);
+						break;
+
+					// FIXME - VARBINARY
+
+					default:
+						vals += "'" + quote_escape(string(col)) + "'";
+						break;
+				}
+			}
+		}
+
+		s += vals;
+
+		s += ");\n";
+	}
+
+	return s;
+}
+
 string table_ddl(const tds::Conn& tds, const string_view& schema, const string_view& table) {
 	int64_t id, seed_value, increment_value;
 	vector<column> columns;
@@ -116,7 +189,7 @@ string table_ddl(const tds::Conn& tds, const string_view& schema, const string_v
 	vector<constraint> constraints;
 	vector<foreign_key> foreign_keys;
 	string escaped_name, ddl;
-	bool has_included_indices = false;
+	bool has_included_indices = false, fulldump = false;
 
 	{
 		tds::Query sq(tds, R"(
@@ -520,6 +593,22 @@ WHERE triggers.parent_id = ?)", id);
 			ddl += "\nGO\n" + (string)sq[0];
 		}
 	}
+
+	{
+		tds::Query sq(tds, R"(
+SELECT * FROM sys.extended_properties
+WHERE major_id = ? AND
+	minor_id = 0 AND
+	class = 1 AND
+	name = 'fulldump'
+)", id);
+
+		if (sq.fetch_row())
+			fulldump = true;
+	}
+
+	if (fulldump)
+		ddl += "\n" + dump_table(tds, escaped_name);
 
 	return ddl;
 }
