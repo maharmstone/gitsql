@@ -590,7 +590,11 @@ JOIN sys.sql_modules ON sql_modules.object_id = triggers.object_id
 WHERE triggers.parent_id = ?)", id);
 
 		while (sq.fetch_row()) {
-			ddl += "\nGO\n" + (string)sq[0];
+			auto trig = (string)sq[0];
+
+			replace_all(trig, "\r\n", "\n");
+
+			ddl += "\nGO\n" + trig;
 		}
 	}
 
