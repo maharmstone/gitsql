@@ -24,6 +24,7 @@ static void replace_all(string& source, const string& from, const string& to);
 
 // table.cpp
 string table_ddl(const tds::Conn& tds, const string_view& schema, const string_view& table);
+string brackets_escape(const string_view& s);
 
 // strip out characters that NTFS doesn't like
 static string sanitize_fn(const string& fn) {
@@ -57,7 +58,7 @@ static string sql_escape(string s) {
 }
 
 static string dump_table(const tds::Conn& tds, const string& schema, const string& table) {
-	string obj = "[" + schema + "].[" + table + "]"; // FIXME - do we need to escape?
+	string obj = brackets_escape(schema) + "." + brackets_escape(table);
 	string cols, s;
 
 	tds::Query sq(tds, "SELECT * FROM " + obj);
@@ -73,7 +74,7 @@ static string dump_table(const tds::Conn& tds, const string& schema, const strin
 				if (cols != "")
 					cols += ", ";
 
-				cols += "[" + col.name + "]";
+				cols += brackets_escape(col.name);
 			}
 		}
 
@@ -103,6 +104,8 @@ static string dump_table(const tds::Conn& tds, const string& schema, const strin
 					case tds::server_type::SYBFLTN:
 						vals += to_string((double)col);
 					break;
+
+					// FIXME - VARBINARY
 
 					default:
 						vals += "'" + sql_escape(string(col)) + "'";

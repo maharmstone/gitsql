@@ -41,7 +41,7 @@ static bool need_escaping(const string_view& s) {
 	return is_reserved_word(string(s));
 }
 
-static string brackets_escape(const string_view& s) {
+string brackets_escape(const string_view& s) {
 	string ret;
 
 	if (!need_escaping(s))
