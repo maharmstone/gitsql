@@ -441,9 +441,21 @@ int main(int argc, char** argv) {
 				write_table_ddl(tds, schema, table, bind_token, commit_id, filename);
 			} else {
 				string repo_dir = cmd;
-				string db = argv[5];
+				string db = argv[5], old_db;
 
+				{
+					tds::Query sq(tds, "SELECT DB_NAME()");
+
+					if (!sq.fetch_row())
+						throw runtime_error("Could not get current database name.");
+
+					old_db = sq[0];
+				}
+
+				tds.run("USE [" + db + "]"); // FIXME - can we definitely not do this with parameters?
 				dump_sql(tds, repo_dir, db);
+
+				tds.run("USE [" + old_db + "]");
 				do_update_git(repo_dir);
 			}
 		}
