@@ -100,7 +100,8 @@
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>W:\devel\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>
+      </AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <DisableSpecificWarnings>4706;4127</DisableSpecificWarnings>
       <LanguageStandard>stdcpplatest</LanguageStandard>

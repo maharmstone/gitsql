@@ -255,10 +255,30 @@ static void flush_git(const tds::Conn& tds) {
 			unsigned int commit, dt;
 			int tz_offset;
 			string name, email, description;
-			optional<signed long long> transaction;
+			list<git_file> files;
+			bool clear_all = false;
+			list<unsigned int> delete_commits;
+			list<unsigned int> delete_files;
+			bool merged_trans = false;
 
 			{
-				tds::Query sq(tds, "SELECT TOP 1 Git.id, COALESCE([user].givenName+' '+[user].sn, [user].name, Git.username), COALESCE([user].mail,'business.intelligence@boltonft.nhs.uk'), Git.description, DATEDIFF(SECOND,'19700101',Git.dt), Git.offset, Git.tran_id FROM Restricted.Git LEFT JOIN AD.[user] ON LEFT(Git.username,5)='XRBH\\' AND [user].sAMAccountName=RIGHT(Git.username,CASE WHEN LEN(Git.username)>=5 THEN LEN(Git.username)-5 END) WHERE Git.repo=? ORDER BY Git.id", r.first);
+				tds::Query sq(tds, R"(
+SELECT
+	Git.id,
+	COALESCE([user].givenName+' '+[user].sn, [user].name, Git.username),
+	COALESCE([user].mail,'business.intelligence@boltonft.nhs.uk'),
+	Git.description,
+	DATEDIFF(SECOND,'19700101',Git.dt),
+	Git.offset,
+	GitFiles.file_id,
+	GitFiles.filename,
+	GitFiles.data
+FROM Restricted.Git
+LEFT JOIN AD.[user] ON LEFT(Git.username,5) = 'XRBH\' AND [user].sAMAccountName = RIGHT(Git.username, CASE WHEN LEN(Git.username) >= 5 THEN LEN(Git.username) - 5 END)
+JOIN Restricted.GitFiles ON GitFiles.id = Git.id
+WHERE Git.id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?) OR Git.tran_id = (SELECT tran_id FROM Restricted.Git WHERE id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?))
+ORDER BY Git.id
+)", r.first, r.first);
 
 				if (!sq.fetch_row())
 					break;
@@ -270,82 +290,65 @@ static void flush_git(const tds::Conn& tds) {
 				dt = (unsigned int)sq[4];
 				tz_offset = (int)sq[5];
 
-				if (!sq[6].is_null())
-					transaction = (signed long long)sq[6];
-			}
+				delete_commits.push_back(commit);
 
-			list<git_file> files;
-			bool clear_all = false;
+				do {
+					delete_files.push_back((unsigned int)sq[6]);
 
-			{
-				tds::Query sq2(tds, "SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit);
+					if ((unsigned int)sq[0] != commit) {
+						if (!merged_trans) {
+							description += " (transaction)";
+							merged_trans = true;
+						}
 
-				while (sq2.fetch_row()) {
-					if (sq2[0].is_null())
-						clear_all = true;
-					else
-						files.emplace_back(sq2[0], sq2[1]);
-				}
-			}
+						bool found = false;
+						auto new_commit = (unsigned int)sq[0];
 
-			// merge together entries with the same transaction ID
-			if (transaction.has_value()) {
-				bool first = true;
-
-				while (true) {
-					unsigned int commit2;
-
-					{
-						tds::Query sq(tds, "SELECT TOP 1 Git.id, Git.tran_id FROM Restricted.Git WHERE repo=? AND id!=? ORDER BY id", r.first, commit);
-
-						if (!sq.fetch_row())
-							break;
-
-						if (sq[1].is_null())
-							break;
-
-						if ((signed long long)sq[1] != transaction.value())
-							break;
-
-						commit2 = (unsigned int)sq[0];
-					}
-
-					if (first)
-						description += " (transaction)";
-
-					{
-						tds::Query sq2(tds, "SELECT filename, data FROM Restricted.GitFiles WHERE id=?", commit2);
-
-						while (sq2.fetch_row()) {
-							if (sq2[0].is_null())
-								clear_all = true;
-							else {
-								string fn = sq2[0];
-							
-								for (auto it = files.begin(); it != files.end(); it++) {
-									if (it->filename == fn) {
-										files.erase(it);
-										break;
-									}
-								}
-
-								files.emplace_back(fn, sq2[1]);
+						for (auto dc : delete_commits) {
+							if (dc == new_commit) {
+								found = true;
+								break;
 							}
 						}
+
+						if (!found)
+							delete_commits.push_back(new_commit);
 					}
 
-					tds.run("UPDATE Restricted.GitFiles SET id=? WHERE id=?", commit, commit2);
-					tds.run("DELETE FROM Restricted.Git WHERE id=?", commit2);
+					if (sq[7].is_null())
+						clear_all = true;
+					else {
+						if (merged_trans) {
+							string fn = sq[7];
 
-					first = false;
-				}
+							for (auto it = files.begin(); it != files.end(); it++) {
+								if (it->filename == fn) {
+									files.erase(it);
+									break;
+								}
+							}
+						}
+
+						files.emplace_back(sq[7], sq[8]);
+					}
+
+					if (!sq.fetch_row())
+						break;
+				} while (true);
 			}
 
 			if (files.size() > 0 || clear_all)
 				update_git(repo, name, email, description, files, clear_all, dt, tz_offset);
 
-			tds.run("DELETE FROM Restricted.Git WHERE id=?", commit);
-			tds.run("DELETE FROM Restricted.GitFiles WHERE id=?", commit);
+			while (!delete_commits.empty()) {
+				tds.run("DELETE FROM Restricted.Git WHERE id=?", delete_commits.front());
+				delete_commits.pop_front();
+			}
+
+			while (!delete_files.empty()) {
+				tds.run("DELETE FROM Restricted.GitFiles WHERE file_id=?", delete_files.front());
+				delete_files.pop_front();
+			}
 
 			trans.commit();
 		}
