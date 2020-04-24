@@ -263,6 +263,9 @@ static void flush_git(const tds::Conn& tds) {
 
 			{
 				tds::Query sq(tds, R"(
+SET LOCK_TIMEOUT 0;
+SET XACT_ABORT ON;
+
 SELECT
 	Git.id,
 	COALESCE([user].givenName+' '+[user].sn, [user].name, Git.username),
