@@ -237,7 +237,7 @@ static void flush_git(const tds::Conn& tds) {
 	git_libgit2_init();
 
 	{
-		tds::Query sq(tds, "SELECT Git.repo, GitRepo.dir FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
+		tds::Query sq(tds, "SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; SELECT Git.repo, GitRepo.dir FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
 
 		while (sq.fetch_row()) {
 			repos[(unsigned int)sq[0]] = sq[1];
