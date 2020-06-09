@@ -410,20 +410,18 @@ static void write_table_ddl(tds::Conn& tds, const string_view& schema, const str
 int main(int argc, char** argv) {  
 	string cmd;
 
-	if (argc < 4)
+	if (argc < 2)
 		return 1;
 
 	string db_server = argv[1];
-	string db_username = argv[2];
-	string db_password = argv[3];
 
-	if (argc > 4)
-		cmd = argv[4];
+	if (argc > 2)
+		cmd = argv[2];
 
-	if (cmd != "flush" && cmd != "table" && argc < 6)
+	if (cmd != "flush" && cmd != "table" && argc < 4)
 		return 1;
 
-	tds::Conn tds(db_server, db_username, db_password, db_app);
+	tds::Conn tds(db_server, "", "", db_app);
 
 	try {
 		string unixpath, def;
@@ -434,20 +432,20 @@ int main(int argc, char** argv) {
 			if (cmd == "flush")
 				flush_git(tds);
 			else if (cmd == "table") {
-				if (argc < 10)
+				if (argc < 8)
 					throw runtime_error("Too few arguments.");
 
 				// FIXME - also specify DB?
-				string schema = argv[5];
-				string table = argv[6];
-				string bind_token = argv[7];
-				auto commit_id = stoi(argv[8]);
-				string filename = argv[9];
+				string schema = argv[3];
+				string table = argv[4];
+				string bind_token = argv[5];
+				auto commit_id = stoi(argv[6]);
+				string filename = argv[7];
 
 				write_table_ddl(tds, schema, table, bind_token, commit_id, filename);
 			} else {
 				string repo_dir = cmd;
-				string db = argv[5], old_db;
+				string db = argv[3], old_db;
 
 				{
 					tds::Query sq(tds, "SELECT DB_NAME()");
