@@ -6,7 +6,7 @@
 
 using namespace std;
 
-static void throw_git_error(int error, const char* func) {
+static void __declspec(noreturn) throw_git_error(int error, const char* func) {
 	const git_error *lg2err;
 
 	if ((lg2err = giterr_last()) && lg2err->message)
