@@ -409,30 +409,32 @@ static void write_table_ddl(tds::Conn& tds, const string_view& schema, const str
 	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, tds::binary_string(ddl));
 }
 
-int main(int argc, char** argv) {  
-	string cmd;
-
-	if (argc < 2)
-		return 1;
-
-	string db_server = argv[1];
-
-	if (argc > 2)
-		cmd = argv[2];
-
-	if (cmd != "flush" && cmd != "table" && argc < 4)
-		return 1;
-
-	tds::Conn tds(db_server, "", "", db_app);
+int main(int argc, char** argv) {
+	unique_ptr<tds::Conn> tds;
 
 	try {
+		string cmd;
+
+		if (argc < 2)
+			return 1;
+
+		string db_server = argv[1];
+
+		if (argc > 2)
+			cmd = argv[2];
+
+		if (cmd != "flush" && cmd != "table" && argc < 4)
+			return 1;
+
+		tds.reset(new tds::Conn(db_server, "", "", db_app));
+
 		string unixpath, def;
 
 		{
 			lockfile lf;
 
 			if (cmd == "flush")
-				flush_git(tds);
+				flush_git(*tds);
 			else if (cmd == "table") {
 				if (argc < 8)
 					throw runtime_error("Too few arguments.");
@@ -444,13 +446,13 @@ int main(int argc, char** argv) {
 				auto commit_id = stoi(argv[6]);
 				string filename = argv[7];
 
-				write_table_ddl(tds, schema, table, bind_token, commit_id, filename);
+				write_table_ddl(*tds, schema, table, bind_token, commit_id, filename);
 			} else {
 				string repo_dir = cmd;
 				string db = argv[3], old_db;
 
 				{
-					tds::Query sq(tds, "SELECT DB_NAME()");
+					tds::Query sq(*tds, "SELECT DB_NAME()");
 
 					if (!sq.fetch_row())
 						throw runtime_error("Could not get current database name.");
@@ -458,10 +460,10 @@ int main(int argc, char** argv) {
 					old_db = sq[0];
 				}
 
-				tds.run("USE [" + db + "]"); // FIXME - can we definitely not do this with parameters?
-				dump_sql(tds, repo_dir, db);
+				tds->run("USE [" + db + "]"); // FIXME - can we definitely not do this with parameters?
+				dump_sql(*tds, repo_dir, db);
 
-				tds.run("USE [" + old_db + "]");
+				tds->run("USE [" + old_db + "]");
 				do_update_git(repo_dir);
 			}
 		}
@@ -469,7 +471,8 @@ int main(int argc, char** argv) {
 		cerr << e.what() << endl;
 
 		try {
-			tds.run("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", string_view(e.what()));
+			if (tds)
+				tds->run("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", string_view(e.what()));
 		} catch (...) {
 		}
 
