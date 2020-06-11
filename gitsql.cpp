@@ -26,7 +26,7 @@ void replace_all(string& source, const string& from, const string& to);
 string table_ddl(const tds::Conn& tds, const string_view& schema, const string_view& table);
 
 // strip out characters that NTFS doesn't like
-static string sanitize_fn(const string& fn) {
+static string sanitize_fn(const string_view& fn) {
 	string s;
 
 	for (auto c : fn) {
