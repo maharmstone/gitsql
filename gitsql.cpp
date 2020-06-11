@@ -467,8 +467,13 @@ int main(int argc, char** argv) {
 		}
 	} catch (const exception& e) {
 		cerr << e.what() << endl;
-		tds.run("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", string_view(e.what()));
-		throw;
+
+		try {
+			tds.run("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", string_view(e.what()));
+		} catch (...) {
+		}
+
+		return 1;
 	}
 
 	return 0;
