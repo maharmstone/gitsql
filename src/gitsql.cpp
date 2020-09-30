@@ -1,8 +1,11 @@
 #define _CRT_SECURE_NO_WARNINGS
 
+#ifdef _WIN32
 #include <winsock2.h>
 #include <windows.h>
 #include <shlwapi.h>
+#endif
+
 #include <sqlext.h>
 #include <git2.h>
 #include <string>
@@ -360,9 +363,11 @@ ORDER BY Git.id
 	}
 }
 
+// FIXME - use NT mutant instead to do this?
 class lockfile {
 public:
 	lockfile() {
+#ifdef _WIN32
 		OVERLAPPED ol;
 
 		h = CreateFileA("lockfile", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -379,9 +384,13 @@ public:
 		memset(&ol, 0, sizeof(ol));
 
 		LockFileEx(h, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &ol);
+#else
+		// FIXME
+#endif
 	}
 
 	~lockfile() {
+#ifdef _WIN32
 		if (h != INVALID_HANDLE_VALUE) {
 			OVERLAPPED ol;
 
@@ -390,10 +399,15 @@ public:
 
 			CloseHandle(h);
 		}
+#else
+		// FIXME
+#endif
 	}
 
 private:
+#ifdef _WIN32
 	HANDLE h = INVALID_HANDLE_VALUE;
+#endif
 };
 
 static void write_table_ddl(tds::Conn& tds, const string_view& schema, const string_view& table, const string_view& bind_token,

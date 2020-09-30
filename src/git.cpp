@@ -6,7 +6,14 @@
 
 using namespace std;
 
-static void __declspec(noreturn) throw_git_error(int error, const char* func) {
+#ifdef _MSC_VER
+#define noret __declspec(noreturn)
+#else
+#define noret __attribute__((noreturn))
+#endif
+
+noret
+static void throw_git_error(int error, const char* func) {
 	const git_error *lg2err;
 
 	if ((lg2err = giterr_last()) && lg2err->message)
@@ -259,7 +266,7 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 
 				if (!parent_tree.entry_bypath(&out, f.filename))
 					continue;
-				
+
 				git_tree_entry_free(out);
 
 				upd[nu].action = GIT_TREE_UPDATE_REMOVE;

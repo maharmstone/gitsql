@@ -82,8 +82,8 @@ struct index_column {
 	bool is_included;
 };
 
-struct index {
-	index(const string& name, unsigned int type, bool is_unique, bool is_primary_key) : name(name), type(type), is_unique(is_unique), is_primary_key(is_primary_key) { }
+struct table_index {
+	table_index(const string& name, unsigned int type, bool is_unique, bool is_primary_key) : name(name), type(type), is_unique(is_unique), is_primary_key(is_primary_key) { }
 
 	string name;
 	unsigned int type;
@@ -157,7 +157,7 @@ static string dump_table(const tds::Conn& tds, const string& escaped_name) {
 					case tds::server_type::SYBINT8:
 					case tds::server_type::SYBBITN:
 					case tds::server_type::SYBBIT:
-						vals += to_string((signed long long)col);
+						vals += to_string((int64_t)col);
 						break;
 
 					case tds::server_type::SYBFLT8:
@@ -185,7 +185,7 @@ static string dump_table(const tds::Conn& tds, const string& escaped_name) {
 string table_ddl(const tds::Conn& tds, const string_view& schema, const string_view& table) {
 	int64_t id, seed_value, increment_value;
 	vector<column> columns;
-	vector<index> indices;
+	vector<table_index> indices;
 	vector<constraint> constraints;
 	vector<foreign_key> foreign_keys;
 	string escaped_name, ddl;
