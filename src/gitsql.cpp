@@ -1,6 +1,6 @@
 #define _CRT_SECURE_NO_WARNINGS
 
-#include <WinSock2.h>
+#include <winsock2.h>
 #include <windows.h>
 #include <shlwapi.h>
 #include <sqlext.h>
@@ -161,7 +161,7 @@ static void git_add_dir(list<git_file>& files, const filesystem::path& dir, cons
 					data = string(size, ' ');
 					f.seekg(0, ios::beg);
 
-					f.read(&data[0], size); 
+					f.read(&data[0], size);
 				}
 
 				files.emplace_back(unixpath + name, data);

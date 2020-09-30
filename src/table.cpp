@@ -37,7 +37,7 @@ static bool need_escaping(const string_view& s) {
 	}
 
 	// can't have number or dollar sign at beginning
-	
+
 	if ((s.front() >= '0' && s.front() <= '9') || s.front() == '$')
 		return true;
 
@@ -65,17 +65,17 @@ static string brackets_escape(const string_view& s) {
 }
 
 struct column {
-	column(const string& name, const string& type, int max_length, bool nullable, int precision, int scale, const optional<string>& default, int column_id, bool is_identity, bool is_computed, bool is_persisted, const string& computed_definition) : name(name), type(type), max_length(max_length), nullable(nullable), precision(precision), scale(scale), default(default), column_id(column_id), is_identity(is_identity), is_computed(is_computed), is_persisted(is_persisted), computed_definition(computed_definition) { }
+	column(const string& name, const string& type, int max_length, bool nullable, int precision, int scale, const optional<string>& def, int column_id, bool is_identity, bool is_computed, bool is_persisted, const string& computed_definition) : name(name), type(type), max_length(max_length), nullable(nullable), precision(precision), scale(scale), def(def), column_id(column_id), is_identity(is_identity), is_computed(is_computed), is_persisted(is_persisted), computed_definition(computed_definition) { }
 
 	string name, type, computed_definition;
 	int max_length, precision, scale;
 	unsigned int column_id;
 	bool nullable, is_identity, is_computed, is_persisted;
-	optional<string> default;
+	optional<string> def;
 };
 
 struct index_column {
-	index_column(const column& col, bool is_desc, bool is_included) : col(col), is_desc(is_desc), is_included(is_included) { } 
+	index_column(const column& col, bool is_desc, bool is_included) : col(col), is_desc(is_desc), is_included(is_included) { }
 
 	const column& col;
 	bool is_desc;
@@ -309,11 +309,11 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 		for (const auto& col : columns) {
 			if (!first)
 				ddl += ",\n";
-		
+
 			first = false;
 
 			ddl += "    " + brackets_escape(col.name);
-			
+
 			if (!col.is_computed) {
 				ddl += " " + brackets_escape(col.type);
 
@@ -330,8 +330,8 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 
 				// FIXME - collation?
 
-				if (col.default.has_value())
-					ddl += " DEFAULT" + col.default.value();
+				if (col.def.has_value())
+					ddl += " DEFAULT" + col.def.value();
 
 				if (col.is_identity) {
 					ddl += " IDENTITY";
