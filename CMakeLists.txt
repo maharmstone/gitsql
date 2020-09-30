@@ -14,9 +14,10 @@ set(SRC_FILES
 add_executable(gitsql ${SRC_FILES})
 
 find_package(tdscpp REQUIRED)
+find_package(git2 REQUIRED)
 
 target_link_libraries(gitsql tdscpp)
-target_link_libraries(gitsql -lgit2)
+target_link_libraries(gitsql git2)
 
 if(NOT MSVC)
 	target_compile_options(gitsql PUBLIC -Wall -Werror=cast-function-type -Wno-expansion-to-defined -Wunused-parameter -Wtype-limits -Wextra -Wconversion)
