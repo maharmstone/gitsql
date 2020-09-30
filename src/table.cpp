@@ -67,11 +67,14 @@ static string brackets_escape(const string_view& s) {
 struct column {
 	column(const string& name, const string& type, int max_length, bool nullable, int precision, int scale, const optional<string>& def, int column_id, bool is_identity, bool is_computed, bool is_persisted, const string& computed_definition) : name(name), type(type), max_length(max_length), nullable(nullable), precision(precision), scale(scale), def(def), column_id(column_id), is_identity(is_identity), is_computed(is_computed), is_persisted(is_persisted), computed_definition(computed_definition) { }
 
-	string name, type, computed_definition;
-	int max_length, precision, scale;
-	unsigned int column_id;
-	bool nullable, is_identity, is_computed, is_persisted;
+	string name, type;
+	int max_length;
+	bool nullable;
+	int precision, scale;
 	optional<string> def;
+	unsigned int column_id;
+	bool is_identity, is_computed, is_persisted;
+	string computed_definition;
 };
 
 struct index_column {
