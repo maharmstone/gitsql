@@ -65,7 +65,12 @@ static string brackets_escape(const string_view& s) {
 }
 
 struct column {
-	column(const string& name, const string& type, int max_length, bool nullable, int precision, int scale, const optional<string>& def, int column_id, bool is_identity, bool is_computed, bool is_persisted, const string& computed_definition) : name(name), type(type), max_length(max_length), nullable(nullable), precision(precision), scale(scale), def(def), column_id(column_id), is_identity(is_identity), is_computed(is_computed), is_persisted(is_persisted), computed_definition(computed_definition) { }
+	column(const string& name, const string& type, int max_length, bool nullable, int precision,
+		   int scale, const optional<string>& def, int column_id, bool is_identity, bool is_computed,
+		   bool is_persisted, const string& computed_definition, const optional<string>& collation) :
+		name(name), type(type), max_length(max_length), nullable(nullable), precision(precision),
+		scale(scale), def(def), column_id(column_id), is_identity(is_identity), is_computed(is_computed),
+		is_persisted(is_persisted), computed_definition(computed_definition), collation(collation) { }
 
 	string name, type;
 	int max_length;
@@ -75,6 +80,7 @@ struct column {
 	unsigned int column_id;
 	bool is_identity, is_computed, is_persisted;
 	string computed_definition;
+	optional<string> collation;
 };
 
 struct index_column {
@@ -226,7 +232,8 @@ SELECT columns.name,
 	columns.is_identity,
 	columns.is_computed,
 	computed_columns.is_persisted,
-	computed_columns.definition
+	computed_columns.definition,
+	CASE WHEN columns.collation_name != DATABASEPROPERTYEX(DB_NAME(), 'Collation') THEN columns.collation_name END
 FROM sys.columns
 JOIN sys.types ON types.user_type_id = columns.user_type_id
 LEFT JOIN sys.default_constraints ON default_constraints.parent_object_id = columns.object_id AND default_constraints.parent_column_id  = columns.column_id
@@ -236,7 +243,9 @@ ORDER BY columns.column_id
 )", id);
 
 		while (sq.fetch_row()) {
-			columns.emplace_back(sq[0], sq[1], (int)sq[2], (int)sq[3] != 0, (int)sq[4], (int)sq[5], sq[6], (unsigned int)sq[7], (unsigned int)sq[8] != 0, (unsigned int)sq[9] != 0, (unsigned int)sq[10] != 0, sq[11]);
+			columns.emplace_back(sq[0], sq[1], (int)sq[2], (int)sq[3] != 0, (int)sq[4], (int)sq[5],
+								 sq[6], (unsigned int)sq[7], (unsigned int)sq[8] != 0, (unsigned int)sq[9] != 0,
+								 (unsigned int)sq[10] != 0, sq[11], sq[12]);
 		}
 	}
 
@@ -342,6 +351,9 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 					if (seed_value != 1 || increment_value != 1)
 						ddl += "(" + to_string(seed_value) + "," + to_string(increment_value) + ")";
 				}
+
+				if (col.collation.has_value())
+					ddl += " COLLATE " + col.collation.value();
 
 				ddl += " " + (col.nullable ? "NULL"s : "NOT NULL"s);
 
