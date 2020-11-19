@@ -26,7 +26,7 @@ const string db_app = "GitSQL";
 void replace_all(string& source, const string& from, const string& to);
 
 // table.cpp
-string table_ddl(const tds::Conn& tds, const string_view& schema, const string_view& table);
+string table_ddl(tds::tds& tds, const string_view& schema, const string_view& table);
 
 // strip out characters that NTFS doesn't like
 static string sanitize_fn(const string_view& fn) {
@@ -59,7 +59,7 @@ struct sql_obj {
 	string schema, name, def, type;
 };
 
-static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, const string& db) {
+static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db) {
 	string s, dbs;
 
 	if (db != "")
@@ -70,7 +70,7 @@ static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, con
 	vector<sql_obj> objs;
 
 	{
-		tds::Query sq(tds, "SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type) FROM " + dbs + "sys.objects LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN " + dbs + "sys.schemas ON schemas.schema_id=objects.schema_id WHERE objects.type IN ('V','P','FN','TF','IF','U') ORDER BY schemas.name, objects.name");
+		tds::query sq(tds, "SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type) FROM " + dbs + "sys.objects LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN " + dbs + "sys.schemas ON schemas.schema_id=objects.schema_id WHERE objects.type IN ('V','P','FN','TF','IF','U') ORDER BY schemas.name, objects.name");
 
 		while (sq.fetch_row()) {
 			objs.emplace_back(sq[0], sq[1], sq[2], sq[3]);
@@ -78,7 +78,7 @@ static void dump_sql(const tds::Conn& tds, const filesystem::path& repo_dir, con
 	}
 
 	{
-		tds::Query sq(tds, "SELECT triggers.name, sql_modules.definition FROM " + dbs + "sys.triggers LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=triggers.object_id WHERE triggers.parent_class_desc = 'DATABASE'");
+		tds::query sq(tds, "SELECT triggers.name, sql_modules.definition FROM " + dbs + "sys.triggers LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=triggers.object_id WHERE triggers.parent_class_desc = 'DATABASE'");
 
 		while (sq.fetch_row()) {
 			objs.emplace_back("db_triggers", sq[0], sq[1], "");
@@ -234,7 +234,7 @@ static void do_update_git(const string& repo_dir) {
 	// FIXME - push to remote server?
 }
 
-static void flush_git(const tds::Conn& tds) {
+static void flush_git(tds::tds& tds) {
 	map<unsigned int, string> repos;
 
 	git_libgit2_init();
@@ -242,10 +242,10 @@ static void flush_git(const tds::Conn& tds) {
 	tds.run("SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; DELETE FROM Restricted.Git WHERE (SELECT COUNT(*) FROM Restricted.GitFiles WHERE id = Git.id) = 0");
 
 	{
-		tds::Query sq(tds, "SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; SELECT Git.repo, GitRepo.dir FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
+		tds::query sq(tds, "SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; SELECT Git.repo, GitRepo.dir FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
 
 		while (sq.fetch_row()) {
-			repos[(unsigned int)sq[0]] = sq[1];
+			repos[(unsigned int)sq[0]] = (string)sq[1];
 		}
 
 		if (repos.size() == 0)
@@ -256,7 +256,7 @@ static void flush_git(const tds::Conn& tds) {
 		GitRepo repo(r.second);
 
 		while (true) {
-			tds::Trans trans(tds);
+			tds::trans trans(tds);
 			unsigned int commit, dt;
 			int tz_offset;
 			string name, email, description;
@@ -267,7 +267,7 @@ static void flush_git(const tds::Conn& tds) {
 			bool merged_trans = false;
 
 			{
-				tds::Query sq(tds, R"(
+				tds::query sq(tds, R"(
 SET LOCK_TIMEOUT 0;
 SET XACT_ABORT ON;
 
@@ -292,9 +292,9 @@ ORDER BY Git.id
 					break;
 
 				commit = (unsigned int)sq[0];
-				name = sq[1];
-				email = sq[2];
-				description = sq[3];
+				name = (string)sq[1];
+				email = (string)sq[2];
+				description = (string)sq[3];
 				dt = (unsigned int)sq[4];
 				tz_offset = (int)sq[5];
 
@@ -323,7 +323,7 @@ ORDER BY Git.id
 							delete_commits.push_back(new_commit);
 					}
 
-					if (sq[7].is_null())
+					if (sq[7].is_null)
 						clear_all = true;
 					else {
 						if (merged_trans) {
@@ -410,21 +410,25 @@ private:
 #endif
 };
 
-static void write_table_ddl(tds::Conn& tds, const string_view& schema, const string_view& table, const string_view& bind_token,
+static void write_table_ddl(tds::tds& tds, const string_view& schema, const string_view& table, const string_view& bind_token,
 							unsigned int commit_id, const string_view& filename) {
-	tds::Trans trans(tds); // not a real transaction - just to stop MSSQL moaning
-
-	trans.committed = true;
-
-	tds.run("BEGIN TRANSACTION; DECLARE @token VARCHAR(255) = ?; EXEC sp_bindsession @token;", bind_token);
-
-	auto ddl = table_ddl(tds, schema, table);
-
-	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, tds::binary_string(ddl));
+// 	tds::trans trans(tds); // not a real transaction - just to stop MSSQL moaning
+//
+// 	trans.committed = true;
+//
+// 	tds.run("BEGIN TRANSACTION; DECLARE @token VARCHAR(255) = ?; EXEC sp_bindsession @token;", bind_token);
+//
+// 	auto ddl = table_ddl(tds, schema, table);
+//
+// 	vector<std::byte> vec(ddl.length());
+//
+// 	memcpy(vec.data(), ddl.data(), ddl.length());
+//
+// 	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, vec);
 }
 
 int main(int argc, char** argv) {
-	unique_ptr<tds::Conn> tds;
+	unique_ptr<tds::tds> tds;
 
 	try {
 		string cmd;
@@ -440,7 +444,7 @@ int main(int argc, char** argv) {
 		if (cmd != "flush" && cmd != "table" && argc < 4)
 			return 1;
 
-		tds.reset(new tds::Conn(db_server, "", "", db_app));
+		tds.reset(new tds::tds(db_server, "", "", db_app));
 
 		string unixpath, def;
 
@@ -466,12 +470,12 @@ int main(int argc, char** argv) {
 				string db = argv[3], old_db;
 
 				{
-					tds::Query sq(*tds, "SELECT DB_NAME()");
+					tds::query sq(*tds, "SELECT DB_NAME()");
 
 					if (!sq.fetch_row())
 						throw runtime_error("Could not get current database name.");
 
-					old_db = sq[0];
+					old_db = (string)sq[0];
 				}
 
 				tds->run("USE [" + db + "]"); // FIXME - can we definitely not do this with parameters?

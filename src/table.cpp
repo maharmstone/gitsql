@@ -4,6 +4,12 @@
 #include <stdexcept>
 #include <tdscpp.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <codecvt>
+#endif
+
 using namespace std;
 
 static const vector<string> reserved_words{"ADD", "ALL", "ALTER", "AND", "ANY", "AS", "ASC", "AUTHORIZATION", "BACKUP", "BEGIN", "BETWEEN", "BREAK", "BROWSE", "BULK", "BY", "CASCADE", "CASE", "CHECK", "CHECKPOINT", "CLOSE", "CLUSTERED", "COALESCE", "COLLATE", "COLUMN", "COMMIT", "COMPUTE", "CONSTRAINT", "CONTAINS", "CONTAINSTABLE", "CONTINUE", "CONVERT", "CREATE", "CROSS", "CURRENT", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "CURRENT_USER", "CURSOR", "DATABASE", "DBCC", "DEALLOCATE", "DECLARE", "DEFAULT", "DELETE", "DENY", "DESC", "DISTINCT", "DISTRIBUTED", "DOUBLE", "DROP", "ELSE", "END", "ERRLVL", "ESCAPE", "EXCEPT", "EXEC", "EXECUTE", "EXISTS", "EXIT", "EXTERNAL", "FETCH", "FILE", "FILLFACTOR", "FOR", "FOREIGN", "FREETEXT", "FREETEXTTABLE", "FROM", "FULL", "FUNCTION", "GOTO", "GRANT", "GROUP", "HAVING", "HOLDLOCK", "IDENTITY", "IDENTITY_INSERT", "IDENTITYCOL", "IF", "IN", "INDEX", "INNER", "INSERT", "INTERSECT", "INTO", "IS", "JOIN", "KEY", "KILL", "LEFT", "LIKE", "LINENO", "MERGE", "NATIONAL", "NOCHECK", "NONCLUSTERED", "NOT", "SQL_NULL", "NULLIF", "OF", "OFF", "OFFSETS", "ON", "OPEN", "OPENDATASOURCE", "OPENQUERY", "OPENROWSET", "OPENXML", "OPTION", "OR", "ORDER", "OUTER", "OVER", "PERCENT", "PIVOT", "PLAN", "PRIMARY", "PRINT", "PROC", "PROCEDURE", "PUBLIC", "RAISERROR", "READ", "READTEXT", "RECONFIGURE", "REFERENCES", "REPLICATION", "RESTORE", "RESTRICT", "RETURN", "REVERT", "REVOKE", "RIGHT", "ROLLBACK", "ROWCOUNT", "ROWGUIDCOL", "RULE", "SAVE", "SCHEMA", "SELECT", "SEMANTICKEYPHRASETABLE", "SEMANTICSIMILARITYDETAILSTABLE", "SEMANTICSIMILARITYTABLE", "SESSION_USER", "SET", "SETUSER", "SHUTDOWN", "SOME", "STATISTICS", "SYSTEM_USER", "TABLE", "TABLESAMPLE", "TEXTSIZE", "THEN", "TO", "TOP", "TRAN", "TRANSACTION", "TRIGGER", "TRUNCATE", "TRY_CONVERT", "TSEQUAL", "UNION", "UNIQUE", "UNPIVOT", "UPDATE", "UPDATETEXT", "USE", "USER", "VALUES", "VARYING", "VIEW", "WAITFOR", "WHEN", "WHERE", "WHILE", "WITH", "WRITETEXT"};
@@ -127,50 +133,80 @@ static string quote_escape(string s) {
 	return s;
 }
 
-static string dump_table(const tds::Conn& tds, const string& escaped_name) {
+static string utf16_to_utf8(const u16string_view& sv) {
+#ifdef _WIN32
+	string ret;
+
+	if (sv.empty())
+		return "";
+
+	auto len = WideCharToMultiByte(CP_UTF8, 0, (const wchar_t*)sv.data(), (int)sv.length(), nullptr, 0,
+								   nullptr, nullptr);
+
+	if (len == 0)
+		throw runtime_error("WideCharToMultiByte 1 failed.");
+
+	ret.resize(len);
+
+	len = WideCharToMultiByte(CP_UTF8, 0, (const wchar_t*)sv.data(), (int)sv.length(), ret.data(), len,
+							  nullptr, nullptr);
+
+	if (len == 0)
+		throw runtime_error("WideCharToMultiByte 2 failed.");
+
+	return ret;
+#else
+	wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
+
+	return convert.to_bytes(sv.data(), sv.data() + sv.length());
+#endif
+}
+
+static string dump_table(tds::tds& tds, const string& escaped_name) {
 	string cols, s;
 
-	tds::Query sq(tds, "SELECT * FROM " + escaped_name);
+	tds::query sq(tds, "SELECT * FROM " + escaped_name);
 
 	while (sq.fetch_row()) {
 		string vals;
 		auto column_count = sq.num_columns();
 
-		if (cols == "") {
-			for (unsigned int i = 0; i < column_count; i++) {
+		if (cols.empty()) {
+			for (uint16_t i = 0; i < column_count; i++) {
 				const auto& col = sq[i];
 
-				if (cols != "")
+				if (!cols.empty())
 					cols += ", ";
 
-				cols += brackets_escape(col.name);
+				cols += brackets_escape(utf16_to_utf8(col.name));
 			}
 		}
 
 		s += "INSERT INTO " + escaped_name + "(" + cols + ") VALUES(";
 
-		for (unsigned int i = 0; i < column_count; i++) {
+		for (uint16_t i = 0; i < column_count; i++) {
 			const auto& col = sq[i];
 
 			if (vals != "")
 				vals += ", ";
 
-			if (col.is_null())
+			if (col.is_null)
 				vals += "NULL";
 			else {
 				switch (col.type) {
-					case tds::server_type::SYBINTN:
-					case tds::server_type::SYBINT1:
-					case tds::server_type::SYBINT2:
-					case tds::server_type::SYBINT4:
-					case tds::server_type::SYBINT8:
-					case tds::server_type::SYBBITN:
-					case tds::server_type::SYBBIT:
+					case tds::sql_type::INTN:
+					case tds::sql_type::TINYINT:
+					case tds::sql_type::SMALLINT:
+					case tds::sql_type::INT:
+					case tds::sql_type::BIGINT:
+					case tds::sql_type::BITN:
+					case tds::sql_type::BIT:
 						vals += to_string((int64_t)col);
 						break;
 
-					case tds::server_type::SYBFLT8:
-					case tds::server_type::SYBFLTN:
+					case tds::sql_type::FLOAT:
+					case tds::sql_type::REAL:
+					case tds::sql_type::FLTN:
 						vals += to_string((double)col);
 						break;
 
@@ -191,7 +227,7 @@ static string dump_table(const tds::Conn& tds, const string& escaped_name) {
 	return s;
 }
 
-string table_ddl(const tds::Conn& tds, const string_view& schema, const string_view& table) {
+string table_ddl(tds::tds& tds, const string_view& schema, const string_view& table) {
 	int64_t id, seed_value, increment_value;
 	vector<column> columns;
 	vector<table_index> indices;
@@ -201,7 +237,7 @@ string table_ddl(const tds::Conn& tds, const string_view& schema, const string_v
 	bool has_included_indices = false, fulldump = false;
 
 	{
-		tds::Query sq(tds, R"(
+		tds::query sq(tds, R"(
 SELECT objects.object_id,
 	identity_columns.seed_value,
 	identity_columns.increment_value
@@ -220,7 +256,7 @@ WHERE objects.name = ? AND schemas.name = ?
 	}
 
 	{
-		tds::Query sq (tds, R"(
+		tds::query sq (tds, R"(
 SELECT columns.name,
 	CASE WHEN types.is_user_defined = 0 THEN UPPER(types.name) ELSE types.name END,
 	columns.max_length,
@@ -252,13 +288,13 @@ ORDER BY columns.column_id
 	{
 		string last_name;
 
-		tds::Query sq(tds, "SELECT indexes.name, indexes.type, indexes.is_unique, indexes.is_primary_key, index_columns.column_id, index_columns.is_descending_key, index_columns.is_included_column FROM sys.indexes JOIN sys.index_columns ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id WHERE indexes.object_id = ? ORDER BY indexes.index_id, index_columns.index_column_id", id);
+		tds::query sq(tds, "SELECT indexes.name, indexes.type, indexes.is_unique, indexes.is_primary_key, index_columns.column_id, index_columns.is_descending_key, index_columns.is_included_column FROM sys.indexes JOIN sys.index_columns ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id WHERE indexes.object_id = ? ORDER BY indexes.index_id, index_columns.index_column_id", id);
 
 		while (sq.fetch_row()) {
 			bool found = false;
 
 			if ((string)sq[0] != last_name) {
-				last_name = sq[0];
+				last_name = (string)sq[0];
 				indices.emplace_back(last_name, (unsigned int)sq[1], (unsigned int)sq[2] != 0, (unsigned int)sq[3] != 0);
 			}
 
@@ -276,7 +312,7 @@ ORDER BY columns.column_id
 	}
 
 	{
-		tds::Query sq(tds, "SELECT definition, parent_column_id FROM sys.check_constraints WHERE parent_object_id = ? ORDER BY name", id);
+		tds::query sq(tds, "SELECT definition, parent_column_id FROM sys.check_constraints WHERE parent_object_id = ? ORDER BY name", id);
 
 		while (sq.fetch_row()) {
 			constraints.emplace_back(sq[0], (unsigned int)sq[1]);
@@ -286,7 +322,7 @@ ORDER BY columns.column_id
 	{
 		int64_t last_num = 0;
 
-		tds::Query sq(tds, R"(
+		tds::query sq(tds, R"(
 SELECT foreign_key_columns.constraint_object_id, foreign_key_columns.parent_column_id, OBJECT_SCHEMA_NAME(foreign_key_columns.referenced_object_id), OBJECT_NAME(foreign_key_columns.referenced_object_id), columns.name, foreign_keys.delete_referential_action, foreign_keys.update_referential_action
 FROM sys.foreign_key_columns
 JOIN sys.columns ON columns.object_id = foreign_key_columns.referenced_object_id AND columns.column_id = foreign_key_columns.referenced_column_id
@@ -598,7 +634,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 	}
 
 	{
-		tds::Query sq(tds, R"(
+		tds::query sq(tds, R"(
 SELECT sql_modules.definition
 FROM sys.triggers
 JOIN sys.sql_modules ON sql_modules.object_id = triggers.object_id
@@ -614,7 +650,7 @@ WHERE triggers.parent_id = ?)", id);
 	}
 
 	{
-		tds::Query sq(tds, R"(
+		tds::query sq(tds, R"(
 SELECT * FROM sys.extended_properties
 WHERE major_id = ? AND
 	minor_id = 0 AND
