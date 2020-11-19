@@ -123,7 +123,13 @@ private:
 };
 
 struct git_file {
-	git_file(const std::string& filename, const std::optional<std::string>& data) : filename(filename), data(data) { }
+	git_file(const std::string& filename, const tds::value& data) : filename(filename) {
+		if (!data.is_null) {
+			this->data = "";
+			this->data.value().resize(data.val.length());
+			memcpy(this->data.value().data(), data.val.data(), data.val.length());
+		}
+	}
 
 	std::string filename;
 	std::optional<std::string> data;

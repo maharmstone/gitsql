@@ -229,7 +229,7 @@ static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string&
 			}
 
 			if (!found)
-				files.emplace_back(prefix + name, nullopt);
+				files.emplace_back(prefix + name, nullptr);
 		}
 	}
 }
