@@ -72,11 +72,13 @@ static string brackets_escape(const string_view& s) {
 
 struct column {
 	column(const string& name, const string& type, int max_length, bool nullable, int precision,
-		   int scale, const optional<string>& def, int column_id, bool is_identity, bool is_computed,
-		   bool is_persisted, const string& computed_definition, const optional<string>& collation) :
+		   int scale, const tds::value& def, int column_id, bool is_identity, bool is_computed,
+		   bool is_persisted, const string& computed_definition, const tds::value& collation) :
 		name(name), type(type), max_length(max_length), nullable(nullable), precision(precision),
-		scale(scale), def(def), column_id(column_id), is_identity(is_identity), is_computed(is_computed),
-		is_persisted(is_persisted), computed_definition(computed_definition), collation(collation) { }
+		scale(scale), def(def.is_null ? optional<string>(nullopt) : optional<string>(def)),
+		column_id(column_id), is_identity(is_identity),
+		is_computed(is_computed), is_persisted(is_persisted), computed_definition(computed_definition),
+		collation(collation.is_null ? optional<string>(nullopt) : optional<string>(collation)) { }
 
 	string name, type;
 	int max_length;
@@ -375,8 +377,6 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 					ddl += "(" + to_string(col.scale) + ")";
 				else if (col.type == "DATETIMEOFFSET")
 					ddl += "(" + to_string(col.scale) + ")"; // FIXME - what's the default for this?
-
-				// FIXME - collation?
 
 				if (col.def.has_value())
 					ddl += " DEFAULT" + col.def.value();
