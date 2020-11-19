@@ -412,19 +412,17 @@ private:
 
 static void write_table_ddl(tds::tds& tds, const string_view& schema, const string_view& table, const string_view& bind_token,
 							unsigned int commit_id, const string_view& filename) {
-// 	tds::trans trans(tds); // not a real transaction - just to stop MSSQL moaning
-//
-// 	trans.committed = true;
-//
-// 	tds.run("BEGIN TRANSACTION; DECLARE @token VARCHAR(255) = ?; EXEC sp_bindsession @token;", bind_token);
-//
-// 	auto ddl = table_ddl(tds, schema, table);
-//
-// 	vector<std::byte> vec(ddl.length());
-//
-// 	memcpy(vec.data(), ddl.data(), ddl.length());
-//
-// 	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, vec);
+	tds::rpc r(tds, u"sp_bindsession", bind_token);
+
+	while (r.fetch_row()) { } // wait for last packet
+
+	auto ddl = table_ddl(tds, schema, table);
+
+	vector<std::byte> vec(ddl.length());
+
+	memcpy(vec.data(), ddl.data(), ddl.length());
+
+	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, vec);
 }
 
 int main(int argc, char** argv) {
