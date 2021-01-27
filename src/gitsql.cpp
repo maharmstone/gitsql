@@ -85,6 +85,14 @@ static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const stri
 		}
 	}
 
+	{
+		tds::query sq(tds, "SELECT name FROM " + dbs + "sys.schemas");
+
+		while (sq.fetch_row()) {
+			objs.emplace_back("schemas", sq[0], "CREATE SCHEMA " + (string)sq[0] + ";", "");
+		}
+	}
+
 	for (auto& obj : objs) {
 		filesystem::path dir = repo_dir / sanitize_fn(obj.schema);
 
