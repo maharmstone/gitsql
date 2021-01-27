@@ -271,7 +271,7 @@ SELECT columns.name,
 	columns.is_computed,
 	computed_columns.is_persisted,
 	computed_columns.definition,
-	CASE WHEN columns.collation_name != DATABASEPROPERTYEX(DB_NAME(), 'Collation') THEN columns.collation_name END
+	CASE WHEN columns.collation_name != CONVERT(VARCHAR(MAX),DATABASEPROPERTYEX(DB_NAME(), 'Collation')) THEN columns.collation_name END
 FROM sys.columns
 JOIN sys.types ON types.user_type_id = columns.user_type_id
 LEFT JOIN sys.default_constraints ON default_constraints.parent_object_id = columns.object_id AND default_constraints.parent_column_id  = columns.column_id
