@@ -55,9 +55,10 @@ static void clear_dir(const filesystem::path& dir) {
 }
 
 struct sql_obj {
-	sql_obj(const string& schema, const string& name, const string& def, const string& type) : schema(schema), name(name), def(def), type(type) { }
+	sql_obj(const string& schema, const string& name, const string& def, const string& type, int64_t id) : schema(schema), name(name), def(def), type(type), id(id) { }
 
 	string schema, name, def, type;
+	int64_t id;
 };
 
 struct sql_perms {
@@ -69,6 +70,36 @@ struct sql_perms {
 	string type;
 	vector<string> perms;
 };
+
+static string grant_string(const vector<sql_perms>& perms, const string& obj) {
+	string ret;
+
+	if (perms.empty())
+		return "";
+
+	ret = "\n";
+
+	for (const auto& p : perms) {
+		bool first = true;
+
+		ret += p.type + " ";
+
+		for (const auto& p2 : p.perms) {
+			if (!first)
+				ret += ", ";
+
+			ret += p2;
+			first = false;
+		}
+
+		ret += " ON " + obj;
+		ret += " TO ";
+		ret += brackets_escape(p.user);
+		ret += ";\n";
+	}
+
+	return ret;
+}
 
 static string get_schema_definition(tds::tds& tds, const string& name) {
 	vector<sql_perms> perms;
@@ -104,30 +135,7 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 		}
 	}
 
-	if (perms.empty())
-		return ret;
-
-	ret += "\n";
-
-	for (const auto& p : perms) {
-		bool first = true;
-
-		ret += p.type + " ";
-
-		for (const auto& p2 : p.perms) {
-			if (!first)
-				ret += ", ";
-
-			ret += p2;
-			first = false;
-		}
-
-		ret += " ON SCHEMA :: ";
-		ret += brackets_escape(name);
-		ret += " TO ";
-		ret += brackets_escape(p.user);
-		ret += ";\n";
-	}
+	ret += grant_string(perms, "SCHEMA :: " + brackets_escape(name));
 
 	return ret;
 }
@@ -143,10 +151,19 @@ static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const stri
 	vector<sql_obj> objs;
 
 	{
-		tds::query sq(tds, "SELECT schemas.name, objects.name, sql_modules.definition, RTRIM(objects.type) FROM " + dbs + "sys.objects LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=objects.object_id JOIN " + dbs + "sys.schemas ON schemas.schema_id=objects.schema_id WHERE objects.type IN ('V','P','FN','TF','IF','U') ORDER BY schemas.name, objects.name");
+		tds::query sq(tds, R"(SELECT schemas.name,
+objects.name,
+sql_modules.definition,
+RTRIM(objects.type),
+CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN objects.object_id ELSE 0 END
+FROM )" + dbs + R"(sys.objects
+LEFT JOIN )" + dbs + R"(sys.sql_modules ON sql_modules.object_id = objects.object_id
+JOIN )" + dbs + R"(sys.schemas ON schemas.schema_id = objects.schema_id
+WHERE objects.type IN ('V','P','FN','TF','IF','U')
+ORDER BY schemas.name, objects.name)");
 
 		while (sq.fetch_row()) {
-			objs.emplace_back(sq[0], sq[1], sq[2], sq[3]);
+			objs.emplace_back(sq[0], sq[1], sq[2], sq[3], (int64_t)sq[4]);
 		}
 	}
 
@@ -154,7 +171,7 @@ static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const stri
 		tds::query sq(tds, "SELECT triggers.name, sql_modules.definition FROM " + dbs + "sys.triggers LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=triggers.object_id WHERE triggers.parent_class_desc = 'DATABASE'");
 
 		while (sq.fetch_row()) {
-			objs.emplace_back("db_triggers", sq[0], sq[1], "");
+			objs.emplace_back("db_triggers", sq[0], sq[1], "", 0);
 		}
 	}
 
@@ -170,7 +187,7 @@ static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const stri
 		}
 
 		for (const auto& v : schemas) {
-			objs.emplace_back("schemas", v, get_schema_definition(tds, v), "");
+			objs.emplace_back("schemas", v, get_schema_definition(tds, v), "", 0);
 		}
 	}
 
@@ -212,6 +229,42 @@ static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const stri
 		}
 
 		obj.def += "\n";
+
+		if (obj.id != 0) {
+			vector<sql_perms> perms;
+
+			{
+				tds::query sq(tds, R"(SELECT database_permissions.state_desc,
+database_permissions.permission_name,
+USER_NAME(database_permissions.grantee_principal_id)
+FROM )" + dbs + R"(sys.database_permissions
+JOIN )" + dbs + R"(sys.database_principals ON database_principals.principal_id = database_permissions.grantee_principal_id
+WHERE database_permissions.class_desc = 'OBJECT_OR_COLUMN' AND
+	database_permissions.major_id = ?
+ORDER BY USER_NAME(database_permissions.grantee_principal_id),
+	database_permissions.state_desc,
+	database_permissions.permission_name)", obj.id);
+
+				while (sq.fetch_row()) {
+					bool found = false;
+					auto type = (string)sq[0];
+					auto user = (string)sq[2];
+
+					for (auto& p : perms) {
+						if (p.user == user && p.type == type) {
+							p.perms.emplace_back((string)sq[1]);
+							found = true;
+							break;
+						}
+					}
+
+					if (!found)
+						perms.emplace_back(user, type, (string)sq[1]);
+				}
+			}
+
+			obj.def += grant_string(perms, brackets_escape(obj.schema) + "." + brackets_escape(obj.name));
+		}
 
 		if (subdir != "") {
 			dir /= subdir;
