@@ -72,7 +72,7 @@ struct sql_perms {
 
 static string get_schema_definition(tds::tds& tds, const string& name) {
 	vector<sql_perms> perms;
-	string ret = "CREATE SCHEMA " + name + ";\n";
+	string ret = "CREATE SCHEMA " + brackets_escape(name) + ";\n";
 
 	{
 		tds::query sq(tds, R"(SELECT database_permissions.state_desc,
