@@ -101,7 +101,7 @@ static string grant_string(const vector<sql_perms>& perms, const string& obj) {
 	return ret;
 }
 
-static string get_schema_definition(tds::tds& tds, const string& name) {
+static string get_schema_definition(tds::tds& tds, const string& name, const string& dbs) {
 	vector<sql_perms> perms;
 	string ret = "CREATE SCHEMA " + brackets_escape(name) + ";\n";
 
@@ -109,8 +109,8 @@ static string get_schema_definition(tds::tds& tds, const string& name) {
 		tds::query sq(tds, R"(SELECT database_permissions.state_desc,
 	database_permissions.permission_name,
 	USER_NAME(database_permissions.grantee_principal_id)
-FROM sys.database_permissions
-JOIN sys.database_principals ON database_principals.principal_id = database_permissions.grantee_principal_id
+FROM )" + dbs + R"(sys.database_permissions
+JOIN )" + dbs + R"(sys.database_principals ON database_principals.principal_id = database_permissions.grantee_principal_id
 WHERE database_permissions.class_desc = 'SCHEMA' AND
 	database_permissions.major_id = SCHEMA_ID(?)
 ORDER BY USER_NAME(database_permissions.grantee_principal_id),
@@ -143,7 +143,7 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db) {
 	string s, dbs;
 
-	if (db != "")
+	if (!db.empty())
 		dbs = db + ".";
 
 	clear_dir(repo_dir);
@@ -187,7 +187,7 @@ ORDER BY schemas.name, objects.name)");
 		}
 
 		for (const auto& v : schemas) {
-			objs.emplace_back("schemas", v, get_schema_definition(tds, v), "", 0);
+			objs.emplace_back("schemas", v, get_schema_definition(tds, v, dbs), "", 0);
 		}
 	}
 
