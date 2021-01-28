@@ -79,7 +79,7 @@ static string get_schema_definition(tds::tds& tds, const string& name) {
 	database_permissions.permission_name,
 	USER_NAME(database_permissions.grantee_principal_id)
 FROM sys.database_permissions
-JOIN sys.database_principals ON database_principals.principal_id = database_permissions.major_id
+JOIN sys.database_principals ON database_principals.principal_id = database_permissions.grantee_principal_id
 WHERE database_permissions.class_desc = 'SCHEMA' AND
 	database_permissions.major_id = SCHEMA_ID(?)
 ORDER BY USER_NAME(database_permissions.grantee_principal_id),
