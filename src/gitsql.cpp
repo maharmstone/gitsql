@@ -27,6 +27,7 @@ void replace_all(string& source, const string& from, const string& to);
 
 // table.cpp
 string table_ddl(tds::tds& tds, const string_view& schema, const string_view& table);
+string brackets_escape(const string_view& s);
 
 // strip out characters that NTFS doesn't like
 static string sanitize_fn(const string_view& fn) {
@@ -59,6 +60,78 @@ struct sql_obj {
 	string schema, name, def, type;
 };
 
+struct sql_perms {
+	sql_perms(const string_view& user, const string_view& type, const string_view& perm) : user(user), type(type) {
+		perms.emplace_back(perm);
+	}
+
+	string user;
+	string type;
+	vector<string> perms;
+};
+
+static string get_schema_definition(tds::tds& tds, const string& name) {
+	vector<sql_perms> perms;
+	string ret = "CREATE SCHEMA " + name + ";\n";
+
+	{
+		tds::query sq(tds, R"(SELECT database_permissions.state_desc,
+	database_permissions.permission_name,
+	USER_NAME(database_permissions.grantee_principal_id)
+FROM sys.database_permissions
+JOIN sys.database_principals ON database_principals.principal_id = database_permissions.major_id
+WHERE database_permissions.class_desc = 'SCHEMA' AND
+	database_permissions.major_id = SCHEMA_ID(?)
+ORDER BY USER_NAME(database_permissions.grantee_principal_id),
+	database_permissions.state_desc,
+	database_permissions.permission_name)", name);
+
+		while (sq.fetch_row()) {
+			bool found = false;
+			auto type = (string)sq[0];
+			auto user = (string)sq[2];
+
+			for (auto& p : perms) {
+				if (p.user == user && p.type == type) {
+					p.perms.emplace_back((string)sq[1]);
+					found = true;
+					break;
+				}
+			}
+
+			if (!found)
+				perms.emplace_back(user, type, (string)sq[1]);
+		}
+	}
+
+	if (perms.empty())
+		return ret;
+
+	ret += "\n";
+
+	for (const auto& p : perms) {
+		bool first = true;
+
+		ret += p.type + " ";
+
+		for (const auto& p2 : p.perms) {
+			if (!first)
+				ret += ", ";
+
+			ret += p2;
+			first = false;
+		}
+
+		ret += " ON SCHEMA :: ";
+		ret += brackets_escape(name);
+		ret += " TO ";
+		ret += brackets_escape(p.user);
+		ret += ";\n";
+	}
+
+	return ret;
+}
+
 static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db) {
 	string s, dbs;
 
@@ -86,10 +159,18 @@ static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const stri
 	}
 
 	{
-		tds::query sq(tds, "SELECT name FROM " + dbs + "sys.schemas");
+		vector<string> schemas;
 
-		while (sq.fetch_row()) {
-			objs.emplace_back("schemas", sq[0], "CREATE SCHEMA " + (string)sq[0] + ";", "");
+		{
+			tds::query sq(tds, "SELECT name FROM " + dbs + "sys.schemas WHERE name != 'sys' AND name != 'INFORMATION_SCHEMA'");
+
+			while (sq.fetch_row()) {
+				schemas.emplace_back(sq[0]);
+			}
+		}
+
+		for (const auto& v : schemas) {
+			objs.emplace_back("schemas", v, get_schema_definition(tds, v), "");
 		}
 	}
 
