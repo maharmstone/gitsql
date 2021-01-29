@@ -303,7 +303,7 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 			}
 
 			if (!perms.empty()) {
-				obj.def += "\n" + grant_string(perms, brackets_escape(obj.schema) + "." + brackets_escape(obj.name));
+				obj.def += "GO\n\n" + grant_string(perms, brackets_escape(obj.schema) + "." + brackets_escape(obj.name));
 			}
 		}
 
