@@ -74,11 +74,6 @@ struct sql_perms {
 static string grant_string(const vector<sql_perms>& perms, const string& obj) {
 	string ret;
 
-	if (perms.empty())
-		return "";
-
-	ret = "\n";
-
 	for (const auto& p : perms) {
 		bool first = true;
 
@@ -135,6 +130,10 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 		}
 	}
 
+	if (perms.empty())
+		return ret;
+
+	ret += "GO\n\n";
 	ret += grant_string(perms, "SCHEMA :: " + brackets_escape(name));
 
 	return ret;
@@ -303,7 +302,9 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 				}
 			}
 
-			obj.def += grant_string(perms, brackets_escape(obj.schema) + "." + brackets_escape(obj.name));
+			if (!perms.empty()) {
+				obj.def += "\n" + grant_string(perms, brackets_escape(obj.schema) + "." + brackets_escape(obj.name));
+			}
 		}
 
 		if (subdir != "") {
