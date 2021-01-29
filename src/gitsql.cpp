@@ -140,6 +140,30 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 	return ret;
 }
 
+static string get_role_definition(tds::tds& tds, const string_view& name, int64_t id) {
+	string ret;
+	bool first = true;
+
+	ret = "CREATE ROLE " + brackets_escape(name) + ";\n";
+
+	tds::query sq(tds, R"(SELECT database_principals.name
+FROM sys.database_role_members
+JOIN sys.database_principals ON database_principals.principal_id = database_role_members.member_principal_id
+WHERE database_role_members.role_principal_id = ?
+ORDER BY database_principals.name)", id);
+
+	while (sq.fetch_row()) {
+		if (first)
+			ret += "\n";
+
+		ret += "ALTER ROLE " + brackets_escape(name) + " ADD MEMBER " + brackets_escape((string)sq[0]) + ";\n";
+
+		first = false;
+	}
+
+	return ret;
+}
+
 static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db) {
 	string s, dbs;
 
@@ -188,6 +212,22 @@ ORDER BY schemas.name, objects.name)");
 
 		for (const auto& v : schemas) {
 			objs.emplace_back("schemas", v, get_schema_definition(tds, v, dbs), "", 0);
+		}
+	}
+
+	{
+		vector<pair<string, int64_t>> roles;
+
+		{
+			tds::query sq(tds, "SELECT name, principal_id FROM " + dbs + "sys.database_principals WHERE type = 'R'");
+
+			while (sq.fetch_row()) {
+				roles.emplace_back(sq[0], (int64_t)sq[1]);
+			}
+		}
+
+		for (const auto& r : roles) {
+			objs.emplace_back("principals", r.first, get_role_definition(tds, r.first, r.second), "", 0);
 		}
 	}
 
