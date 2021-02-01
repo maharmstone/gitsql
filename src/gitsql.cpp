@@ -177,15 +177,16 @@ static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const stri
 
 	{
 		tds::query sq(tds, R"(SELECT schemas.name,
-objects.name,
+COALESCE(table_types.name, objects.name),
 sql_modules.definition,
 RTRIM(objects.type),
 objects.object_id,
 CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END
 FROM )" + dbs + R"(sys.objects
 LEFT JOIN )" + dbs + R"(sys.sql_modules ON sql_modules.object_id = objects.object_id
-JOIN )" + dbs + R"(sys.schemas ON schemas.schema_id = objects.schema_id
-WHERE objects.type IN ('V','P','FN','TF','IF','U')
+LEFT JOIN )" + dbs + R"(sys.table_types ON objects.type = 'TT' AND table_types.type_table_object_id = objects.object_id
+JOIN )" + dbs + R"(sys.schemas ON schemas.schema_id = COALESCE(table_types.schema_id, objects.schema_id)
+WHERE objects.type IN ('V','P','FN','TF','IF','U','TT')
 ORDER BY schemas.name, objects.name)");
 
 		while (sq.fetch_row()) {
@@ -249,10 +250,12 @@ ORDER BY schemas.name, objects.name)");
 			subdir = "functions";
 		else if (obj.type == "U")
 			subdir = "tables";
+		else if (obj.type == "TT")
+			subdir = "types";
 		else
 			subdir = "";
 
-		if (obj.type == "U")
+		if (obj.type == "U" || obj.type == "TT")
 			obj.def = table_ddl(tds, obj.id);
 
 		replace_all(obj.def, "\r\n", "\n");

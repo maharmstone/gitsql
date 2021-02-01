@@ -231,7 +231,7 @@ static string dump_table(tds::tds& tds, const string& escaped_name) {
 
 string table_ddl(tds::tds& tds, int64_t id) {
 	int64_t seed_value, increment_value;
-	string table, schema;
+	string table, schema, type;
 	vector<column> columns;
 	vector<table_index> indices;
 	vector<constraint> constraints;
@@ -244,7 +244,8 @@ string table_ddl(tds::tds& tds, int64_t id) {
 SELECT objects.name,
 	schemas.name,
 	identity_columns.seed_value,
-	identity_columns.increment_value
+	identity_columns.increment_value,
+	objects.type
 FROM sys.objects
 JOIN sys.schemas ON schemas.schema_id = objects.schema_id
 LEFT JOIN sys.identity_columns ON identity_columns.object_id = objects.object_id
@@ -258,6 +259,17 @@ WHERE objects.object_id = ?
 		schema = (string)sq[1];
 		seed_value = (int64_t)sq[2];
 		increment_value = (int64_t)sq[3];
+		type = (string)sq[4];
+	}
+
+	if (type == "TT") {
+		tds::query sq(tds, "SELECT name, SCHEMA_NAME(schema_id) FROM sys.table_types WHERE type_table_object_id = ?", id);
+
+		if (!sq.fetch_row())
+			throw runtime_error("Could not find real name for table type "s + string(schema) + "."s + string(table) + "."s);
+
+		table = (string)sq[0];
+		schema = (string)sq[1];
 	}
 
 	{
@@ -353,8 +365,13 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 
 	escaped_name = brackets_escape(schema) + "." + brackets_escape(table);
 
-	ddl = "DROP TABLE IF EXISTS " + escaped_name + ";\n\n";
-	ddl += "CREATE TABLE " + escaped_name + " (\n";
+	if (type == "TT") {
+		ddl = "DROP TYPE IF EXISTS " + escaped_name + ";\n\n";
+		ddl += "CREATE TYPE " + escaped_name + " AS TABLE (\n";
+	} else {
+		ddl = "DROP TABLE IF EXISTS " + escaped_name + ";\n\n";
+		ddl += "CREATE TABLE " + escaped_name + " (\n";
+	}
 
 	{
 		bool first = true;
