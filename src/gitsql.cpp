@@ -55,7 +55,7 @@ static void clear_dir(const filesystem::path& dir) {
 }
 
 struct sql_obj {
-	sql_obj(const string& schema, const string& name, const string& def, const string& type, int64_t id, bool has_perms) :
+	sql_obj(const string& schema, const string& name, const string& def, const string& type = "", int64_t id = 0, bool has_perms = false) :
 		schema(schema), name(name), def(def), type(type), id(id), has_perms(has_perms) { }
 
 	string schema, name, def, type;
@@ -165,6 +165,150 @@ ORDER BY database_principals.name)", id);
 	return ret;
 }
 
+static string get_type_definition(const string_view& name, const string_view& schema, int32_t system_type_id,
+								  int16_t max_length, uint8_t precision, uint8_t scale,
+								  bool is_nullable) {
+	string ret;
+	string escaped_name = brackets_escape(schema) + "." + brackets_escape(name);
+
+	ret = "DROP TYPE IF EXISTS " + escaped_name + ";\n\n";
+
+	ret += "CREATE TYPE " + escaped_name + " FROM ";
+
+
+	switch (system_type_id) {
+		case 34:
+			ret += "IMAGE";
+			break;
+
+		case 35:
+			ret += "TEXT";
+			break;
+
+		case 36:
+			ret += "UNIQUEIDENTIFIER";
+			break;
+
+		case 40:
+			ret += "DATE";
+			break;
+
+		case 41:
+			ret += "TIME("s + to_string(scale) + ")"s;
+			break;
+
+		case 42:
+			ret += "DATETIME2("s + to_string(scale) + ")"s;
+			break;
+
+		case 43:
+			ret += "DATETIMEOFFSET("s + to_string(scale) + ")"s;
+			break;
+
+		case 48:
+			ret += "TINYINT";
+			break;
+
+		case 52:
+			ret += "SMALLINT";
+			break;
+
+		case 56:
+			ret += "INT";
+			break;
+
+		case 58:
+			ret += "SMALLDATETIME";
+			break;
+
+		case 59:
+			ret += "REAL";
+			break;
+
+		case 60:
+			ret += "MONEY";
+			break;
+
+		case 61:
+			ret += "DATETIME";
+			break;
+
+		case 62:
+			ret += precision <= 24 ? "REAL" : "FLOAT";
+			break;
+
+		case 98:
+			ret += "SQL_VARIANT";
+			break;
+
+		case 99:
+			ret += "NTEXT";
+			break;
+
+		case 104:
+			ret += "BIT";
+			break;
+
+		case 106:
+			ret += "DECIMAL("s + to_string(precision) + ","s + to_string(scale) + ")"s;
+			break;
+
+		case 108:
+			ret += "NUMERIC("s + to_string(precision) + ","s + to_string(scale) + ")"s;
+			break;
+
+		case 122:
+			ret += "SMALLMONEY";
+			break;
+
+		case 127:
+			ret += "BIGINT";
+			break;
+
+		case 165:
+			ret += "VARBINARY("s + (max_length == -1 ? "MAX"s : to_string(max_length)) + ")"s;
+			break;
+
+		case 167:
+			ret += "VARCHAR("s + (max_length == -1 ? "MAX"s : to_string(max_length)) + ")"s;
+			break;
+
+		case 173:
+			ret += "BINARY(" + to_string(max_length) + ")";
+			break;
+
+		case 175:
+			ret += "CHAR(" + to_string(max_length) + ")";
+			break;
+
+		case 189:
+			ret += "TIMESTAMP";
+			break;
+
+		case 231:
+			ret += "NVARCHAR("s + (max_length == -1 ? "MAX"s : to_string(max_length / 2)) + ")"s;
+			break;
+
+		case 239:
+			ret += "NCHAR(" + to_string(max_length / 2) + ")";
+			break;
+
+		case 241:
+			ret += "XML";
+			break;
+
+		default:
+			throw runtime_error("Unrecognized system type " + to_string(system_type_id) + ".");
+	}
+
+	ret += is_nullable ? " NULL" : " NOT NULL";
+
+	ret += ";\n";
+
+
+	return ret;
+}
+
 static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db) {
 	string s, dbs;
 
@@ -198,7 +342,7 @@ ORDER BY schemas.name, objects.name)");
 		tds::query sq(tds, "SELECT triggers.name, sql_modules.definition FROM " + dbs + "sys.triggers LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=triggers.object_id WHERE triggers.parent_class_desc = 'DATABASE'");
 
 		while (sq.fetch_row()) {
-			objs.emplace_back("db_triggers", sq[0], sq[1], "", 0, false);
+			objs.emplace_back("db_triggers", sq[0], sq[1]);
 		}
 	}
 
@@ -214,7 +358,7 @@ ORDER BY schemas.name, objects.name)");
 		}
 
 		for (const auto& v : schemas) {
-			objs.emplace_back("schemas", v, get_schema_definition(tds, v, dbs), "", 0, false);
+			objs.emplace_back("schemas", v, get_schema_definition(tds, v, dbs));
 		}
 	}
 
@@ -230,7 +374,23 @@ ORDER BY schemas.name, objects.name)");
 		}
 
 		for (const auto& r : roles) {
-			objs.emplace_back("principals", r.first, get_role_definition(tds, r.first, r.second), "", 0, false);
+			objs.emplace_back("principals", r.first, get_role_definition(tds, r.first, r.second));
+		}
+	}
+
+	{
+		tds::query sq(tds, R"(SELECT name,
+system_type_id,
+SCHEMA_NAME(schema_id),
+max_length,
+precision,
+scale,
+is_nullable
+FROM )" + dbs + R"(sys.types
+WHERE is_user_defined = 1 AND is_table_type = 0)");
+
+		while (sq.fetch_row()) {
+			objs.emplace_back(sq[2], sq[0], get_type_definition((string)sq[0], (string)sq[2], sq[1], sq[3], sq[4], sq[5], (unsigned int)sq[6] != 0), "T");
 		}
 	}
 
@@ -250,7 +410,7 @@ ORDER BY schemas.name, objects.name)");
 			subdir = "functions";
 		else if (obj.type == "U")
 			subdir = "tables";
-		else if (obj.type == "TT")
+		else if (obj.type == "TT" || obj.type == "T")
 			subdir = "types";
 		else
 			subdir = "";
