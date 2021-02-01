@@ -26,7 +26,7 @@ const string db_app = "GitSQL";
 void replace_all(string& source, const string& from, const string& to);
 
 // table.cpp
-string table_ddl(tds::tds& tds, const string_view& schema, const string_view& table);
+string table_ddl(tds::tds& tds, int64_t id);
 string brackets_escape(const string_view& s);
 
 // strip out characters that NTFS doesn't like
@@ -55,10 +55,12 @@ static void clear_dir(const filesystem::path& dir) {
 }
 
 struct sql_obj {
-	sql_obj(const string& schema, const string& name, const string& def, const string& type, int64_t id) : schema(schema), name(name), def(def), type(type), id(id) { }
+	sql_obj(const string& schema, const string& name, const string& def, const string& type, int64_t id, bool has_perms) :
+		schema(schema), name(name), def(def), type(type), id(id), has_perms(has_perms) { }
 
 	string schema, name, def, type;
 	int64_t id;
+	bool has_perms;
 };
 
 struct sql_perms {
@@ -178,7 +180,8 @@ static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const stri
 objects.name,
 sql_modules.definition,
 RTRIM(objects.type),
-CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN objects.object_id ELSE 0 END
+objects.object_id,
+CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END
 FROM )" + dbs + R"(sys.objects
 LEFT JOIN )" + dbs + R"(sys.sql_modules ON sql_modules.object_id = objects.object_id
 JOIN )" + dbs + R"(sys.schemas ON schemas.schema_id = objects.schema_id
@@ -186,7 +189,7 @@ WHERE objects.type IN ('V','P','FN','TF','IF','U')
 ORDER BY schemas.name, objects.name)");
 
 		while (sq.fetch_row()) {
-			objs.emplace_back(sq[0], sq[1], sq[2], sq[3], (int64_t)sq[4]);
+			objs.emplace_back(sq[0], sq[1], sq[2], sq[3], (int64_t)sq[4], (unsigned int)sq[5] != 0);
 		}
 	}
 
@@ -194,7 +197,7 @@ ORDER BY schemas.name, objects.name)");
 		tds::query sq(tds, "SELECT triggers.name, sql_modules.definition FROM " + dbs + "sys.triggers LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=triggers.object_id WHERE triggers.parent_class_desc = 'DATABASE'");
 
 		while (sq.fetch_row()) {
-			objs.emplace_back("db_triggers", sq[0], sq[1], "", 0);
+			objs.emplace_back("db_triggers", sq[0], sq[1], "", 0, false);
 		}
 	}
 
@@ -210,7 +213,7 @@ ORDER BY schemas.name, objects.name)");
 		}
 
 		for (const auto& v : schemas) {
-			objs.emplace_back("schemas", v, get_schema_definition(tds, v, dbs), "", 0);
+			objs.emplace_back("schemas", v, get_schema_definition(tds, v, dbs), "", 0, false);
 		}
 	}
 
@@ -226,7 +229,7 @@ ORDER BY schemas.name, objects.name)");
 		}
 
 		for (const auto& r : roles) {
-			objs.emplace_back("principals", r.first, get_role_definition(tds, r.first, r.second), "", 0);
+			objs.emplace_back("principals", r.first, get_role_definition(tds, r.first, r.second), "", 0, false);
 		}
 	}
 
@@ -250,7 +253,7 @@ ORDER BY schemas.name, objects.name)");
 			subdir = "";
 
 		if (obj.type == "U")
-			obj.def = table_ddl(tds, obj.schema, obj.name);
+			obj.def = table_ddl(tds, obj.id);
 
 		replace_all(obj.def, "\r\n", "\n");
 
@@ -269,7 +272,7 @@ ORDER BY schemas.name, objects.name)");
 
 		obj.def += "\n";
 
-		if (obj.id != 0) {
+		if (obj.has_perms) {
 			vector<sql_perms> perms;
 
 			{
@@ -595,11 +598,22 @@ private:
 
 static void write_table_ddl(tds::tds& tds, const string_view& schema, const string_view& table, const string_view& bind_token,
 							unsigned int commit_id, const string_view& filename) {
+	int64_t id;
+
 	tds::rpc r(tds, u"sp_bindsession", bind_token);
 
 	while (r.fetch_row()) { } // wait for last packet
 
-	auto ddl = table_ddl(tds, schema, table);
+	{
+		tds::query sq(tds, "SELECT object_id FROM sys.objects WHERE name = ? AND schema_id = SCHEMA_ID(?)", table, schema);
+
+		if (!sq.fetch_row())
+			throw runtime_error("Could not find object ID for table " + string(schema) + "." + string(table) + ".");
+
+		id = (int64_t)sq[0];
+	}
+
+	auto ddl = table_ddl(tds, id);
 
 	vector<std::byte> vec(ddl.length());
 

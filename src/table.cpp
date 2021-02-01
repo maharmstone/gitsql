@@ -229,8 +229,9 @@ static string dump_table(tds::tds& tds, const string& escaped_name) {
 	return s;
 }
 
-string table_ddl(tds::tds& tds, const string_view& schema, const string_view& table) {
-	int64_t id, seed_value, increment_value;
+string table_ddl(tds::tds& tds, int64_t id) {
+	int64_t seed_value, increment_value;
+	string table, schema;
 	vector<column> columns;
 	vector<table_index> indices;
 	vector<constraint> constraints;
@@ -240,21 +241,23 @@ string table_ddl(tds::tds& tds, const string_view& schema, const string_view& ta
 
 	{
 		tds::query sq(tds, R"(
-SELECT objects.object_id,
+SELECT objects.name,
+	schemas.name,
 	identity_columns.seed_value,
 	identity_columns.increment_value
 FROM sys.objects
 JOIN sys.schemas ON schemas.schema_id = objects.schema_id
 LEFT JOIN sys.identity_columns ON identity_columns.object_id = objects.object_id
-WHERE objects.name = ? AND schemas.name = ?
-)", table, schema);
+WHERE objects.object_id = ?
+)", id);
 
 		if (!sq.fetch_row())
 			throw runtime_error("Cannot find object ID for "s + string(schema) + "."s + string(table) + "."s);
 
-		id = (int64_t)sq[0];
-		seed_value = (int64_t)sq[1];
-		increment_value = (int64_t)sq[2];
+		table = (string)sq[0];
+		schema = (string)sq[1];
+		seed_value = (int64_t)sq[2];
+		increment_value = (int64_t)sq[3];
 	}
 
 	{
