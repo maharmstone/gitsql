@@ -429,7 +429,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 				obj.def = obj.def.substr(pos);
 		}
 
-		while (!obj.def.empty() && obj.def.back() == '\n') {
+		while (!obj.def.empty() && (obj.def.back() == '\n' || obj.def.back() == ' ')) {
 			obj.def.pop_back();
 		}
 
