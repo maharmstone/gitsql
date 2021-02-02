@@ -712,27 +712,19 @@ ORDER BY Git.id
 	}
 }
 
-// FIXME - use NT mutant instead to do this?
 class lockfile {
 public:
 	lockfile() {
 #ifdef _WIN32
-		OVERLAPPED ol;
+        h = CreateMutexW(nullptr, false, L"gitsql_mutant");
 
-		h = CreateFileA("lockfile", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (!h || h == INVALID_HANDLE_VALUE)
+            throw runtime_error("CreateMutex failed (" + to_string(GetLastError()) + ")");
 
-		if (h == INVALID_HANDLE_VALUE)
-			throw runtime_error("Could not create or open lockfile.");
+        auto res = WaitForSingleObject(h, INFINITE);
 
-		if (GetLastError() == 0) { // file created
-			DWORD written;
-
-			WriteFile(h, "lockfile", 8, &written, nullptr);
-		}
-
-		memset(&ol, 0, sizeof(ol));
-
-		LockFileEx(h, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &ol);
+        if (res != WAIT_OBJECT_0)
+            throw runtime_error("WaitForSingleObject returned " + to_string(res));
 #else
 		// FIXME
 #endif
@@ -740,14 +732,8 @@ public:
 
 	~lockfile() {
 #ifdef _WIN32
-		if (h != INVALID_HANDLE_VALUE) {
-			OVERLAPPED ol;
-
-			memset(&ol, 0, sizeof(ol));
-			UnlockFileEx(h, 0, 1, 0, &ol);
-
-			CloseHandle(h);
-		}
+        ReleaseMutex(h);
+        CloseHandle(h);
 #else
 		// FIXME
 #endif
