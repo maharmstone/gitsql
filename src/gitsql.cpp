@@ -583,8 +583,16 @@ static void do_update_git(const string& repo_dir) {
 	// FIXME - push to remote server?
 }
 
+class repo {
+public:
+    repo(unsigned int id, const string_view& dir) : id(id), dir(dir) { }
+
+    unsigned int id;
+    string dir;
+};
+
 static void flush_git(tds::tds& tds) {
-	map<unsigned int, string> repos;
+	vector<repo> repos;
 
 	git_libgit2_init();
 
@@ -594,7 +602,7 @@ static void flush_git(tds::tds& tds) {
 		tds::query sq(tds, "SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; SELECT Git.repo, GitRepo.dir FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
 
 		while (sq.fetch_row()) {
-			repos[(unsigned int)sq[0]] = (string)sq[1];
+			repos.emplace_back((unsigned int)sq[0], (string)sq[1]);
 		}
 
 		if (repos.size() == 0)
@@ -602,7 +610,7 @@ static void flush_git(tds::tds& tds) {
 	}
 
 	for (const auto& r : repos) {
-		GitRepo repo(r.second);
+		GitRepo repo(r.dir);
 
 		while (true) {
 			tds::trans trans(tds);
@@ -635,7 +643,7 @@ LEFT JOIN AD.[user] ON LEFT(Git.username,5) = 'XRBH\' AND [user].sAMAccountName 
 JOIN Restricted.GitFiles ON GitFiles.id = Git.id
 WHERE Git.id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?) OR Git.tran_id = (SELECT tran_id FROM Restricted.Git WHERE id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?))
 ORDER BY Git.id
-)", r.first, r.first);
+)", r.id, r.id);
 
 				if (!sq.fetch_row())
 					break;
