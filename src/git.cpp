@@ -381,3 +381,10 @@ GitBlob::~GitBlob() {
 GitBlob::operator string() const {
 	return string((char*)git_blob_rawcontent((git_blob*)obj), git_blob_rawsize((git_blob*)obj));
 }
+
+void GitRepo::checkout_head(const git_checkout_options* opts) {
+	unsigned int ret;
+
+	if ((ret = git_checkout_head(repo, opts)))
+		throw_git_error(ret, "git_checkout_head");
+}

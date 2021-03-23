@@ -74,6 +74,7 @@ public:
 	git_oid blob_create_frombuffer(const std::string& data);
 	git_oid tree_create_updated(const GitTree& baseline, size_t nupdates, const git_tree_update* updates);
 	git_oid index_tree_id() const;
+	void checkout_head(const git_checkout_options* opts = nullptr);
 
 private:
 	git_repository* repo = nullptr;
