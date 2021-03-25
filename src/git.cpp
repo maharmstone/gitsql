@@ -101,15 +101,16 @@ void GitRepo::commit_lookup(git_commit** commit, const git_oid* oid) {
 		throw_git_error(ret, "git_commit_lookup");
 }
 
-git_oid GitRepo::commit_create(const string& update_ref, const GitSignature& author, const GitSignature& committer, const string& message, const GitTree& tree, git_commit* parent) {
+git_oid GitRepo::commit_create(const GitSignature& author, const GitSignature& committer, const string& message, const GitTree& tree,
+							   bool update_head, git_commit* parent) {
 	unsigned int ret;
 	git_oid id;
 
 	if (parent) {
-		if ((ret = git_commit_create_v(&id, repo, update_ref.c_str(), author, committer, nullptr, message.c_str(), tree, 1, parent)))
+		if ((ret = git_commit_create_v(&id, repo, update_head ? "HEAD" : nullptr, author, committer, nullptr, message.c_str(), tree, 1, parent)))
 			throw_git_error(ret, "git_commit_create_v");
 	} else {
-		if ((ret = git_commit_create_v(&id, repo, update_ref.c_str(), author, committer, nullptr, message.c_str(), tree, 0)))
+		if ((ret = git_commit_create_v(&id, repo, update_head ? "HEAD" : nullptr, author, committer, nullptr, message.c_str(), tree, 0)))
 			throw_git_error(ret, "git_commit_create_v");
 	}
 
@@ -204,7 +205,7 @@ static void update_git_new_repo(GitRepo& repo, const GitSignature& sig, const st
 
 	GitTree tree(repo, oid);
 
-	repo.commit_create("HEAD", sig, sig, description, tree);
+	repo.commit_create(sig, sig, description, tree, true);
 }
 
 static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string& prefix, list<git_file>& files) {
@@ -299,7 +300,7 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 			return;
 	}
 
-	repo.commit_create("HEAD", sig, sig, description, tree, parent);
+	repo.commit_create(sig, sig, description, tree, true, parent);
 }
 
 GitIndex::GitIndex(const GitRepo& repo) {
