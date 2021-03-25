@@ -71,11 +71,13 @@ public:
 	bool reference_name_to_id(git_oid* out, const std::string& name);
 	void commit_lookup(git_commit** commit, const git_oid* oid);
 	git_oid commit_create(const GitSignature& author, const GitSignature& committer, const std::string& message, const GitTree& tree,
-						  bool update_head, git_commit* parent = nullptr);
+						  git_commit* parent = nullptr);
 	git_oid blob_create_frombuffer(const std::string& data);
 	git_oid tree_create_updated(const GitTree& baseline, size_t nupdates, const git_tree_update* updates);
 	git_oid index_tree_id() const;
 	void checkout_head(const git_checkout_options* opts = nullptr);
+	git_reference* branch_lookup(const std::string& branch_name, git_branch_t branch_type);
+	void branch_create(const std::string& branch_name, const git_commit* target, bool force);
 
 private:
 	git_repository* repo = nullptr;
@@ -139,4 +141,4 @@ struct git_file {
 
 void update_git(GitRepo& repo, const std::string& user, const std::string& email, const std::string& description,
 				std::list<git_file>& files, bool clear_all = false, std::optional<time_t> dt = std::nullopt,
-				signed int offset = 0);
+				signed int offset = 0, const std::string& branch = "");

@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include <iostream>
 #include "git.h"
 
 using namespace std;
@@ -102,15 +103,15 @@ void GitRepo::commit_lookup(git_commit** commit, const git_oid* oid) {
 }
 
 git_oid GitRepo::commit_create(const GitSignature& author, const GitSignature& committer, const string& message, const GitTree& tree,
-							   bool update_head, git_commit* parent) {
+							   git_commit* parent) {
 	unsigned int ret;
 	git_oid id;
 
 	if (parent) {
-		if ((ret = git_commit_create_v(&id, repo, update_head ? "HEAD" : nullptr, author, committer, nullptr, message.c_str(), tree, 1, parent)))
+		if ((ret = git_commit_create_v(&id, repo, nullptr, author, committer, nullptr, message.c_str(), tree, 1, parent)))
 			throw_git_error(ret, "git_commit_create_v");
 	} else {
-		if ((ret = git_commit_create_v(&id, repo, update_head ? "HEAD" : nullptr, author, committer, nullptr, message.c_str(), tree, 0)))
+		if ((ret = git_commit_create_v(&id, repo, nullptr, author, committer, nullptr, message.c_str(), tree, 0)))
 			throw_git_error(ret, "git_commit_create_v");
 	}
 
@@ -173,7 +174,7 @@ git_oid GitRepo::index_tree_id() const {
 	return tree_id;
 }
 
-static void update_git_new_repo(GitRepo& repo, const GitSignature& sig, const string& description, const list<git_file>& files) {
+static void update_git_no_parent(GitRepo& repo, const GitSignature& sig, const string& description, const list<git_file>& files, const string& branch) {
 	git_oid oid;
 
 	GitTree empty_tree(repo, repo.index_tree_id());
@@ -205,7 +206,15 @@ static void update_git_new_repo(GitRepo& repo, const GitSignature& sig, const st
 
 	GitTree tree(repo, oid);
 
-	repo.commit_create(sig, sig, description, tree, true);
+	auto commit_oid = repo.commit_create(sig, sig, description, tree);
+
+	git_commit* commit; // FIXME - class wrapper for this
+
+	repo.commit_lookup(&commit, &commit_oid);
+
+	repo.branch_create(branch.c_str(), commit, true);
+
+	git_commit_free(commit);
 }
 
 static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string& prefix, list<git_file>& files) {
@@ -235,17 +244,40 @@ static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string&
 	}
 }
 
+git_reference* GitRepo::branch_lookup(const std::string& branch_name, git_branch_t branch_type) {
+	git_reference* ref = nullptr; // FIXME - would be better with class wrapper for this
+
+	auto ret = git_branch_lookup(&ref, repo, branch_name.c_str(), branch_type);
+
+	if (ret && ret != GIT_ENOTFOUND)
+		throw_git_error(ret, "git_branch_lookup");
+
+	return !ret ? ref : nullptr;
+}
+
+void GitRepo::branch_create(const string& branch_name, const git_commit* target, bool force) {
+	git_reference* ref = nullptr;
+
+	auto ret = git_branch_create(&ref, repo, branch_name.c_str(), target, force ? 1 : 0);
+
+	if (ret)
+		throw_git_error(ret, "git_branch_create");
+
+	if (ref)
+		git_reference_free(ref);
+}
+
 void update_git(GitRepo& repo, const string& user, const string& email, const string& description, list<git_file>& files,
-				bool clear_all, optional<time_t> dt, signed int offset) {
+				bool clear_all, optional<time_t> dt, signed int offset, const string& branch) {
 	GitSignature sig(user, email, dt, offset);
 
 	git_commit* parent;
 	git_oid parent_id;
 
-	bool head_found = repo.reference_name_to_id(&parent_id, "HEAD");
+	bool parent_found = repo.reference_name_to_id(&parent_id, branch.empty() ? "refs/heads/master" : "refs/heads/" + branch);
 
-	if (!head_found) {
-		update_git_new_repo(repo, sig, description, files);
+	if (!parent_found) {
+		update_git_no_parent(repo, sig, description, files, branch);
 		return;
 	}
 
@@ -300,7 +332,12 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 			return;
 	}
 
-	repo.commit_create(sig, sig, description, tree, true, parent);
+	auto commit_oid = repo.commit_create(sig, sig, description, tree, parent);
+	git_commit* commit;
+
+	repo.commit_lookup(&commit, &commit_oid);
+
+	repo.branch_create(branch, commit, true); // FIXME - work with master
 }
 
 GitIndex::GitIndex(const GitRepo& repo) {

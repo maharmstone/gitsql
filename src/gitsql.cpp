@@ -585,11 +585,13 @@ static void do_update_git(const string& repo_dir) {
 
 class repo {
 public:
-	repo(unsigned int id, const string_view& dir, bool checkout) : id(id), dir(dir), checkout(checkout) { }
+	repo(unsigned int id, const string_view& dir, bool checkout, const string_view& branch) :
+		id(id), dir(dir), checkout(checkout), branch(branch) { }
 
 	unsigned int id;
 	string dir;
 	bool checkout;
+	string branch;
 };
 
 static void flush_git(tds::tds& tds) {
@@ -600,10 +602,10 @@ static void flush_git(tds::tds& tds) {
 	tds.run("SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; DELETE FROM Restricted.Git WHERE (SELECT COUNT(*) FROM Restricted.GitFiles WHERE id = Git.id) = 0");
 
 	{
-		tds::query sq(tds, "SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; SELECT Git.repo, GitRepo.dir, GitRepo.checkout FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
+		tds::query sq(tds, "SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; SELECT Git.repo, GitRepo.dir, GitRepo.checkout, GitRepo.branch FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
 
 		while (sq.fetch_row()) {
-			repos.emplace_back((unsigned int)sq[0], (string)sq[1], (unsigned int)sq[2] != 0);
+			repos.emplace_back((unsigned int)sq[0], (string)sq[1], (unsigned int)sq[2] != 0, (string)sq[3]);
 		}
 
 		if (repos.size() == 0)
@@ -645,6 +647,8 @@ JOIN Restricted.GitFiles ON GitFiles.id = Git.id
 WHERE Git.id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?) OR Git.tran_id = (SELECT tran_id FROM Restricted.Git WHERE id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?))
 ORDER BY Git.id
 )", r.id, r.id);
+
+				// FIXME - don't rely on AD tables?
 
 				if (!sq.fetch_row())
 					break;
@@ -704,7 +708,7 @@ ORDER BY Git.id
 			}
 
 			if (files.size() > 0 || clear_all)
-				update_git(repo, name, email, description, files, clear_all, dt, tz_offset);
+				update_git(repo, name, email, description, files, clear_all, dt, tz_offset, r.branch);
 
 			while (!delete_commits.empty()) {
 				tds.run("DELETE FROM Restricted.Git WHERE id=?", delete_commits.front());
