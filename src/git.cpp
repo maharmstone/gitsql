@@ -267,6 +267,18 @@ void GitRepo::branch_create(const string& branch_name, const git_commit* target,
 		git_reference_free(ref);
 }
 
+void GitRepo::reference_create(const string& name, const git_oid& id, bool force, const string& log_message) {
+	git_reference* ref = nullptr;
+
+	auto ret = git_reference_create(&ref, repo, name.c_str(), &id, force ? 1 : 0, log_message.c_str());
+
+	if (ret)
+		throw_git_error(ret, "git_reference_create");
+
+	if (ref)
+		git_reference_free(ref);
+}
+
 void update_git(GitRepo& repo, const string& user, const string& email, const string& description, list<git_file>& files,
 				bool clear_all, optional<time_t> dt, signed int offset, const string& branch) {
 	GitSignature sig(user, email, dt, offset);
@@ -337,7 +349,8 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 
 	repo.commit_lookup(&commit, &commit_oid);
 
-	repo.branch_create(branch, commit, true); // FIXME - work with master
+	repo.reference_create(branch.empty() ? "refs/heads/master" : "refs/heads/" + branch,
+						  commit_oid, true, "branch updated");
 }
 
 GitIndex::GitIndex(const GitRepo& repo) {

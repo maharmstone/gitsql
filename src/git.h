@@ -78,6 +78,7 @@ public:
 	void checkout_head(const git_checkout_options* opts = nullptr);
 	git_reference* branch_lookup(const std::string& branch_name, git_branch_t branch_type);
 	void branch_create(const std::string& branch_name, const git_commit* target, bool force);
+	void reference_create(const std::string& name, const git_oid& id, bool force, const std::string& log_message);
 
 private:
 	git_repository* repo = nullptr;
