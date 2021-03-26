@@ -11,6 +11,8 @@
 #include <vector>
 #include <map>
 #include <span>
+#include <array>
+#include <string>
 
 using namespace std;
 
