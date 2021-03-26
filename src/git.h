@@ -80,6 +80,7 @@ public:
 	void branch_create(const std::string& branch_name, const git_commit* target, bool force);
 	void reference_create(const std::string& name, const git_oid& id, bool force, const std::string& log_message);
 	bool branch_is_head(const std::string& name);
+	bool is_bare();
 
 private:
 	git_repository* repo = nullptr;

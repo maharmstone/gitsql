@@ -459,3 +459,7 @@ bool GitRepo::branch_is_head(const std::string& name) {
 
 	return ret;
 }
+
+bool GitRepo::is_bare() {
+	return git_repository_is_bare(repo);
+}
