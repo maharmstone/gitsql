@@ -16,6 +16,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <span>
 #include <tdscpp.h>
 #include "git.h"
 
@@ -28,6 +29,9 @@ void replace_all(string& source, const string& from, const string& to);
 // table.cpp
 string table_ddl(tds::tds& tds, int64_t id);
 string brackets_escape(const string_view& s);
+
+// ldap.cpp
+void get_ldap_details_from_sid(const span<std::byte>& sid, string& name, string& email);
 
 // strip out characters that NTFS doesn't like
 static string sanitize_fn(const string_view& fn) {
@@ -49,7 +53,7 @@ static void clear_dir(const filesystem::path& dir) {
 	}
 
 	for (const auto& p : children) {
-		if (p.filename().u8string()[0] != '.')
+		if (p.filename().string()[0] != '.')
 			filesystem::remove_all(p);
 	}
 }
@@ -398,7 +402,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 		filesystem::path dir = repo_dir / sanitize_fn(obj.schema);
 
 		if (!filesystem::exists(dir) && !filesystem::create_directory(dir))
-			throw runtime_error("Error creating directory " + dir.u8string() + ".");
+			throw runtime_error("Error creating directory " + dir.string() + ".");
 
 		string subdir;
 
@@ -477,7 +481,7 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 			dir /= subdir;
 
 			if (!filesystem::exists(dir) && !filesystem::create_directory(dir))
-				throw runtime_error("Error creating directory " + dir.u8string() + ".");
+				throw runtime_error("Error creating directory " + dir.string() + ".");
 		}
 
 		filesystem::path fn = dir / (sanitize_fn(obj.name) + ".sql");
@@ -485,7 +489,7 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 		ofstream f(fn, ios::binary);
 
 		if (!f.good())
-			throw runtime_error("Error creating file " + fn.u8string() + ".");
+			throw runtime_error("Error creating file " + fn.string() + ".");
 
 		f.write(obj.def.c_str(), obj.def.size());
 	}
@@ -494,7 +498,7 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 static void git_add_dir(list<git_file>& files, const filesystem::path& dir, const string& unixpath) {
 	for (const auto& de : filesystem::directory_iterator(dir)) {
 		const auto& p = de.path();
-		auto name = p.filename().u8string();
+		auto name = p.filename().string();
 
 		if (!name.empty() && name[0] != '.') {
 			if (de.is_directory())
@@ -506,7 +510,7 @@ static void git_add_dir(list<git_file>& files, const filesystem::path& dir, cons
 					ifstream f(p, ios::binary);
 
 					if (!f.good())
-						throw runtime_error("Could not open " + p.u8string() + " for reading.");
+						throw runtime_error("Could not open " + p.string() + " for reading.");
 
 					f.seekg(0, ios::end);
 					size_t size = f.tellg();
@@ -555,6 +559,31 @@ void replace_all(string& source, const string& from, const string& to) {
 	new_string += source.substr(last_pos);
 
 	source.swap(new_string);
+}
+
+static void get_user_details(const string& username, string& name, string& email) {
+	array<std::byte, 68> sid;
+	DWORD sidlen = sid.size();
+	char domain[100];
+	DWORD domainlen = sizeof(domain);
+	SID_NAME_USE use;
+
+	if (!LookupAccountNameA(nullptr, username.c_str(), sid.data(), &sidlen,
+							domain, &domainlen, &use)) {
+		name = username;
+		email = "";
+		return;
+	}
+
+	try {
+		get_ldap_details_from_sid(sid, name, email);
+
+		if (name.empty())
+			name = "username";
+	} catch (...) {
+		name = username;
+		email = "";
+	}
 }
 
 static void do_update_git(const string& repo_dir) {
@@ -618,7 +647,7 @@ static void flush_git(tds::tds& tds) {
 			tds::trans trans(tds);
 			unsigned int commit, dt;
 			int tz_offset;
-			string name, email, description;
+			string username, name, email, description;
 			list<git_file> files;
 			bool clear_all = false;
 			list<unsigned int> delete_commits;
@@ -632,8 +661,7 @@ SET XACT_ABORT ON;
 
 SELECT
 	Git.id,
-	COALESCE([user].givenName+' '+[user].sn, [user].name, Git.username),
-	COALESCE([user].mail,'business.intelligence@boltonft.nhs.uk'),
+	Git.username,
 	Git.description,
 	DATEDIFF(SECOND,'19700101',Git.dt),
 	Git.offset,
@@ -641,7 +669,6 @@ SELECT
 	GitFiles.filename,
 	GitFiles.data
 FROM Restricted.Git
-LEFT JOIN AD.[user] ON LEFT(Git.username,5) = 'XRBH\' AND [user].sAMAccountName = RIGHT(Git.username, CASE WHEN LEN(Git.username) >= 5 THEN LEN(Git.username) - 5 END)
 JOIN Restricted.GitFiles ON GitFiles.id = Git.id
 WHERE Git.id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?) OR Git.tran_id = (SELECT tran_id FROM Restricted.Git WHERE id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?))
 ORDER BY Git.id
@@ -653,16 +680,17 @@ ORDER BY Git.id
 					break;
 
 				commit = (unsigned int)sq[0];
-				name = (string)sq[1];
-				email = (string)sq[2];
-				description = (string)sq[3];
-				dt = (unsigned int)sq[4];
-				tz_offset = (int)sq[5];
+				username = (string)sq[1];
+				description = (string)sq[2];
+				dt = (unsigned int)sq[3];
+				tz_offset = (int)sq[4];
+
+				get_user_details(username, name, email);
 
 				delete_commits.push_back(commit);
 
 				do {
-					delete_files.push_back((unsigned int)sq[6]);
+					delete_files.push_back((unsigned int)sq[5]);
 
 					if ((unsigned int)sq[0] != commit) {
 						if (!merged_trans) {
@@ -684,11 +712,11 @@ ORDER BY Git.id
 							delete_commits.push_back(new_commit);
 					}
 
-					if (sq[7].is_null)
+					if (sq[6].is_null)
 						clear_all = true;
 					else {
 						if (merged_trans) {
-							string fn = sq[7];
+							string fn = sq[6];
 
 							for (auto it = files.begin(); it != files.end(); it++) {
 								if (it->filename == fn) {
@@ -698,7 +726,7 @@ ORDER BY Git.id
 							}
 						}
 
-						files.emplace_back(sq[7], sq[8]);
+						files.emplace_back(sq[6], sq[7]);
 					}
 
 					if (!sq.fetch_row())

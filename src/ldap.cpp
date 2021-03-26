@@ -10,6 +10,7 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <span>
 
 using namespace std;
 
@@ -301,57 +302,29 @@ static string hex_byte(uint8_t v) {
 	return s;
 }
 
-string sidstr_to_email(const string& sidstr) {
+void get_ldap_details_from_sid(const span<std::byte>& sid, string& name, string& email) {
 	ldapobj l;
-	PSID sid;
 	string binsid;
 	DWORD sidlen;
 
-	if (!ConvertStringSidToSidW((WCHAR*)utf8_to_utf16(sidstr).c_str(), &sid))
-		throw last_error("ConvertStringSidToSid", GetLastError());
-
-	sidlen = GetLengthSid(sid);
+	sidlen = GetLengthSid(sid.data());
 	binsid.reserve(3 * sidlen);
 	for (unsigned int i = 0; i < sidlen; i++) {
 		binsid += "\\";
-		binsid += hex_byte(((uint8_t*)sid)[i]);
+		binsid += hex_byte(((uint8_t*)sid.data())[i]);
 	}
 
-	LocalFree(sid);
+	auto ret = l.search("(objectSid=" + binsid + ")", { "givenName", "sn", "name", "mail" });
 
-	auto ret = l.search("(objectSid=" + binsid + ")", { "mail" });
+	if (ret.count("givenName") != 0 && ret.count("sn") != 0)
+		name = ret.at("givenName") + " " + ret.at("sn");
+	else if (ret.count("name") != 0)
+		name = ret.at("name");
+	else
+		name = "";
 
-	if (ret.count("mail") == 0)
-		throw runtime_error("Attribute \"mail\" not returned.");
-
-	return ret.at("mail");
-}
-
-vector<uint8_t> email_to_sid(const string& email) {
-	ldapobj l;
-
-	auto ret = l.search("(proxyAddresses=smtp:" + email + ")", { "objectSid" });
-
-	if (ret.count("objectSid") == 0)
-		throw runtime_error("Attribute \"objectSid\" not returned.");
-
-	auto s = ret.at("objectSid");
-
-	vector<uint8_t> v(s.data(), s.data() + s.length());
-
-	return v;
-}
-
-vector<string> get_user_addresses(PSID sid) {
-	ldapobj l;
-	string binsid;
-
-	auto sidlen = GetLengthSid(sid);
-	binsid.reserve(3 * sidlen);
-	for (unsigned int i = 0; i < sidlen; i++) {
-		binsid += "\\";
-		binsid += hex_byte(((uint8_t*)sid)[i]);
-	}
-
-	return l.search_multiple("(objectSid=" + binsid + ")", "proxyAddresses");
+	if (ret.count("mail") != 0)
+		email = ret.at("mail");
+	else
+		email = "";
 }
