@@ -565,7 +565,7 @@ static void get_user_details(const string& username, string& name, string& email
 	if (!LookupAccountNameA(nullptr, username.c_str(), sid.data(), &sidlen,
 							domain, &domainlen, &use)) {
 		name = username;
-		email = "";
+		email = username + "@localhost"s;
 		return;
 	}
 
@@ -577,6 +577,11 @@ static void get_user_details(const string& username, string& name, string& email
 	} catch (...) {
 		name = username;
 		email = "";
+	}
+
+	if (email.empty()) {
+		domain[domainlen] = 0;
+		email = username + "@"s + domain;
 	}
 }
 
@@ -611,17 +616,25 @@ static void get_current_user_details(string& name, string& email) {
 		email = "";
 	}
 
-	if (name.empty()) {
+	if (name.empty() || email.empty()) {
 		char username[255], domain[255];
 		DWORD usernamelen, domainlen;
 		SID_NAME_USE use;
 
 		if (!LookupAccountSidA(nullptr, tu->User.Sid, username, &usernamelen, domain,
-						   &domainlen, &use)) {
+							   &domainlen, &use)) {
 			throw last_error("LookupAccountSid", GetLastError());
 		}
 
-		name = username;
+		username[usernamelen] = 0;
+
+		if (name.empty())
+			name = username;
+
+		if (email.empty()) {
+			domain[domainlen] = 0;
+			email = username + "@"s + domain;
+		}
 	}
 }
 
