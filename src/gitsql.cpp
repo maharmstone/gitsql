@@ -723,7 +723,7 @@ ORDER BY Git.id
 			trans.commit();
 		}
 
-		if (r.checkout) {
+		if (repo.branch_is_head(r.branch.empty() ? "master" : r.branch)) {
 			git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
 
 			opts.checkout_strategy = GIT_CHECKOUT_FORCE;

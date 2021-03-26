@@ -439,3 +439,23 @@ void GitRepo::checkout_head(const git_checkout_options* opts) {
 	if ((ret = git_checkout_head(repo, opts)))
 		throw_git_error(ret, "git_checkout_head");
 }
+
+bool GitRepo::branch_is_head(const std::string& name) {
+	int ret;
+	git_reference* ref;
+
+	ret = git_reference_lookup(&ref, repo, ("refs/heads/" + name).c_str());
+	if (ret)
+		throw_git_error(ret, "git_reference_lookup");
+
+	ret = git_branch_is_head(ref);
+
+	if (ret < 0) {
+		git_reference_free(ref); // FIXME - will this overwrite error?
+		throw_git_error(ret, "git_branch_is_head");
+	}
+
+	git_reference_free(ref);
+
+	return ret;
+}
