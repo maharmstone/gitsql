@@ -19,19 +19,13 @@
 #include <span>
 #include <tdscpp.h>
 #include "git.h"
+#include "gitsql.h"
 
 using namespace std;
 
 const string db_app = "GitSQL";
 
 void replace_all(string& source, const string& from, const string& to);
-
-// table.cpp
-string table_ddl(tds::tds& tds, int64_t id);
-string brackets_escape(const string_view& s);
-
-// ldap.cpp
-void get_ldap_details_from_sid(const span<std::byte>& sid, string& name, string& email);
 
 // strip out characters that NTFS doesn't like
 static string sanitize_fn(const string_view& fn) {
@@ -576,13 +570,58 @@ static void get_user_details(const string& username, string& name, string& email
 	}
 
 	try {
-		get_ldap_details_from_sid(sid, name, email);
+		get_ldap_details_from_sid(sid.data(), name, email);
 
 		if (name.empty())
-			name = "username";
+			name = username;
 	} catch (...) {
 		name = username;
 		email = "";
+	}
+}
+
+static void get_current_user_details(string& name, string& email) {
+	unique_handle token;
+	DWORD retlen;
+
+	{
+		HANDLE h;
+
+		if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &h))
+			throw last_error("OpenProcessToken", GetLastError());
+
+		token.reset(h);
+	}
+
+	if (!GetTokenInformation(token.get(), TokenUser, nullptr, 0, &retlen) && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+		throw last_error("GetTokenInformation", GetLastError());
+
+	vector<uint8_t> buf;
+	buf.resize(retlen);
+
+	auto tu = (TOKEN_USER*)buf.data();
+
+	if (!GetTokenInformation(token.get(), TokenUser, tu, (DWORD)buf.size(), &retlen))
+		throw last_error("GetTokenInformation", GetLastError());
+
+	try {
+		get_ldap_details_from_sid(tu->User.Sid, name, email);
+	} catch (...) {
+		name = "";
+		email = "";
+	}
+
+	if (name.empty()) {
+		char username[255], domain[255];
+		DWORD usernamelen, domainlen;
+		SID_NAME_USE use;
+
+		if (!LookupAccountSidA(nullptr, tu->User.Sid, username, &usernamelen, domain,
+						   &domainlen, &use)) {
+			throw last_error("LookupAccountSid", GetLastError());
+		}
+
+		name = username;
 	}
 }
 
@@ -607,7 +646,11 @@ static void do_update_git(const string& repo_dir) {
 		git_remove_dir(repo, parent_tree, repo_dir, "", files);
 	}
 
-	update_git(repo, "System", "business.intelligence@boltonft.nhs.uk", "Update", files);
+	string name, email;
+
+	get_current_user_details(name, email);
+
+	update_git(repo, name, email, "Update", files);
 
 	// FIXME - push to remote server?
 }

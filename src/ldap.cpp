@@ -14,88 +14,6 @@
 
 using namespace std;
 
-static __inline u16string utf8_to_utf16(const string_view& s) {
-	u16string ret;
-
-	if (s.empty())
-		return u"";
-
-	auto len = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.length(), nullptr, 0);
-
-	if (len == 0)
-		throw runtime_error("MultiByteToWideChar 1 failed.");
-
-	ret.resize(len);
-
-	len = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.length(), (wchar_t*)ret.data(), len);
-
-	if (len == 0)
-		throw runtime_error("MultiByteToWideChar 2 failed.");
-
-	return ret;
-}
-
-static __inline string utf16_to_utf8(const u16string_view& s) {
-	string ret;
-
-	if (s.empty())
-		return "";
-
-	auto len = WideCharToMultiByte(CP_UTF8, 0, (const wchar_t*)s.data(), (int)s.length(), nullptr, 0,
-								   nullptr, nullptr);
-
-	if (len == 0)
-		throw runtime_error("WideCharToMultiByte 1 failed.");
-
-	ret.resize(len);
-
-	len = WideCharToMultiByte(CP_UTF8, 0, (const wchar_t*)s.data(), (int)s.length(), ret.data(), len,
-							  nullptr, nullptr);
-
-	if (len == 0)
-		throw runtime_error("WideCharToMultiByte 2 failed.");
-
-	return ret;
-}
-
-class last_error : public exception {
-public:
-	last_error(const string_view& function, int le) {
-		string nice_msg;
-
-		{
-			char16_t* fm;
-
-			if (FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr,
-				le, 0, reinterpret_cast<LPWSTR>(&fm), 0, nullptr)) {
-				try {
-					u16string_view s = fm;
-
-					while (!s.empty() && (s[s.length() - 1] == u'\r' || s[s.length() - 1] == u'\n')) {
-						s.remove_suffix(1);
-					}
-
-					nice_msg = utf16_to_utf8(s);
-				} catch (...) {
-					LocalFree(fm);
-					throw;
-				}
-
-				LocalFree(fm);
-				}
-		}
-
-		msg = string(function) + " failed (error " + to_string(le) + (!nice_msg.empty() ? (", " + nice_msg) : "") + ").";
-	}
-
-	const char* what() const noexcept {
-		return msg.c_str();
-	}
-
-private:
-	string msg;
-};
-
 class ldap_error : public exception {
 public:
 	ldap_error(const string& func, ULONG err) {
@@ -302,16 +220,16 @@ static string hex_byte(uint8_t v) {
 	return s;
 }
 
-void get_ldap_details_from_sid(const span<std::byte>& sid, string& name, string& email) {
+void get_ldap_details_from_sid(PSID sid, string& name, string& email) {
 	ldapobj l;
 	string binsid;
 	DWORD sidlen;
 
-	sidlen = GetLengthSid(sid.data());
+	sidlen = GetLengthSid(sid);
 	binsid.reserve(3 * sidlen);
 	for (unsigned int i = 0; i < sidlen; i++) {
 		binsid += "\\";
-		binsid += hex_byte(((uint8_t*)sid.data())[i]);
+		binsid += hex_byte(((uint8_t*)sid)[i]);
 	}
 
 	auto ret = l.search("(objectSid=" + binsid + ")", { "givenName", "sn", "name", "mail" });
