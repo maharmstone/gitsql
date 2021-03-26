@@ -618,7 +618,7 @@ static void get_current_user_details(string& name, string& email) {
 
 	if (name.empty() || email.empty()) {
 		char username[255], domain[255];
-		DWORD usernamelen, domainlen;
+		DWORD usernamelen = sizeof(username), domainlen = sizeof(domain);
 		SID_NAME_USE use;
 
 		if (!LookupAccountSidA(nullptr, tu->User.Sid, username, &usernamelen, domain,
