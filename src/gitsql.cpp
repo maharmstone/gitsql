@@ -875,6 +875,35 @@ static void write_table_ddl(tds::tds& tds, const string_view& schema, const stri
 	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, vec);
 }
 
+static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
+	string repo_dir, db, old_db;
+
+	{
+		tds::query sq(tds, "SELECT DB_NAME()");
+
+		if (!sq.fetch_row())
+			throw runtime_error("Could not get current database name.");
+
+		old_db = (string)sq[0];
+	}
+
+	{
+		tds::query sq(tds, "SELECT dir, db FROM Restricted.GitRepo WHERE id = ?", repo_num);
+
+		if (!sq.fetch_row())
+			throw runtime_error("Repo " + to_string(repo_num) + " not found in Restricted.GitRepo.");
+
+		repo_dir = (string)sq[0];
+		db = (string)sq[1];
+	}
+
+	tds.run("USE [" + db + "]");
+	dump_sql(tds, repo_dir, db);
+
+	tds.run("USE [" + old_db + "]");
+	do_update_git(repo_dir);
+}
+
 int main(int argc, char** argv) {
 	unique_ptr<tds::tds> tds;
 
@@ -889,7 +918,7 @@ int main(int argc, char** argv) {
 		if (argc > 2)
 			cmd = argv[2];
 
-		if (cmd != "flush" && cmd != "table" && argc < 4)
+		if (cmd != "flush" && cmd != "table" && cmd != "dump" && argc < 4)
 			return 1;
 
 		tds.reset(new tds::tds(db_server, "", "", db_app));
@@ -913,7 +942,9 @@ int main(int argc, char** argv) {
 				string filename = argv[7];
 
 				write_table_ddl(*tds, schema, table, bind_token, commit_id, filename);
-			} else {
+			} else if (cmd == "dump")
+				dump_sql2(*tds, stoi(argv[3]));
+			else {
 				string repo_dir = cmd;
 				string db = argv[3], old_db;
 
