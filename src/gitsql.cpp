@@ -820,7 +820,7 @@ class lockfile {
 public:
 	lockfile() {
 #ifdef _WIN32
-        h = CreateMutexW(nullptr, false, L"gitsql_mutant");
+        h = CreateMutexW(nullptr, false, L"Global\\gitsql_mutant");
 
         if (!h || h == INVALID_HANDLE_VALUE)
             throw runtime_error("CreateMutex failed (" + to_string(GetLastError()) + ")");
