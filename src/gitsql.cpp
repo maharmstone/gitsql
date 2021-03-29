@@ -876,31 +876,42 @@ static void write_table_ddl(tds::tds& tds, const string_view& schema, const stri
 }
 
 static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
-	string repo_dir, db, old_db;
+	string repo_dir, db, server;
 
 	{
-		tds::query sq(tds, "SELECT DB_NAME()");
-
-		if (!sq.fetch_row())
-			throw runtime_error("Could not get current database name.");
-
-		old_db = (string)sq[0];
-	}
-
-	{
-		tds::query sq(tds, "SELECT dir, db FROM Restricted.GitRepo WHERE id = ?", repo_num);
+		tds::query sq(tds, "SELECT dir, db, server FROM Restricted.GitRepo WHERE id = ?", repo_num);
 
 		if (!sq.fetch_row())
 			throw runtime_error("Repo " + to_string(repo_num) + " not found in Restricted.GitRepo.");
 
 		repo_dir = (string)sq[0];
 		db = (string)sq[1];
+		server = (string)sq[2];
 	}
 
-	tds.run("USE [" + db + "]");
-	dump_sql(tds, repo_dir, db);
+	if (server.empty()) {
+		string old_db;
 
-	tds.run("USE [" + old_db + "]");
+		{
+			tds::query sq(tds, "SELECT DB_NAME()");
+
+			if (!sq.fetch_row())
+				throw runtime_error("Could not get current database name.");
+
+			old_db = (string)sq[0];
+		}
+
+		tds.run("USE [" + db + "]");
+		dump_sql(tds, repo_dir, db);
+
+		tds.run("USE [" + old_db + "]");
+	} else {
+		tds::tds tds2(server, "", "", db_app);
+
+		tds2.run("USE [" + db + "]");
+		dump_sql(tds2, repo_dir, db);
+	}
+
 	do_update_git(repo_dir);
 }
 
