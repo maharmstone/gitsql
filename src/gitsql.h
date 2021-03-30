@@ -4,6 +4,24 @@
 #include <string>
 #include <span>
 #include <tdscpp.h>
+#include <fmt/format.h>
+
+class _formatted_error : public std::exception {
+public:
+	template<typename T, typename... Args>
+	_formatted_error(const T& s, Args&&... args) {
+		msg = fmt::format(s, std::forward<Args>(args)...);
+	}
+
+	const char* what() const noexcept {
+		return msg.c_str();
+	}
+
+private:
+	std::string msg;
+};
+
+#define formatted_error(s, ...) _formatted_error(FMT_STRING(s), __VA_ARGS__)
 
 static __inline std::u16string utf8_to_utf16(const std::string_view& s) {
 	std::u16string ret;
@@ -64,7 +82,7 @@ public:
 			char16_t* fm;
 
 			if (FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr,
-				le, 0, reinterpret_cast<LPWSTR>(&fm), 0, nullptr)) {
+							   le, 0, reinterpret_cast<LPWSTR>(&fm), 0, nullptr)) {
 				try {
 					std::u16string_view s = fm;
 

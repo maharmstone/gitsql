@@ -16,10 +16,12 @@ add_executable(gitsql ${SRC_FILES})
 
 find_package(tdscpp REQUIRED)
 find_package(libgit2 REQUIRED)
+find_package(fmt REQUIRED)
 
 target_link_libraries(gitsql tdscpp)
 target_link_libraries(gitsql libgit2)
 target_link_libraries(gitsql wldap32)
+target_link_libraries(gitsql fmt::fmt-header-only)
 
 if(NOT MSVC)
 	target_compile_options(gitsql PUBLIC -Wall -Werror=cast-function-type -Wno-expansion-to-defined -Wunused-parameter -Wtype-limits -Wextra -Wconversion)

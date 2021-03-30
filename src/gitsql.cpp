@@ -296,7 +296,7 @@ static string get_type_definition(const string_view& name, const string_view& sc
 			break;
 
 		default:
-			throw runtime_error("Unrecognized system type " + to_string(system_type_id) + ".");
+			throw formatted_error("Unrecognized system type {}.", system_type_id);
 	}
 
 	ret += is_nullable ? " NULL" : " NOT NULL";
@@ -396,7 +396,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 		filesystem::path dir = repo_dir / sanitize_fn(obj.schema);
 
 		if (!filesystem::exists(dir) && !filesystem::create_directory(dir))
-			throw runtime_error("Error creating directory " + dir.string() + ".");
+			throw formatted_error("Error creating directory {}.", dir.string());
 
 		string subdir;
 
@@ -475,7 +475,7 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 			dir /= subdir;
 
 			if (!filesystem::exists(dir) && !filesystem::create_directory(dir))
-				throw runtime_error("Error creating directory " + dir.string() + ".");
+				throw formatted_error("Error creating directory {}.", dir.string());
 		}
 
 		filesystem::path fn = dir / (sanitize_fn(obj.name) + ".sql");
@@ -483,7 +483,7 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 		ofstream f(fn, ios::binary);
 
 		if (!f.good())
-			throw runtime_error("Error creating file " + fn.string() + ".");
+			throw formatted_error("Error creating file {}.", fn.string());
 
 		f.write(obj.def.c_str(), obj.def.size());
 	}
@@ -504,7 +504,7 @@ static void git_add_dir(list<git_file>& files, const filesystem::path& dir, cons
 					ifstream f(p, ios::binary);
 
 					if (!f.good())
-						throw runtime_error("Could not open " + p.string() + " for reading.");
+						throw formatted_error("Could not open {} for reading.", p.string());
 
 					f.seekg(0, ios::end);
 					size_t size = f.tellg();
@@ -821,12 +821,14 @@ public:
         h = CreateMutexW(nullptr, false, L"Global\\gitsql_mutant");
 
         if (!h || h == INVALID_HANDLE_VALUE)
-            throw runtime_error("CreateMutex failed (" + to_string(GetLastError()) + ")");
+            throw last_error("CreateMutex", GetLastError());
 
         auto res = WaitForSingleObject(h, INFINITE);
 
-        if (res != WAIT_OBJECT_0)
-            throw runtime_error("WaitForSingleObject returned " + to_string(res));
+		if (res == WAIT_FAILED)
+			throw last_error("WaitForSingleObject", GetLastError());
+        else if (res != WAIT_OBJECT_0)
+            throw formatted_error("WaitForSingleObject returned {}", res);
 #else
 		// FIXME
 #endif
@@ -859,7 +861,7 @@ static void write_table_ddl(tds::tds& tds, const string_view& schema, const stri
 		tds::query sq(tds, "SELECT object_id FROM sys.objects WHERE name = ? AND schema_id = SCHEMA_ID(?)", table, schema);
 
 		if (!sq.fetch_row())
-			throw runtime_error("Could not find object ID for table " + string(schema) + "." + string(table) + ".");
+			throw formatted_error("Could not find object ID for table {}.{}.", schema, table);
 
 		id = (int64_t)sq[0];
 	}
@@ -880,7 +882,7 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 		tds::query sq(tds, "SELECT dir, db, server, branch FROM Restricted.GitRepo WHERE id = ?", repo_num);
 
 		if (!sq.fetch_row())
-			throw runtime_error("Repo " + to_string(repo_num) + " not found in Restricted.GitRepo.");
+			throw formatted_error("Repo {} not found in Restricted.GitRepo.", repo_num);
 
 		repo_dir = (string)sq[0];
 		db = (string)sq[1];
