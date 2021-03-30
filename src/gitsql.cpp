@@ -954,25 +954,6 @@ int main(int argc, char** argv) {
 				write_table_ddl(*tds, schema, table, bind_token, commit_id, filename);
 			} else if (cmd == "dump")
 				dump_sql2(*tds, stoi(argv[3]));
-			else {
-				string repo_dir = cmd;
-				string db = argv[3], old_db;
-
-				{
-					tds::query sq(*tds, "SELECT DB_NAME()");
-
-					if (!sq.fetch_row())
-						throw runtime_error("Could not get current database name.");
-
-					old_db = (string)sq[0];
-				}
-
-				tds->run("USE [" + db + "]"); // FIXME - can we definitely not do this with parameters?
-				dump_sql(*tds, repo_dir, db);
-
-				tds->run("USE [" + old_db + "]");
-				do_update_git(repo_dir, "");
-			}
 		}
 	} catch (const exception& e) {
 		cerr << e.what() << endl;
