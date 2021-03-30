@@ -965,7 +965,7 @@ int main(int argc, char** argv) {
 				print_usage();
 		}
 	} catch (const exception& e) {
-		fmt::print(stderr, fg(fmt::color::red), "{}\n", e.what());
+		fmt::print(stderr, "{}\n", e.what());
 
 		try {
 			if (tds)
