@@ -730,8 +730,6 @@ WHERE Git.id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?) OR Git.tran_i
 ORDER BY Git.id
 )", r.id, r.id);
 
-				// FIXME - don't rely on AD tables?
-
 				if (!sq.fetch_row())
 					break;
 
