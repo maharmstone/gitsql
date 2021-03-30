@@ -13,11 +13,11 @@
 #include <list>
 #include <map>
 #include <stdexcept>
-#include <iostream>
 #include <fstream>
 #include <filesystem>
 #include <span>
 #include <tdscpp.h>
+#include <fmt/color.h>
 #include "git.h"
 #include "gitsql.h"
 
@@ -958,7 +958,7 @@ int main(int argc, char** argv) {
 				dump_sql2(*tds, stoi(argv[3]));
 		}
 	} catch (const exception& e) {
-		cerr << e.what() << endl;
+		fmt::print(stderr, fg(fmt::color::red), "{}\n", e.what());
 
 		try {
 			if (tds)
