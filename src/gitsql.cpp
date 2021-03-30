@@ -638,7 +638,7 @@ static void get_current_user_details(string& name, string& email) {
 	}
 }
 
-static void do_update_git(const string& repo_dir) {
+static void do_update_git(const string& repo_dir, const string& branch) {
 	list<git_file> files;
 	git_oid parent_id;
 
@@ -663,7 +663,7 @@ static void do_update_git(const string& repo_dir) {
 
 	get_current_user_details(name, email);
 
-	update_git(repo, name, email, "Update", files);
+	update_git(repo, name, email, "Update", files, false, nullopt, 0, branch);
 
 	// FIXME - push to remote server?
 }
@@ -876,10 +876,10 @@ static void write_table_ddl(tds::tds& tds, const string_view& schema, const stri
 }
 
 static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
-	string repo_dir, db, server;
+	string repo_dir, db, server, branch;
 
 	{
-		tds::query sq(tds, "SELECT dir, db, server FROM Restricted.GitRepo WHERE id = ?", repo_num);
+		tds::query sq(tds, "SELECT dir, db, server, branch FROM Restricted.GitRepo WHERE id = ?", repo_num);
 
 		if (!sq.fetch_row())
 			throw runtime_error("Repo " + to_string(repo_num) + " not found in Restricted.GitRepo.");
@@ -887,6 +887,7 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 		repo_dir = (string)sq[0];
 		db = (string)sq[1];
 		server = (string)sq[2];
+		branch = (string)sq[3];
 	}
 
 	if (server.empty()) {
@@ -912,7 +913,7 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 		dump_sql(tds2, repo_dir, db);
 	}
 
-	do_update_git(repo_dir);
+	do_update_git(repo_dir, branch);
 }
 
 int main(int argc, char** argv) {
@@ -972,7 +973,7 @@ int main(int argc, char** argv) {
 				dump_sql(*tds, repo_dir, db);
 
 				tds->run("USE [" + old_db + "]");
-				do_update_git(repo_dir);
+				do_update_git(repo_dir, "");
 			}
 		}
 	} catch (const exception& e) {
