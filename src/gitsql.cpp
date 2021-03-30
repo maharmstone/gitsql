@@ -12,11 +12,9 @@
 #include <list>
 #include <map>
 #include <stdexcept>
-#include <fstream>
 #include <filesystem>
 #include <span>
 #include <tdscpp.h>
-#include <fmt/color.h>
 #include "git.h"
 #include "gitsql.h"
 
@@ -25,6 +23,7 @@ using namespace std;
 const string db_app = "GitSQL";
 
 void replace_all(string& source, const string& from, const string& to);
+static void get_current_user_details(string& name, string& email);
 
 // strip out characters that NTFS doesn't like
 static string sanitize_fn(const string_view& fn) {
@@ -36,19 +35,6 @@ static string sanitize_fn(const string_view& fn) {
 	}
 
 	return s;
-}
-
-static void clear_dir(const filesystem::path& dir) {
-	vector<filesystem::path> children;
-
-	for (const auto& p : filesystem::directory_iterator(dir)) {
-		children.emplace_back(p);
-	}
-
-	for (const auto& p : children) {
-		if (p.filename().string()[0] != '.')
-			filesystem::remove_all(p);
-	}
 }
 
 struct sql_obj {
@@ -306,13 +292,16 @@ static string get_type_definition(const string_view& name, const string_view& sc
 	return ret;
 }
 
-static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db) {
+static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db, const string& branch) {
 	string s, dbs;
+	list<git_file> files;
+
+	git_libgit2_init();
+
+	GitRepo repo(repo_dir.string());
 
 	if (!db.empty())
 		dbs = db + ".";
-
-	clear_dir(repo_dir);
 
 	vector<sql_obj> objs;
 
@@ -392,25 +381,18 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 	}
 
 	for (auto& obj : objs) {
-		filesystem::path dir = repo_dir / sanitize_fn(obj.schema);
-
-		if (!filesystem::exists(dir) && !filesystem::create_directory(dir))
-			throw formatted_error("Error creating directory {}.", dir.string());
-
-		string subdir;
+		string filename = sanitize_fn(obj.schema) + "/";
 
 		if (obj.type == "V")
-			subdir = "views";
+			filename += "views/";
 		else if (obj.type == "P")
-			subdir = "procedures";
+			filename += "procedures/";
 		else if (obj.type == "FN" || obj.type == "TF" || obj.type == "IF")
-			subdir = "functions";
+			filename += "functions/";
 		else if (obj.type == "U")
-			subdir = "tables";
+			filename += "tables/";
 		else if (obj.type == "TT" || obj.type == "T")
-			subdir = "types";
-		else
-			subdir = "";
+			filename += "types/";
 
 		if (obj.type == "U" || obj.type == "TT")
 			obj.def = table_ddl(tds, obj.id);
@@ -470,69 +452,18 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 			}
 		}
 
-		if (subdir != "") {
-			dir /= subdir;
+		filename += sanitize_fn(obj.name) + ".sql";
 
-			if (!filesystem::exists(dir) && !filesystem::create_directory(dir))
-				throw formatted_error("Error creating directory {}.", dir.string());
-		}
-
-		filesystem::path fn = dir / (sanitize_fn(obj.name) + ".sql");
-
-		ofstream f(fn, ios::binary);
-
-		if (!f.good())
-			throw formatted_error("Error creating file {}.", fn.string());
-
-		f.write(obj.def.c_str(), obj.def.size());
+		files.emplace_back(filename, obj.def);
 	}
-}
 
-static void git_add_dir(list<git_file>& files, const filesystem::path& dir, const string& unixpath) {
-	for (const auto& de : filesystem::directory_iterator(dir)) {
-		const auto& p = de.path();
-		auto name = p.filename().string();
+	string name, email;
 
-		if (!name.empty() && name[0] != '.') {
-			if (de.is_directory())
-				git_add_dir(files, p, unixpath + name + "/");
-			else {
-				string data;
+	get_current_user_details(name, email);
 
-				{
-					ifstream f(p, ios::binary);
+	update_git(repo, name, email, "Update", files, true, nullopt, 0, branch);
 
-					if (!f.good())
-						throw formatted_error("Could not open {} for reading.", p.string());
-
-					f.seekg(0, ios::end);
-					size_t size = f.tellg();
-					data = string(size, ' ');
-					f.seekg(0, ios::beg);
-
-					f.read(&data[0], size);
-				}
-
-				files.emplace_back(unixpath + name, data);
-			}
-		}
-	}
-}
-
-static void git_remove_dir(GitRepo& repo, GitTree& tree, const filesystem::path& dir, const string& unixdir, list<git_file>& files) {
-	size_t c = tree.entrycount();
-
-	for (size_t i = 0; i < c; i++) {
-		GitTreeEntry gte(tree, i);
-		string name = gte.name();
-
-		if (gte.type() == GIT_OBJ_TREE) {
-			GitTree subtree(repo, gte);
-
-			git_remove_dir(repo, subtree, dir / name, unixdir + name + "/", files);
-		} else if (!filesystem::exists(dir / name))
-			files.emplace_back(unixdir + name, nullptr);
-	}
+	// FIXME - do reset if current branch
 }
 
 // taken from Stack Overflow: https://stackoverflow.com/questions/2896600/how-to-replace-all-occurrences-of-a-character-in-string
@@ -635,36 +566,6 @@ static void get_current_user_details(string& name, string& email) {
 			email = username + "@"s + domain;
 		}
 	}
-}
-
-static void do_update_git(const string& repo_dir, const string& branch) {
-	list<git_file> files;
-	git_oid parent_id;
-
-	git_libgit2_init();
-
-	GitRepo repo(repo_dir);
-
-	git_add_dir(files, repo_dir, "");
-
-	if (repo.reference_name_to_id(&parent_id, "HEAD")) {
-		git_commit* parent;
-
-		repo.commit_lookup(&parent, &parent_id);
-
-		GitTree parent_tree(parent);
-
-		// loop through repo and remove anything that's been deleted
-		git_remove_dir(repo, parent_tree, repo_dir, "", files);
-	}
-
-	string name, email;
-
-	get_current_user_details(name, email);
-
-	update_git(repo, name, email, "Update", files, false, nullopt, 0, branch);
-
-	// FIXME - push to remote server?
 }
 
 class repo {
@@ -902,17 +803,15 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 		}
 
 		tds.run("USE [" + db + "]");
-		dump_sql(tds, repo_dir, db);
+		dump_sql(tds, repo_dir, db, branch.empty() ? "master" : branch);
 
 		tds.run("USE [" + old_db + "]");
 	} else {
 		tds::tds tds2(server, "", "", db_app);
 
 		tds2.run("USE [" + db + "]");
-		dump_sql(tds2, repo_dir, db);
+		dump_sql(tds2, repo_dir, db, branch.empty() ? "master" : branch);
 	}
-
-	do_update_git(repo_dir, branch);
 }
 
 static void print_usage() {
