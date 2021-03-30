@@ -916,7 +916,7 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 }
 
 static void print_usage() {
-	fmt::print(stderr, "Usage:\n    gitsql flush <server>\n    gitsql table <server> <schema> <table> <bind-token> <commit> <filename>\n    gitsql dump <server> <repo-id>\n");
+	fmt::print(stderr, "Usage:\n    gitsql <server> flush\n    gitsql <server> table <schema> <table> <bind-token> <commit> <filename>\n    gitsql <server> dump <repo-id>\n");
 }
 
 int main(int argc, char** argv) {
