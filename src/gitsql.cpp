@@ -298,8 +298,6 @@ static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const stri
 
 	git_libgit2_init();
 
-	GitRepo repo(repo_dir.string());
-
 	if (!db.empty())
 		dbs = db + ".";
 
@@ -461,9 +459,17 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 
 	get_current_user_details(name, email);
 
+	GitRepo repo(repo_dir.string());
+
 	update_git(repo, name, email, "Update", files, true, nullopt, 0, branch);
 
-	// FIXME - do reset if current branch
+	if (!repo.is_bare() && repo.branch_is_head(branch)) {
+		git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+
+		opts.checkout_strategy = GIT_CHECKOUT_FORCE;
+
+		repo.checkout_head(&opts);
+	}
 }
 
 // taken from Stack Overflow: https://stackoverflow.com/questions/2896600/how-to-replace-all-occurrences-of-a-character-in-string
