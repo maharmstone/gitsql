@@ -915,14 +915,20 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 	do_update_git(repo_dir, branch);
 }
 
+static void print_usage() {
+	fmt::print(stderr, "Usage:\n    gitsql flush <server>\n    gitsql table <server> <schema> <table> <bind-token> <commit> <filename>\n    gitsql dump <server> <repo-id>\n");
+}
+
 int main(int argc, char** argv) {
 	unique_ptr<tds::tds> tds;
 
 	try {
 		string cmd;
 
-		if (argc < 2)
+		if (argc < 2) {
+			print_usage();
 			return 1;
+		}
 
 		string db_server = argv[1];
 
@@ -955,6 +961,8 @@ int main(int argc, char** argv) {
 				write_table_ddl(*tds, schema, table, bind_token, commit_id, filename);
 			} else if (cmd == "dump")
 				dump_sql2(*tds, stoi(argv[3]));
+			else
+				print_usage();
 		}
 	} catch (const exception& e) {
 		fmt::print(stderr, fg(fmt::color::red), "{}\n", e.what());
