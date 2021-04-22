@@ -314,7 +314,9 @@ FROM )" + dbs + R"(sys.objects
 LEFT JOIN )" + dbs + R"(sys.sql_modules ON sql_modules.object_id = objects.object_id
 LEFT JOIN )" + dbs + R"(sys.table_types ON objects.type = 'TT' AND table_types.type_table_object_id = objects.object_id
 JOIN )" + dbs + R"(sys.schemas ON schemas.schema_id = COALESCE(table_types.schema_id, objects.schema_id)
-WHERE objects.type IN ('V','P','FN','TF','IF','U','TT')
+LEFT JOIN )" + dbs + R"(sys.extended_properties ON extended_properties.major_id = objects.object_id AND extended_properties.minor_id = 0 AND extended_properties.name = 'microsoft_database_tools_support'
+WHERE objects.type IN ('V','P','FN','TF','IF','U','TT') AND
+	(extended_properties.value IS NULL OR extended_properties.value != 1)
 ORDER BY schemas.name, objects.name)");
 
 		while (sq.fetch_row()) {
