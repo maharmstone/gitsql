@@ -320,7 +320,7 @@ WHERE objects.type IN ('V','P','FN','TF','IF','U','TT') AND
 ORDER BY schemas.name, objects.name)");
 
 		while (sq.fetch_row()) {
-			objs.emplace_back(sq[0], sq[1], sq[2], sq[3], (int64_t)sq[4], (unsigned int)sq[5] != 0);
+			objs.emplace_back((string)sq[0], (string)sq[1], (string)sq[2], (string)sq[3], (int64_t)sq[4], (unsigned int)sq[5] != 0);
 		}
 	}
 
@@ -328,7 +328,7 @@ ORDER BY schemas.name, objects.name)");
 		tds::query sq(tds, "SELECT triggers.name, sql_modules.definition FROM " + dbs + "sys.triggers LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=triggers.object_id WHERE triggers.parent_class_desc = 'DATABASE'");
 
 		while (sq.fetch_row()) {
-			objs.emplace_back("db_triggers", sq[0], sq[1]);
+			objs.emplace_back("db_triggers", (string)sq[0], (string)sq[1]);
 		}
 	}
 
@@ -344,7 +344,7 @@ ORDER BY schemas.name, objects.name)");
 		}
 
 		for (const auto& v : schemas) {
-			objs.emplace_back("schemas", v, get_schema_definition(tds, v, dbs));
+			objs.emplace_back("schemas", (string)v, get_schema_definition(tds, v, dbs));
 		}
 	}
 
@@ -376,7 +376,7 @@ FROM )" + dbs + R"(sys.types
 WHERE is_user_defined = 1 AND is_table_type = 0)");
 
 		while (sq.fetch_row()) {
-			objs.emplace_back(sq[2], sq[0], get_type_definition((string)sq[0], (string)sq[2], sq[1], sq[3], sq[4], sq[5], (unsigned int)sq[6] != 0), "T");
+			objs.emplace_back((string)sq[2], (string)sq[0], get_type_definition((string)sq[0], (string)sq[2], (int32_t)sq[1], (int16_t)sq[3], (uint8_t)sq[4], (uint8_t)sq[5], (unsigned int)sq[6] != 0), "T");
 		}
 	}
 
@@ -678,7 +678,7 @@ ORDER BY Git.id
 						clear_all = true;
 					else {
 						if (merged_trans) {
-							string fn = sq[6];
+							auto fn = (string)sq[6];
 
 							for (auto it = files.begin(); it != files.end(); it++) {
 								if (it->filename == fn) {
@@ -688,7 +688,7 @@ ORDER BY Git.id
 							}
 						}
 
-						files.emplace_back(sq[6], sq[7]);
+						files.emplace_back((string)sq[6], sq[7]);
 					}
 
 					if (!sq.fetch_row())

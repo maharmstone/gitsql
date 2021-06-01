@@ -269,9 +269,9 @@ ORDER BY columns.column_id
 )", id);
 
 		while (sq.fetch_row()) {
-			columns.emplace_back(sq[0], sq[1], (int)sq[2], (int)sq[3] != 0, (int)sq[4], (int)sq[5],
+			columns.emplace_back((string)sq[0], (string)sq[1], (int)sq[2], (int)sq[3] != 0, (int)sq[4], (int)sq[5],
 								 sq[6], (unsigned int)sq[7], (unsigned int)sq[8] != 0, (unsigned int)sq[9] != 0,
-								 (unsigned int)sq[10] != 0, sq[11], sq[12]);
+								 (unsigned int)sq[10] != 0, (string)sq[11], sq[12]);
 		}
 	}
 
@@ -305,7 +305,7 @@ ORDER BY columns.column_id
 		tds::query sq(tds, "SELECT definition, parent_column_id FROM sys.check_constraints WHERE parent_object_id = ? ORDER BY name", id);
 
 		while (sq.fetch_row()) {
-			constraints.emplace_back(sq[0], (unsigned int)sq[1]);
+			constraints.emplace_back((string)sq[0], (unsigned int)sq[1]);
 		}
 	}
 
@@ -329,7 +329,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 
 			for (const auto& col : columns) {
 				if (col.column_id == (unsigned int)sq[1]) {
-					foreign_keys.back().cols.emplace_back(col, sq[2], sq[3], sq[4]);
+					foreign_keys.back().cols.emplace_back(col, (string)sq[2], (string)sq[3], (string)sq[4]);
 					break;
 				}
 			}
