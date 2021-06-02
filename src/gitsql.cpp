@@ -20,6 +20,7 @@
 
 using namespace std;
 
+string db_username, db_password;
 const string db_app = "GitSQL";
 
 void replace_all(string& source, const string& from, const string& to);
@@ -813,11 +814,33 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 
 		tds.run("USE [" + old_db + "]");
 	} else {
-		tds::tds tds2(server, "", "", db_app);
+		tds::tds tds2(server, db_username, db_password, db_app);
 
 		tds2.run("USE [" + db + "]");
 		dump_sql(tds2, repo_dir, db, branch.empty() ? "master" : branch);
 	}
+}
+
+static optional<u16string> get_environment_variable(const u16string& name) {
+	auto len = GetEnvironmentVariableW((WCHAR*)name.c_str(), nullptr, 0);
+
+	if (len == 0) {
+		if (GetLastError() == ERROR_ENVVAR_NOT_FOUND)
+			return nullopt;
+
+		return u"";
+	}
+
+	u16string ret(len, 0);
+
+	if (GetEnvironmentVariableW((WCHAR*)name.c_str(), (WCHAR*)ret.data(), len) == 0)
+		throw last_error("GetEnvironmentVariableW", GetLastError());
+
+	while (!ret.empty() && ret.back() == 0) {
+		ret.pop_back();
+	}
+
+	return ret;
 }
 
 static void print_usage() {
@@ -843,7 +866,17 @@ int main(int argc, char** argv) {
 		if (cmd != "flush" && cmd != "table" && cmd != "dump" && argc < 4)
 			return 1;
 
-		tds.reset(new tds::tds(db_server, "", "", db_app));
+		auto db_username_env = get_environment_variable(u"DB_USERNAME");
+
+		if (db_username_env.has_value())
+			db_username = utf16_to_utf8(db_username_env.value());
+
+		auto db_password_env = get_environment_variable(u"DB_PASSWORD");
+
+		if (db_password_env.has_value())
+			db_password = utf16_to_utf8(db_password_env.value());
+
+		tds.reset(new tds::tds(db_server, db_username, db_password, db_app));
 
 		string unixpath, def;
 
