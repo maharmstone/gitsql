@@ -628,7 +628,7 @@ SELECT
 	Git.id,
 	Git.username,
 	Git.description,
-	TODATETIMEOFFSET(Git.dt, Git.offset),
+	Git.dto,
 	GitFiles.file_id,
 	GitFiles.filename,
 	GitFiles.data
