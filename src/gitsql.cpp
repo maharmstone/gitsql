@@ -496,7 +496,7 @@ void replace_all(string& source, const string& from, const string& to) {
 
 static void get_user_details(const string& username, string& name, string& email) {
 	array<std::byte, 68> sid;
-	DWORD sidlen = sid.size();
+	auto sidlen = (DWORD)sid.size();
 	char domain[100];
 	DWORD domainlen = sizeof(domain);
 	SID_NAME_USE use;
