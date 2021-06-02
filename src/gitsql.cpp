@@ -463,7 +463,7 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 
 	GitRepo repo(repo_dir.string());
 
-	update_git(repo, name, email, "Update", files, true, nullopt, 0, branch);
+	update_git(repo, name, email, "Update", files, true, nullopt, branch);
 
 	if (!repo.is_bare() && repo.branch_is_head(branch)) {
 		git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
@@ -609,8 +609,8 @@ static void flush_git(tds::tds& tds) {
 
 		while (true) {
 			tds::trans trans(tds);
-			unsigned int commit, dt;
-			int tz_offset;
+			unsigned int commit;
+			tds::datetimeoffset dto;
 			string username, name, email, description;
 			list<git_file> files;
 			bool clear_all = false;
@@ -627,8 +627,7 @@ SELECT
 	Git.id,
 	Git.username,
 	Git.description,
-	DATEDIFF(SECOND,'19700101',Git.dt),
-	Git.offset,
+	TODATETIMEOFFSET(Git.dt, Git.offset),
 	GitFiles.file_id,
 	GitFiles.filename,
 	GitFiles.data
@@ -644,15 +643,14 @@ ORDER BY Git.id
 				commit = (unsigned int)sq[0];
 				username = (string)sq[1];
 				description = (string)sq[2];
-				dt = (unsigned int)sq[3];
-				tz_offset = (int)sq[4];
+				dto = (tds::datetimeoffset)sq[3];
 
 				get_user_details(username, name, email);
 
 				delete_commits.push_back(commit);
 
 				do {
-					delete_files.push_back((unsigned int)sq[5]);
+					delete_files.push_back((unsigned int)sq[4]);
 
 					if ((unsigned int)sq[0] != commit) {
 						if (!merged_trans) {
@@ -674,11 +672,11 @@ ORDER BY Git.id
 							delete_commits.push_back(new_commit);
 					}
 
-					if (sq[6].is_null)
+					if (sq[5].is_null)
 						clear_all = true;
 					else {
 						if (merged_trans) {
-							auto fn = (string)sq[6];
+							auto fn = (string)sq[5];
 
 							for (auto it = files.begin(); it != files.end(); it++) {
 								if (it->filename == fn) {
@@ -688,7 +686,7 @@ ORDER BY Git.id
 							}
 						}
 
-						files.emplace_back((string)sq[6], sq[7]);
+						files.emplace_back((string)sq[5], sq[6]);
 					}
 
 					if (!sq.fetch_row())
@@ -697,7 +695,7 @@ ORDER BY Git.id
 			}
 
 			if (files.size() > 0 || clear_all)
-				update_git(repo, name, email, description, files, clear_all, dt, tz_offset, r.branch);
+				update_git(repo, name, email, description, files, clear_all, dto, r.branch);
 
 			while (!delete_commits.empty()) {
 				tds.run("DELETE FROM Restricted.Git WHERE id=?", delete_commits.front());

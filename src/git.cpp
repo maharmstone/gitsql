@@ -23,11 +23,16 @@ static void throw_git_error(int error, const char* func) {
 	throw runtime_error(string(func) + " failed (error " + to_string(error) + ").");
 }
 
-GitSignature::GitSignature(const string& user, const string& email, optional<time_t> dt, signed int offset) {
+static const auto jan1970 = chrono::duration_cast<chrono::seconds>(chrono::time_point{chrono::sys_days{1970y/chrono::January/1d}}.time_since_epoch());
+
+GitSignature::GitSignature(const string& user, const string& email, const optional<tds::datetimeoffset>& dto) {
 	unsigned int ret;
 
-	if (dt.has_value()) {
-		if ((ret = git_signature_new(&sig, user.c_str(), email.c_str(), dt.value(), offset)))
+	if (dto.has_value()) {
+		auto tp = (chrono::time_point<chrono::system_clock>)dto.value() + chrono::minutes{dto.value().offset};
+		auto secs = chrono::duration_cast<chrono::seconds>(tp.time_since_epoch()) - jan1970;
+
+		if ((ret = git_signature_new(&sig, user.c_str(), email.c_str(), secs.count(), dto.value().offset)))
 			throw_git_error(ret, "git_signature_new");
 	} else {
 		if ((ret = git_signature_now(&sig, user.c_str(), email.c_str())))
@@ -280,8 +285,8 @@ void GitRepo::reference_create(const string& name, const git_oid& id, bool force
 }
 
 void update_git(GitRepo& repo, const string& user, const string& email, const string& description, list<git_file>& files,
-				bool clear_all, optional<time_t> dt, signed int offset, const string& branch) {
-	GitSignature sig(user, email, dt, offset);
+				bool clear_all, const optional<tds::datetimeoffset>& dto, const string& branch) {
+	GitSignature sig(user, email, dto);
 
 	git_commit* parent;
 	git_oid parent_id;
