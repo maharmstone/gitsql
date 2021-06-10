@@ -609,7 +609,6 @@ static void flush_git(tds::tds& tds) {
 		GitRepo repo(r.dir);
 
 		while (true) {
-			tds::trans trans(tds);
 			unsigned int commit;
 			tds::datetimeoffset dto;
 			string username, name, email, description;
@@ -620,6 +619,7 @@ static void flush_git(tds::tds& tds) {
 			bool merged_trans = false;
 
 			{
+				tds::trans trans(tds);
 				tds::query sq(tds, R"(
 SET LOCK_TIMEOUT 0;
 SET XACT_ABORT ON;
@@ -698,17 +698,21 @@ ORDER BY Git.id
 			if (files.size() > 0 || clear_all)
 				update_git(repo, name, email, description, files, clear_all, dto, r.branch);
 
-			while (!delete_commits.empty()) {
-				tds.run("DELETE FROM Restricted.Git WHERE id=?", delete_commits.front());
-				delete_commits.pop_front();
-			}
+			{
+				tds::trans trans(tds);
 
-			while (!delete_files.empty()) {
-				tds.run("DELETE FROM Restricted.GitFiles WHERE file_id=?", delete_files.front());
-				delete_files.pop_front();
-			}
+				while (!delete_commits.empty()) {
+					tds.run("DELETE FROM Restricted.Git WHERE id=?", delete_commits.front());
+					delete_commits.pop_front();
+				}
 
-			trans.commit();
+				while (!delete_files.empty()) {
+					tds.run("DELETE FROM Restricted.GitFiles WHERE file_id=?", delete_files.front());
+					delete_files.pop_front();
+				}
+
+				trans.commit();
+			}
 		}
 
 		if (!repo.is_bare() && repo.branch_is_head(r.branch.empty() ? "master" : r.branch)) {
