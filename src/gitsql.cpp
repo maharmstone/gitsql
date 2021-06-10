@@ -881,11 +881,11 @@ int main(int argc, char** argv) {
 		string unixpath, def;
 
 		{
-			lockfile lf;
+			if (cmd == "flush") {
+				lockfile lf;
 
-			if (cmd == "flush")
 				flush_git(*tds);
-			else if (cmd == "table") {
+			} else if (cmd == "table") {
 				if (argc < 8)
 					throw runtime_error("Too few arguments.");
 
@@ -897,9 +897,11 @@ int main(int argc, char** argv) {
 				string filename = argv[7];
 
 				write_table_ddl(*tds, schema, table, bind_token, commit_id, filename);
-			} else if (cmd == "dump")
+			} else if (cmd == "dump") {
+				lockfile lf;
+
 				dump_sql2(*tds, stoi(argv[3]));
-			else
+			} else
 				print_usage();
 		}
 	} catch (const exception& e) {
