@@ -628,17 +628,21 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 
 	{
 		tds::query sq(tds, R"(
-SELECT sql_modules.definition
+SELECT sql_modules.definition, triggers.is_disabled, triggers.name
 FROM sys.triggers
 JOIN sys.sql_modules ON sql_modules.object_id = triggers.object_id
 WHERE triggers.parent_id = ?)", id);
 
 		while (sq.fetch_row()) {
 			auto trig = (string)sq[0];
+			bool disabled = (unsigned int)sq[1] != 0;
 
 			replace_all(trig, "\r\n", "\n");
 
 			ddl += "\nGO\n" + trig;
+
+			if (disabled)
+				ddl += "\nDISABLE TRIGGER " + brackets_escape((string)sq[2]) + " ON " + escaped_name + ";\nGO";
 		}
 	}
 
