@@ -293,6 +293,45 @@ static string get_type_definition(const string_view& name, const string_view& sc
 	return ret;
 }
 
+string object_perms(tds::tds& tds, int64_t id, const string& dbs, const string& name) {
+	vector<sql_perms> perms;
+
+	{
+		tds::query sq(tds, R"(SELECT database_permissions.state_desc,
+database_permissions.permission_name,
+USER_NAME(database_permissions.grantee_principal_id)
+FROM )" + dbs + R"(sys.database_permissions
+JOIN )" + dbs + R"(sys.database_principals ON database_principals.principal_id = database_permissions.grantee_principal_id
+WHERE database_permissions.class_desc = 'OBJECT_OR_COLUMN' AND
+	database_permissions.major_id = ?
+ORDER BY USER_NAME(database_permissions.grantee_principal_id),
+	database_permissions.state_desc,
+	database_permissions.permission_name)", id);
+
+		while (sq.fetch_row()) {
+			bool found = false;
+			auto type = (string)sq[0];
+			auto user = (string)sq[2];
+
+			for (auto& p : perms) {
+				if (p.user == user && p.type == type) {
+					p.perms.emplace_back((string)sq[1]);
+					found = true;
+					break;
+				}
+			}
+
+			if (!found)
+				perms.emplace_back(user, type, (string)sq[1]);
+		}
+	}
+
+	if (perms.empty())
+		return "";
+
+	return "GO\n\n" + grant_string(perms, name);
+}
+
 static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db, const string& branch) {
 	string s, dbs;
 	list<git_file> files;
@@ -396,7 +435,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 			filename += "types/";
 
 		if (obj.type == "U" || obj.type == "TT")
-			obj.def = table_ddl(tds, obj.id);
+			obj.def = table_ddl(tds, obj.id, false);
 
 		replace_all(obj.def, "\r\n", "\n");
 
@@ -415,43 +454,8 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 
 		obj.def += "\n";
 
-		if (obj.has_perms) {
-			vector<sql_perms> perms;
-
-			{
-				tds::query sq(tds, R"(SELECT database_permissions.state_desc,
-database_permissions.permission_name,
-USER_NAME(database_permissions.grantee_principal_id)
-FROM )" + dbs + R"(sys.database_permissions
-JOIN )" + dbs + R"(sys.database_principals ON database_principals.principal_id = database_permissions.grantee_principal_id
-WHERE database_permissions.class_desc = 'OBJECT_OR_COLUMN' AND
-	database_permissions.major_id = ?
-ORDER BY USER_NAME(database_permissions.grantee_principal_id),
-	database_permissions.state_desc,
-	database_permissions.permission_name)", obj.id);
-
-				while (sq.fetch_row()) {
-					bool found = false;
-					auto type = (string)sq[0];
-					auto user = (string)sq[2];
-
-					for (auto& p : perms) {
-						if (p.user == user && p.type == type) {
-							p.perms.emplace_back((string)sq[1]);
-							found = true;
-							break;
-						}
-					}
-
-					if (!found)
-						perms.emplace_back(user, type, (string)sq[1]);
-				}
-			}
-
-			if (!perms.empty()) {
-				obj.def += "GO\n\n" + grant_string(perms, brackets_escape(obj.schema) + "." + brackets_escape(obj.name));
-			}
-		}
+		if (obj.has_perms)
+			obj.def += object_perms(tds, obj.id, dbs, brackets_escape(obj.schema) + "." + brackets_escape(obj.name));
 
 		filename += sanitize_fn(obj.name) + ".sql";
 
@@ -777,7 +781,7 @@ static void write_table_ddl(tds::tds& tds, const string_view& schema, const stri
 		id = (int64_t)sq[0];
 	}
 
-	auto ddl = table_ddl(tds, id);
+	auto ddl = table_ddl(tds, id, true);
 
 	vector<std::byte> vec(ddl.length());
 

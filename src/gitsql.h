@@ -126,8 +126,11 @@ public:
 
 typedef std::unique_ptr<HANDLE, handle_closer> unique_handle;
 
+// gitsql.cpp
+std::string object_perms(tds::tds& tds, int64_t id, const std::string& dbs, const std::string& name);
+
 // table.cpp
-std::string table_ddl(tds::tds& tds, int64_t id);
+std::string table_ddl(tds::tds& tds, int64_t id, bool include_perms);
 std::string brackets_escape(const std::string_view& s);
 
 // ldap.cpp
