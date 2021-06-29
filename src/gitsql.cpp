@@ -6,7 +6,6 @@
 #include <shlwapi.h>
 #endif
 
-#include <git2.h>
 #include <string>
 #include <vector>
 #include <list>

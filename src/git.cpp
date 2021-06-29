@@ -1,4 +1,3 @@
-#include <git2.h>
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -17,7 +16,7 @@ noret
 static void throw_git_error(int error, const char* func) {
 	const git_error *lg2err;
 
-	if ((lg2err = giterr_last()) && lg2err->message)
+	if ((lg2err = git_error_last()) && lg2err->message)
 		throw runtime_error(string(func) + " failed (" + lg2err->message + ").");
 
 	throw runtime_error(string(func) + " failed (error " + to_string(error) + ").");
@@ -123,12 +122,12 @@ git_oid GitRepo::commit_create(const GitSignature& author, const GitSignature& c
 	return id;
 }
 
-git_oid GitRepo::blob_create_frombuffer(const string_view& data) {
+git_oid GitRepo::blob_create_from_buffer(const string_view& data) {
 	unsigned int ret;
 	git_oid blob;
 
-	if ((ret = git_blob_create_frombuffer(&blob, repo, data.data(), data.length())))
-		throw_git_error(ret, "git_blob_create_frombuffer");
+	if ((ret = git_blob_create_from_buffer(&blob, repo, data.data(), data.length())))
+		throw_git_error(ret, "git_blob_create_from_buffer");
 
 	return blob;
 }
@@ -191,7 +190,7 @@ static void update_git_no_parent(GitRepo& repo, const GitSignature& sig, const s
 		for (const auto& f : files) {
 			if (f.data.has_value()) {
 				upd[nu].action = GIT_TREE_UPDATE_UPSERT;
-				upd[nu].id = repo.blob_create_frombuffer(f.data.value());
+				upd[nu].id = repo.blob_create_from_buffer(f.data.value());
 			}
 
 			upd[nu].filemode = GIT_FILEMODE_BLOB;
@@ -229,7 +228,7 @@ static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string&
 		GitTreeEntry gte(tree, i);
 		string name = prefix + gte.name();
 
-		if (gte.type() == GIT_OBJ_TREE) {
+		if (gte.type() == GIT_OBJECT_TREE) {
 			GitTree subtree(repo, gte);
 
 			do_clear_all(repo, subtree, name + "/", files);
@@ -322,7 +321,7 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 				upd[nu].action = GIT_TREE_UPDATE_REMOVE;
 			} else {
 				upd[nu].action = GIT_TREE_UPDATE_UPSERT;
-				upd[nu].id = repo.blob_create_frombuffer(f.data.value());
+				upd[nu].id = repo.blob_create_from_buffer(f.data.value());
 			}
 
 			upd[nu].filemode = GIT_FILEMODE_BLOB;
@@ -412,7 +411,7 @@ string GitTreeEntry::name() {
 	return git_tree_entry_name(gte);
 }
 
-git_otype GitTreeEntry::type() {
+git_object_t GitTreeEntry::type() {
 	return git_tree_entry_type(gte);
 }
 
@@ -426,7 +425,7 @@ GitTree::GitTree(const GitRepo& repo, const string& rev) {
 GitBlob::GitBlob(const GitTree& tree, const string& path) {
 	unsigned int ret;
 
-	if ((ret = git_object_lookup_bypath(&obj, (git_object*)(git_tree*)tree, path.c_str(), GIT_OBJ_BLOB)))
+	if ((ret = git_object_lookup_bypath(&obj, (git_object*)(git_tree*)tree, path.c_str(), GIT_OBJECT_BLOB)))
 		throw_git_error(ret, "git_object_lookup_bypath");
 }
 

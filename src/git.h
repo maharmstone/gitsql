@@ -72,7 +72,7 @@ public:
 	void commit_lookup(git_commit** commit, const git_oid* oid);
 	git_oid commit_create(const GitSignature& author, const GitSignature& committer, const std::string& message, const GitTree& tree,
 						  git_commit* parent = nullptr);
-	git_oid blob_create_frombuffer(const std::string_view& data);
+	git_oid blob_create_from_buffer(const std::string_view& data);
 	git_oid tree_create_updated(const GitTree& baseline, size_t nupdates, const git_tree_update* updates);
 	git_oid index_tree_id() const;
 	void checkout_head(const git_checkout_options* opts = nullptr);
@@ -107,7 +107,7 @@ class GitTreeEntry {
 public:
 	GitTreeEntry(const GitTree& tree, size_t idx);
 	std::string name();
-	git_otype type();
+	git_object_t type();
 
 	friend class GitTree;
 
