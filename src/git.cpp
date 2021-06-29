@@ -2,6 +2,7 @@
 #include <vector>
 #include <stdexcept>
 #include <iostream>
+#include <zlib.h>
 #include "git.h"
 
 using namespace std;
@@ -122,12 +123,134 @@ git_oid GitRepo::commit_create(const GitSignature& author, const GitSignature& c
 	return id;
 }
 
+static void rename_open_file(HANDLE h, const filesystem::path& fn) {
+	vector<uint8_t> buf;
+	auto dest = fn.u16string();
+
+	buf.resize(offsetof(FILE_RENAME_INFO, FileName) + ((dest.length() + 1) * sizeof(char16_t)));
+
+	auto fri = (FILE_RENAME_INFO*)buf.data();
+
+	fri->ReplaceIfExists = true;
+	fri->RootDirectory = nullptr;
+	fri->FileNameLength = (DWORD)(dest.length() * sizeof(char16_t));
+	memcpy(fri->FileName, dest.data(), fri->FileNameLength);
+	fri->FileName[dest.length()] = 0;
+
+	if (!SetFileInformationByHandle(h, FileRenameInfo, fri, (DWORD)buf.size()))
+		throw runtime_error("SetFileInformationByHandle failed (last error " + to_string(GetLastError()) + ")");
+}
+
+static filesystem::path get_object_filename(const filesystem::path& repopath, const git_oid& oid) {
+	filesystem::path file = repopath;
+	char fn[39];
+
+	file /= "objects";
+
+	sprintf(fn, "%02x", oid.id[0]);
+	file /= fn;
+
+	create_directory(file);
+
+	sprintf(fn, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+			oid.id[1], oid.id[2], oid.id[3], oid.id[4], oid.id[5], oid.id[6], oid.id[7], oid.id[8],
+			oid.id[9], oid.id[10], oid.id[11], oid.id[12], oid.id[13], oid.id[14], oid.id[15],
+			oid.id[16], oid.id[17], oid.id[18], oid.id[19]);
+	file /= fn;
+
+	return file;
+}
+
 git_oid GitRepo::blob_create_from_buffer(const string_view& data) {
 	unsigned int ret;
 	git_oid blob;
+	unique_ptr<git_odb, decltype(&git_odb_free)> odb(nullptr, git_odb_free);
 
-	if ((ret = git_blob_create_from_buffer(&blob, repo, data.data(), data.length())))
-		throw_git_error(ret, "git_blob_create_from_buffer");
+	if ((ret = git_odb_hash(&blob, data.data(), data.length(), GIT_OBJECT_BLOB)))
+		throw_git_error(ret, "git_odb_hash");
+
+	{
+		git_odb* tmp;
+
+		if ((ret = git_repository_odb(&tmp, repo)))
+			throw_git_error(ret, "git_repository_odb");
+
+		odb.reset(tmp);
+	}
+
+	if (git_odb_exists(odb.get(), &blob) == 1)
+		return blob;
+
+	string repopath = git_repository_path(repo); // FIXME - should be Unicode
+
+	for (auto& c : repopath) {
+		if (c == '/')
+			c = '\\';
+	}
+
+	filesystem::path tmpfile = repopath;
+	tmpfile /= "newblob";
+
+	unique_handle h{CreateFileW((WCHAR*)tmpfile.u16string().c_str(), FILE_WRITE_DATA | DELETE, 0, nullptr, CREATE_ALWAYS,
+								FILE_ATTRIBUTE_NORMAL, nullptr)};
+
+	if (h.get() == INVALID_HANDLE_VALUE)
+		throw runtime_error("CreateFile failed for " + tmpfile.string() + " (last error " + to_string(GetLastError()) + ")");
+
+	string header = "blob " + to_string(data.length());
+	header.push_back(0);
+
+	z_stream strm;
+	int err;
+	uint8_t zbuf[4096];
+	bool writing_header = true;
+
+	memset(&strm, 0, sizeof(strm));
+
+	err = deflateInit(&strm, Z_DEFAULT_COMPRESSION);
+	if (err != Z_OK)
+		throw runtime_error("deflateInit failed (error " + to_string(err) + ")");
+
+	strm.next_in = (unsigned char*)header.data();
+	strm.avail_in = (unsigned int)header.length();
+	strm.next_out = zbuf;
+	strm.avail_out = sizeof(zbuf);
+
+	do {
+		DWORD written;
+
+		err = deflate(&strm, writing_header ? Z_NO_FLUSH : Z_FINISH);
+
+		if (err != Z_OK && err != Z_STREAM_END) {
+			deflateEnd(&strm);
+			throw runtime_error("deflate returned " + to_string(err));
+		}
+
+		if (strm.avail_out != sizeof(zbuf)) {
+			if (!WriteFile(h.get(), zbuf, sizeof(zbuf) - strm.avail_out, &written, nullptr)) {
+				deflateEnd(&strm);
+				throw runtime_error("WriteFile failed for " + tmpfile.string() + " (last error " + to_string(GetLastError()) + ").");
+			}
+
+			strm.next_out = zbuf;
+			strm.avail_out = sizeof(zbuf);
+		}
+
+		if (strm.avail_in == 0) {
+			if (!writing_header)
+				break;
+
+			writing_header = false;
+			strm.next_in = (unsigned char*)data.data();
+			strm.avail_in = (unsigned int)data.length();
+		}
+	} while (err != Z_STREAM_END);
+
+	deflateEnd(&strm);
+
+	auto blobfile = get_object_filename(repopath, blob);
+
+	rename_open_file(h.get(), blobfile);
 
 	return blob;
 }

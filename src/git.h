@@ -1,9 +1,11 @@
 #pragma once
 
+#include <windows.h>
 #include <git2.h>
 #include <string>
 #include <list>
 #include <optional>
+#include <filesystem>
 #include <time.h>
 #include <tdscpp.h>
 
@@ -141,6 +143,20 @@ struct git_file {
 	std::string filename;
 	std::optional<std::string> data;
 };
+
+class handle_closer {
+public:
+	typedef HANDLE pointer;
+
+	void operator()(HANDLE h) {
+		if (h == INVALID_HANDLE_VALUE)
+			return;
+
+		CloseHandle(h);
+	}
+};
+
+typedef std::unique_ptr<HANDLE, handle_closer> unique_handle;
 
 void update_git(GitRepo& repo, const std::string& user, const std::string& email, const std::string& description,
 				std::list<git_file>& files, bool clear_all = false, const std::optional<tds::datetimeoffset>& dto = std::nullopt,

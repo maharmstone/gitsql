@@ -112,21 +112,6 @@ private:
 	std::string msg;
 };
 
-
-class handle_closer {
-public:
-	typedef HANDLE pointer;
-
-	void operator()(HANDLE h) {
-		if (h == INVALID_HANDLE_VALUE)
-			return;
-
-		CloseHandle(h);
-	}
-};
-
-typedef std::unique_ptr<HANDLE, handle_closer> unique_handle;
-
 // gitsql.cpp
 std::string object_perms(tds::tds& tds, int64_t id, const std::string& dbs, const std::string& name);
 
