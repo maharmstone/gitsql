@@ -227,24 +227,24 @@ static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string&
 
 	for (size_t i = 0; i < c; i++) {
 		GitTreeEntry gte(tree, i);
-		string name = gte.name();
+		string name = prefix + gte.name();
 
 		if (gte.type() == GIT_OBJ_TREE) {
 			GitTree subtree(repo, gte);
 
-			do_clear_all(repo, subtree, prefix + name + "/", files);
+			do_clear_all(repo, subtree, name + "/", files);
 		} else {
 			bool found = false;
 
 			for (auto& f : files) {
-				if (f.filename == prefix + name) {
+				if (f.filename == name) {
 					found = true;
 					break;
 				}
 			}
 
 			if (!found)
-				files.emplace_back(prefix + name, nullptr);
+				files.emplace_back(name, nullptr);
 		}
 	}
 }
