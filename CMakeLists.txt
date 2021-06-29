@@ -18,6 +18,8 @@ find_package(tdscpp REQUIRED)
 find_package(libgit2 REQUIRED)
 find_package(fmt REQUIRED)
 
+add_definitions(-DNOMINMAX)
+
 target_link_libraries(gitsql tdscpp)
 target_link_libraries(gitsql libgit2)
 target_link_libraries(gitsql wldap32)
