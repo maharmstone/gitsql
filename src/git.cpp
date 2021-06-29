@@ -306,7 +306,7 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 		do_clear_all(repo, parent_tree, "", files);
 
 	{
-		git_tree_update* upd = new git_tree_update[files.size()];
+		vector<git_tree_update> upd(files.size());
 		unsigned int nu = 0;
 
 		for (const auto& f : files) {
@@ -329,14 +329,10 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 			nu++;
 		}
 
-		if (nu == 0) {
-			delete[] upd;
+		if (nu == 0)
 			return;
-		}
 
-		oid = repo.tree_create_updated(parent_tree, nu, upd);
-
-		delete[] upd;
+		oid = repo.tree_create_updated(parent_tree, nu, upd.data());
 	}
 
 	GitTree tree(repo, oid);
