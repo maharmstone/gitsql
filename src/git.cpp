@@ -184,7 +184,7 @@ static void update_git_no_parent(GitRepo& repo, const GitSignature& sig, const s
 	GitTree empty_tree(repo, repo.index_tree_id());
 
 	{
-		git_tree_update* upd = new git_tree_update[files.size()];
+		vector<git_tree_update> upd(files.size());
 		unsigned int nu = 0;
 
 		for (const auto& f : files) {
@@ -198,14 +198,10 @@ static void update_git_no_parent(GitRepo& repo, const GitSignature& sig, const s
 			nu++;
 		}
 
-		if (nu == 0) {
-			delete[] upd;
+		if (nu == 0)
 			return;
-		}
 
-		oid = repo.tree_create_updated(empty_tree, nu, upd);
-
-		delete[] upd;
+		oid = repo.tree_create_updated(empty_tree, nu, upd.data());
 	}
 
 	GitTree tree(repo, oid);
