@@ -123,11 +123,11 @@ git_oid GitRepo::commit_create(const GitSignature& author, const GitSignature& c
 	return id;
 }
 
-git_oid GitRepo::blob_create_frombuffer(const string& data) {
+git_oid GitRepo::blob_create_frombuffer(const string_view& data) {
 	unsigned int ret;
 	git_oid blob;
 
-	if ((ret = git_blob_create_frombuffer(&blob, repo, data.c_str(), data.length())))
+	if ((ret = git_blob_create_frombuffer(&blob, repo, data.data(), data.length())))
 		throw_git_error(ret, "git_blob_create_frombuffer");
 
 	return blob;
