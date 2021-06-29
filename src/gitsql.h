@@ -5,6 +5,7 @@
 #include <span>
 #include <tdscpp.h>
 #include <fmt/format.h>
+#include <fmt/compile.h>
 
 class _formatted_error : public std::exception {
 public:
@@ -21,7 +22,7 @@ private:
 	std::string msg;
 };
 
-#define formatted_error(s, ...) _formatted_error(FMT_STRING(s), __VA_ARGS__)
+#define formatted_error(s, ...) _formatted_error(FMT_COMPILE(s), __VA_ARGS__)
 
 static __inline std::u16string utf8_to_utf16(const std::string_view& s) {
 	std::u16string ret;
