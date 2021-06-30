@@ -2,6 +2,7 @@
 #include <vector>
 #include <stdexcept>
 #include <iostream>
+#include <unordered_set>
 #include <zlib.h>
 #include "git.h"
 
@@ -340,7 +341,8 @@ static void update_git_no_parent(GitRepo& repo, const GitSignature& sig, const s
 	git_commit_free(commit);
 }
 
-static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string& prefix, list<git_file>& files) {
+static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string& prefix,
+						 list<git_file>& files, unordered_set<string>& filenames) {
 	auto c = tree.entrycount();
 
 	for (size_t i = 0; i < c; i++) {
@@ -350,19 +352,12 @@ static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string&
 		if (gte.type() == GIT_OBJECT_TREE) {
 			GitTree subtree(repo, gte);
 
-			do_clear_all(repo, subtree, name + "/", files);
+			do_clear_all(repo, subtree, name + "/", files, filenames);
 		} else {
-			bool found = false;
-
-			for (auto& f : files) {
-				if (f.filename == name) {
-					found = true;
-					break;
-				}
-			}
-
-			if (!found)
+			if (!filenames.contains(name)) {
 				files.emplace_back(name, nullptr);
+				filenames.emplace(name);
+			}
 		}
 	}
 }
@@ -421,8 +416,15 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 	GitTree parent_tree(parent);
 	git_oid oid;
 
-	if (clear_all)
-		do_clear_all(repo, parent_tree, "", files);
+	if (clear_all) {
+		unordered_set<string> filenames;
+
+		for (const auto& f : files) {
+			filenames.emplace(f.filename);
+		}
+
+		do_clear_all(repo, parent_tree, "", files, filenames);
+	}
 
 	{
 		vector<git_tree_update> upd(files.size());
