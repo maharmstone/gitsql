@@ -336,6 +336,7 @@ static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const stri
 	list<git_file> files;
 
 	git_libgit2_init();
+	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
 
 	if (!db.empty())
 		dbs = db + ".";
