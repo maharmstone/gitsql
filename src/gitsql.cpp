@@ -708,12 +708,8 @@ ORDER BY Git.id
 
 				while (!delete_commits.empty()) {
 					tds.run("DELETE FROM Restricted.Git WHERE id=?", delete_commits.front());
+					tds.run("DELETE FROM Restricted.GitFiles WHERE id=?", delete_commits.front());
 					delete_commits.pop_front();
-				}
-
-				while (!delete_files.empty()) {
-					tds.run("DELETE FROM Restricted.GitFiles WHERE file_id=?", delete_files.front());
-					delete_files.pop_front();
 				}
 
 				trans.commit();
