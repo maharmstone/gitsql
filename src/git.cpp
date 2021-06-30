@@ -237,10 +237,7 @@ git_oid GitRepo::blob_create_from_buffer(const string_view& data) {
 			strm.avail_out = sizeof(zbuf);
 		}
 
-		if (strm.avail_in == 0) {
-			if (!writing_header)
-				break;
-
+		if (strm.avail_in == 0 && writing_header) {
 			writing_header = false;
 			strm.next_in = (unsigned char*)data.data();
 			strm.avail_in = (unsigned int)data.length();
