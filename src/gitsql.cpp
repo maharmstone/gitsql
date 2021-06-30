@@ -594,6 +594,7 @@ static void flush_git(tds::tds& tds) {
 	vector<repo> repos;
 
 	git_libgit2_init();
+	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
 
 	tds.run("SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; DELETE FROM Restricted.Git WHERE (SELECT COUNT(*) FROM Restricted.GitFiles WHERE id = Git.id) = 0");
 
