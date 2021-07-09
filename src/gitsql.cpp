@@ -792,6 +792,23 @@ WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 		ddl = table_ddl(tds, id);
 	// FIXME - other types
 
+	replace_all(ddl, "\r\n", "\n");
+
+	if (!ddl.empty() && ddl.front() == '\n') {
+		auto pos = ddl.find_first_not_of("\n");
+
+		if (pos == string::npos)
+			ddl.clear();
+		else
+			ddl = ddl.substr(pos);
+	}
+
+	while (!ddl.empty() && (ddl.back() == '\n' || ddl.back() == ' ')) {
+		ddl.pop_back();
+	}
+
+	ddl += "\n";
+
 	if (has_perms)
 		ddl += object_perms(tds, id, "", brackets_escape(schema) + "." + brackets_escape(object));
 
