@@ -24,56 +24,6 @@ private:
 
 #define formatted_error(s, ...) _formatted_error(FMT_COMPILE(s), __VA_ARGS__)
 
-static __inline std::u16string utf8_to_utf16(const std::string_view& s) {
-	std::u16string ret;
-
-	if (s.empty())
-		return u"";
-
-	auto len = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.length(), nullptr, 0);
-
-	if (len == 0)
-		throw std::runtime_error("MultiByteToWideChar 1 failed.");
-
-	ret.resize(len);
-
-	len = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.length(), (wchar_t*)ret.data(), len);
-
-	if (len == 0)
-		throw std::runtime_error("MultiByteToWideChar 2 failed.");
-
-	return ret;
-}
-
-static __inline std::string utf16_to_utf8(const std::u16string_view& s) {
-#ifdef _WIN32
-	std::string ret;
-
-	if (s.empty())
-		return "";
-
-	auto len = WideCharToMultiByte(CP_UTF8, 0, (const wchar_t*)s.data(), (int)s.length(), nullptr, 0,
-								   nullptr, nullptr);
-
-	if (len == 0)
-		throw std::runtime_error("WideCharToMultiByte 1 failed.");
-
-	ret.resize(len);
-
-	len = WideCharToMultiByte(CP_UTF8, 0, (const wchar_t*)s.data(), (int)s.length(), ret.data(), len,
-							  nullptr, nullptr);
-
-	if (len == 0)
-		throw std::runtime_error("WideCharToMultiByte 2 failed.");
-
-	return ret;
-#else
-	wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
-
-	return convert.to_bytes(sv.data(), sv.data() + sv.length());
-#endif
-}
-
 class last_error : public std::exception {
 public:
 	last_error(const std::string_view& function, int le) {
@@ -91,7 +41,7 @@ public:
 						s.remove_suffix(1);
 					}
 
-					nice_msg = utf16_to_utf8(s);
+					nice_msg = tds::utf16_to_utf8(s);
 				} catch (...) {
 					LocalFree(fm);
 					throw;

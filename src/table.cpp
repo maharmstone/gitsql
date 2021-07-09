@@ -153,7 +153,7 @@ static string dump_table(tds::tds& tds, const string& escaped_name) {
 				if (!cols.empty())
 					cols += ", ";
 
-				cols += brackets_escape(utf16_to_utf8(col.name));
+				cols += brackets_escape(tds::utf16_to_utf8(col.name));
 			}
 		}
 

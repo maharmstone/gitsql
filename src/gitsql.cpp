@@ -870,12 +870,12 @@ int main(int argc, char** argv) {
 		auto db_username_env = get_environment_variable(u"DB_USERNAME");
 
 		if (db_username_env.has_value())
-			db_username = utf16_to_utf8(db_username_env.value());
+			db_username = tds::utf16_to_utf8(db_username_env.value());
 
 		auto db_password_env = get_environment_variable(u"DB_PASSWORD");
 
 		if (db_password_env.has_value())
-			db_password = utf16_to_utf8(db_password_env.value());
+			db_password = tds::utf16_to_utf8(db_password_env.value());
 
 		tds.reset(new tds::tds(db_server, db_username, db_password, db_app));
 
