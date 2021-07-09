@@ -780,11 +780,7 @@ static void write_table_ddl(tds::tds& tds, const string_view& schema, const stri
 
 	auto ddl = table_ddl(tds, id, true);
 
-	vector<std::byte> vec(ddl.length());
-
-	memcpy(vec.data(), ddl.data(), ddl.length());
-
-	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, vec);
+	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, tds::to_bytes(ddl));
 }
 
 static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
