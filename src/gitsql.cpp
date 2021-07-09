@@ -764,7 +764,7 @@ private:
 static void write_object_ddl(tds::tds& tds, const string_view& schema, const string_view& object, const string_view& bind_token,
 							 unsigned int commit_id, const string_view& filename) {
 	int64_t id;
-	string type;
+	string type, ddl;
 	bool has_perms;
 
 	tds::rpc r(tds, u"sp_bindsession", bind_token);
@@ -774,8 +774,10 @@ static void write_object_ddl(tds::tds& tds, const string_view& schema, const str
 	{
 		tds::query sq(tds, R"(SELECT objects.object_id,
 	objects.type,
-	CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END
+	CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END,
+	sql_modules.definition
 FROM sys.objects
+LEFT JOIN sys.sql_modules ON sql_modules.object_id = objects.object_id
 WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 
 		if (!sq.fetch_row())
@@ -784,15 +786,13 @@ WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 		id = (int64_t)sq[0];
 		type = (string)sq[1];
 		has_perms = (unsigned int)sq[2] != 0;
+		ddl = (string)sq[3];
 	}
 
-	string ddl;
-
-	if (type == "U") // table
+	if (type == "U" || type == "TT") // table
 		ddl = table_ddl(tds, id);
-	// FIXME - other types
-
-	replace_all(ddl, "\r\n", "\n");
+	else
+		replace_all(ddl, "\r\n", "\n");
 
 	if (!ddl.empty() && ddl.front() == '\n') {
 		auto pos = ddl.find_first_not_of("\n");
