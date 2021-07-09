@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include <zlib.h>
 #include "git.h"
+#include "gitsql.h"
 
 using namespace std;
 
@@ -139,7 +140,7 @@ static void rename_open_file(HANDLE h, const filesystem::path& fn) {
 	fri->FileName[dest.length()] = 0;
 
 	if (!SetFileInformationByHandle(h, FileRenameInfo, fri, (DWORD)buf.size()))
-		throw runtime_error("SetFileInformationByHandle failed (last error " + to_string(GetLastError()) + ")");
+		throw last_error("SetFileInformationByHandle", GetLastError());
 }
 
 static filesystem::path get_object_filename(const filesystem::path& repopath, const git_oid& oid) {
@@ -196,7 +197,7 @@ git_oid GitRepo::blob_create_from_buffer(const string_view& data) {
 								FILE_ATTRIBUTE_NORMAL, nullptr)};
 
 	if (h.get() == INVALID_HANDLE_VALUE)
-		throw runtime_error("CreateFile failed for " + tmpfile.string() + " (last error " + to_string(GetLastError()) + ")");
+		throw last_error("CreateFile(" + tmpfile.string() + ")", GetLastError());
 
 	string header = "blob " + to_string(data.length());
 	header.push_back(0);
@@ -230,7 +231,7 @@ git_oid GitRepo::blob_create_from_buffer(const string_view& data) {
 		if (strm.avail_out != sizeof(zbuf)) {
 			if (!WriteFile(h.get(), zbuf, sizeof(zbuf) - strm.avail_out, &written, nullptr)) {
 				deflateEnd(&strm);
-				throw runtime_error("WriteFile failed for " + tmpfile.string() + " (last error " + to_string(GetLastError()) + ").");
+				throw last_error("WriteFile(" + tmpfile.string() + ")", GetLastError());
 			}
 
 			strm.next_out = zbuf;
