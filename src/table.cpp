@@ -202,7 +202,7 @@ static string dump_table(tds::tds& tds, const string& escaped_name) {
 	return s;
 }
 
-string table_ddl(tds::tds& tds, int64_t id, bool include_perms) {
+string table_ddl(tds::tds& tds, int64_t id) {
 	int64_t seed_value, increment_value;
 	string table, schema, type;
 	vector<column> columns;
@@ -210,7 +210,7 @@ string table_ddl(tds::tds& tds, int64_t id, bool include_perms) {
 	vector<constraint> constraints;
 	vector<foreign_key> foreign_keys;
 	string escaped_name, ddl;
-	bool has_included_indices = false, fulldump = false, has_perms;
+	bool has_included_indices = false, fulldump = false;
 
 	{
 		tds::query sq(tds, R"(
@@ -218,8 +218,7 @@ SELECT objects.name,
 	schemas.name,
 	identity_columns.seed_value,
 	identity_columns.increment_value,
-	objects.type,
-	CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END
+	objects.type
 FROM sys.objects
 JOIN sys.schemas ON schemas.schema_id = objects.schema_id
 LEFT JOIN sys.identity_columns ON identity_columns.object_id = objects.object_id
@@ -234,7 +233,6 @@ WHERE objects.object_id = ?
 		seed_value = (int64_t)sq[2];
 		increment_value = (int64_t)sq[3];
 		type = (string)sq[4];
-		has_perms = (unsigned int)sq[5] != 0;
 	}
 
 	if (type == "TT") {
@@ -663,9 +661,6 @@ WHERE major_id = ? AND
 
 	if (fulldump)
 		ddl += "\n" + dump_table(tds, escaped_name);
-
-	if (has_perms && include_perms)
-		ddl += object_perms(tds, id, "", escaped_name);
 
 	return ddl;
 }

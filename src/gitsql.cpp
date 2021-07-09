@@ -435,7 +435,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 			filename += "types/";
 
 		if (obj.type == "U" || obj.type == "TT")
-			obj.def = table_ddl(tds, obj.id, false);
+			obj.def = table_ddl(tds, obj.id);
 
 		replace_all(obj.def, "\r\n", "\n");
 
@@ -761,24 +761,39 @@ private:
 #endif
 };
 
-static void write_table_ddl(tds::tds& tds, const string_view& schema, const string_view& table, const string_view& bind_token,
-							unsigned int commit_id, const string_view& filename) {
+static void write_object_ddl(tds::tds& tds, const string_view& schema, const string_view& object, const string_view& bind_token,
+							 unsigned int commit_id, const string_view& filename) {
 	int64_t id;
+	string type;
+	bool has_perms;
 
 	tds::rpc r(tds, u"sp_bindsession", bind_token);
 
 	while (r.fetch_row()) { } // wait for last packet
 
 	{
-		tds::query sq(tds, "SELECT object_id FROM sys.objects WHERE name = ? AND schema_id = SCHEMA_ID(?)", table, schema);
+		tds::query sq(tds, R"(SELECT objects.object_id,
+	objects.type,
+	CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END
+FROM sys.objects
+WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 
 		if (!sq.fetch_row())
-			throw formatted_error("Could not find object ID for table {}.{}.", schema, table);
+			throw formatted_error("Could not find ID for object {}.{}.", schema, object);
 
 		id = (int64_t)sq[0];
+		type = (string)sq[1];
+		has_perms = (unsigned int)sq[2] != 0;
 	}
 
-	auto ddl = table_ddl(tds, id, true);
+	string ddl;
+
+	if (type == "U") // table
+		ddl = table_ddl(tds, id);
+	// FIXME - other types
+
+	if (has_perms)
+		ddl += object_perms(tds, id, "", brackets_escape(schema) + "." + brackets_escape(object));
 
 	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, tds::to_bytes(ddl));
 }
@@ -886,18 +901,18 @@ int main(int argc, char** argv) {
 				lockfile lf;
 
 				flush_git(*tds);
-			} else if (cmd == "table") {
+			} else if (cmd == "object") {
 				if (argc < 8)
 					throw runtime_error("Too few arguments.");
 
 				// FIXME - also specify DB?
 				string schema = argv[3];
-				string table = argv[4];
+				string object = argv[4];
 				string bind_token = argv[5];
 				auto commit_id = stoi(argv[6]);
 				string filename = argv[7];
 
-				write_table_ddl(*tds, schema, table, bind_token, commit_id, filename);
+				write_object_ddl(*tds, schema, object, bind_token, commit_id, filename);
 			} else if (cmd == "dump") {
 				lockfile lf;
 
