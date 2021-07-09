@@ -934,8 +934,10 @@ int main(int argc, char** argv) {
 				lockfile lf;
 
 				dump_sql2(*tds, stoi(argv[3]));
-			} else
+			} else {
 				print_usage();
+				return 1;
+			}
 		}
 	} catch (const exception& e) {
 		fmt::print(stderr, "{}\n", e.what());
