@@ -773,7 +773,7 @@ static void write_object_ddl(tds::tds& tds, const string_view& schema, const str
 
 	{
 		tds::query sq(tds, R"(SELECT objects.object_id,
-	objects.type,
+	RTRIM(objects.type),
 	CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END,
 	sql_modules.definition
 FROM sys.objects
@@ -789,7 +789,7 @@ WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 		ddl = (string)sq[3];
 	}
 
-	if (type == "U" || type == "TT") // table
+	if (type == "U") // table
 		ddl = table_ddl(tds, id);
 	else
 		replace_all(ddl, "\r\n", "\n");
