@@ -349,7 +349,7 @@ COALESCE(table_types.name, objects.name),
 sql_modules.definition,
 RTRIM(objects.type),
 objects.object_id,
-CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END
+CASE WHEN EXISTS (SELECT * FROM )" + dbs + R"(sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END
 FROM )" + dbs + R"(sys.objects
 LEFT JOIN )" + dbs + R"(sys.sql_modules ON sql_modules.object_id = objects.object_id
 LEFT JOIN )" + dbs + R"(sys.table_types ON objects.type = 'TT' AND table_types.type_table_object_id = objects.object_id
