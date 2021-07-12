@@ -877,7 +877,7 @@ static optional<u16string> get_environment_variable(const u16string& name) {
 }
 
 static void print_usage() {
-	fmt::print(stderr, "Usage:\n    gitsql <server> flush\n    gitsql <server> table <schema> <table> <bind-token> <commit> <filename>\n    gitsql <server> dump <repo-id>\n");
+	fmt::print(stderr, "Usage:\n    gitsql <server> flush\n    gitsql <server> object <schema> <object> <bind-token> <commit> <filename>\n    gitsql <server> dump <repo-id>\n");
 }
 
 int main(int argc, char** argv) {
