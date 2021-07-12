@@ -761,15 +761,18 @@ private:
 #endif
 };
 
-static void write_object_ddl(tds::tds& tds, const string_view& schema, const string_view& object, const string_view& bind_token,
-							 unsigned int commit_id, const string_view& filename) {
+static void write_object_ddl(tds::tds& tds, const string_view& schema, const string_view& object,
+							 const optional<u16string>& bind_token, unsigned int commit_id,
+							 const string_view& filename) {
 	int64_t id;
 	string type, ddl;
 	bool has_perms;
 
-	tds::rpc r(tds, u"sp_bindsession", bind_token);
+	if (bind_token.has_value()) {
+		tds::rpc r(tds, u"sp_bindsession", bind_token.value());
 
-	while (r.fetch_row()) { } // wait for last packet
+		while (r.fetch_row()) { } // wait for last packet
+	}
 
 	{
 		tds::query sq(tds, R"(SELECT objects.object_id,
@@ -877,7 +880,7 @@ static optional<u16string> get_environment_variable(const u16string& name) {
 }
 
 static void print_usage() {
-	fmt::print(stderr, "Usage:\n    gitsql <server> flush\n    gitsql <server> object <schema> <object> <bind-token> <commit> <filename>\n    gitsql <server> dump <repo-id>\n");
+	fmt::print(stderr, "Usage:\n    gitsql <server> flush\n    gitsql <server> object <schema> <object> <commit> <filename>\n    gitsql <server> dump <repo-id>\n");
 }
 
 int main(int argc, char** argv) {
@@ -919,15 +922,16 @@ int main(int argc, char** argv) {
 
 				flush_git(*tds);
 			} else if (cmd == "object") {
-				if (argc < 8)
+				if (argc < 7)
 					throw runtime_error("Too few arguments.");
+
+				auto bind_token = get_environment_variable(u"DB_BIND_TOKEN");
 
 				// FIXME - also specify DB?
 				string schema = argv[3];
 				string object = argv[4];
-				string bind_token = argv[5];
-				auto commit_id = stoi(argv[6]);
-				string filename = argv[7];
+				auto commit_id = stoi(argv[5]);
+				string filename = argv[6];
 
 				write_object_ddl(*tds, schema, object, bind_token, commit_id, filename);
 			} else if (cmd == "dump") {
