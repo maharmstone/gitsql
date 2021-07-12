@@ -946,9 +946,20 @@ int main(int argc, char** argv) {
 
 				write_object_ddl(*tds, schema, object, bind_token, commit_id, filename);
 			} else if (cmd == "dump") {
+				int32_t repo_id;
+
+				{
+					string_view repo_id_str = argv[3];
+
+					auto [ptr, ec] = from_chars(repo_id_str.data(), repo_id_str.data() + repo_id_str.length(), repo_id);
+
+					if (ptr != repo_id_str.data() + repo_id_str.length())
+						throw formatted_error("Invalid repository ID \"{}\".", repo_id_str);
+				}
+
 				lockfile lf;
 
-				dump_sql2(*tds, stoi(argv[3]));
+				dump_sql2(*tds, repo_id);
 			} else {
 				print_usage();
 				return 1;
