@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <filesystem>
 #include <span>
+#include <charconv>
 #include <tdscpp.h>
 #include "git.h"
 #include "gitsql.h"
@@ -927,10 +928,20 @@ int main(int argc, char** argv) {
 
 				auto bind_token = get_environment_variable(u"DB_BIND_TOKEN");
 
+				int32_t commit_id;
+
+				{
+					string_view commit_id_str = argv[5];
+
+					auto [ptr, ec] = from_chars(commit_id_str.data(), commit_id_str.data() + commit_id_str.length(), commit_id);
+
+					if (ptr != commit_id_str.data() + commit_id_str.length())
+						throw formatted_error("Invalid commit ID \"{}\".", commit_id_str);
+				}
+
 				// FIXME - also specify DB?
 				string schema = argv[3];
 				string object = argv[4];
-				auto commit_id = stoi(argv[5]);
 				string filename = argv[6];
 
 				write_object_ddl(*tds, schema, object, bind_token, commit_id, filename);
