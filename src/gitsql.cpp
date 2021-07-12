@@ -881,27 +881,26 @@ static optional<u16string> get_environment_variable(const u16string& name) {
 }
 
 static void print_usage() {
-	fmt::print(stderr, "Usage:\n    gitsql <server> flush\n    gitsql <server> object <schema> <object> <commit> <filename>\n    gitsql <server> dump <repo-id>\n");
+	fmt::print(stderr, "Usage:\n    gitsql flush <server>\n    gitsql object <server> <schema> <object> <commit> <filename>\n    gitsql dump <server> <repo-id>\n");
 }
 
 int main(int argc, char** argv) {
 	unique_ptr<tds::tds> tds;
 
 	try {
-		string cmd;
-
-		if (argc < 2) {
+		if (argc < 3) {
 			print_usage();
 			return 1;
 		}
 
-		string db_server = argv[1];
+		string cmd = argv[1];
 
-		if (argc > 2)
-			cmd = argv[2];
-
-		if (cmd != "flush" && cmd != "table" && cmd != "dump" && argc < 4)
+		if (cmd != "flush" && cmd != "table" && cmd != "dump") {
+			print_usage();
 			return 1;
+		}
+
+		string db_server = argv[2];
 
 		auto db_username_env = get_environment_variable(u"DB_USERNAME");
 
