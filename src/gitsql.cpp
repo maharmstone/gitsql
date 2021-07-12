@@ -881,26 +881,31 @@ static optional<u16string> get_environment_variable(const u16string& name) {
 }
 
 static void print_usage() {
-	fmt::print(stderr, "Usage:\n    gitsql flush <server>\n    gitsql object <server> <schema> <object> <commit> <filename>\n    gitsql dump <server> <repo-id>\n");
+	fmt::print(stderr, "Usage:\n    gitsql flush\n    gitsql object <schema> <object> <commit> <filename>\n    gitsql dump <repo-id>\n");
 }
 
 int main(int argc, char** argv) {
 	unique_ptr<tds::tds> tds;
 
 	try {
-		if (argc < 3) {
+		if (argc < 2) {
 			print_usage();
 			return 1;
 		}
 
 		string cmd = argv[1];
 
-		if (cmd != "flush" && cmd != "table" && cmd != "dump") {
+		if (cmd != "flush" && cmd != "object" && cmd != "dump") {
 			print_usage();
 			return 1;
 		}
 
-		string db_server = argv[2];
+		auto db_server_env = get_environment_variable(u"DB_RMTSERVER");
+
+		if (!db_server_env.has_value())
+			throw runtime_error("Environment variable DB_RMTSERVER not set.");
+
+		auto db_server = tds::utf16_to_utf8(db_server_env.value());
 
 		auto db_username_env = get_environment_variable(u"DB_USERNAME");
 
@@ -916,53 +921,48 @@ int main(int argc, char** argv) {
 
 		string unixpath, def;
 
-		{
-			if (cmd == "flush") {
-				lockfile lf;
+		if (cmd == "flush") {
+			lockfile lf;
 
-				flush_git(*tds);
-			} else if (cmd == "object") {
-				if (argc < 7)
-					throw runtime_error("Too few arguments.");
+			flush_git(*tds);
+		} else if (cmd == "object") {
+			if (argc < 6)
+				throw runtime_error("Too few arguments.");
 
-				auto bind_token = get_environment_variable(u"DB_BIND_TOKEN");
+			auto bind_token = get_environment_variable(u"DB_BIND_TOKEN");
 
-				int32_t commit_id;
+			int32_t commit_id;
 
-				{
-					string_view commit_id_str = argv[5];
+			{
+				string_view commit_id_str = argv[4];
 
-					auto [ptr, ec] = from_chars(commit_id_str.data(), commit_id_str.data() + commit_id_str.length(), commit_id);
+				auto [ptr, ec] = from_chars(commit_id_str.data(), commit_id_str.data() + commit_id_str.length(), commit_id);
 
-					if (ptr != commit_id_str.data() + commit_id_str.length())
-						throw formatted_error("Invalid commit ID \"{}\".", commit_id_str);
-				}
-
-				// FIXME - also specify DB?
-				string schema = argv[3];
-				string object = argv[4];
-				string filename = argv[6];
-
-				write_object_ddl(*tds, schema, object, bind_token, commit_id, filename);
-			} else if (cmd == "dump") {
-				int32_t repo_id;
-
-				{
-					string_view repo_id_str = argv[3];
-
-					auto [ptr, ec] = from_chars(repo_id_str.data(), repo_id_str.data() + repo_id_str.length(), repo_id);
-
-					if (ptr != repo_id_str.data() + repo_id_str.length())
-						throw formatted_error("Invalid repository ID \"{}\".", repo_id_str);
-				}
-
-				lockfile lf;
-
-				dump_sql2(*tds, repo_id);
-			} else {
-				print_usage();
-				return 1;
+				if (ptr != commit_id_str.data() + commit_id_str.length())
+					throw formatted_error("Invalid commit ID \"{}\".", commit_id_str);
 			}
+
+			// FIXME - also specify DB?
+			string schema = argv[2];
+			string object = argv[3];
+			string filename = argv[5];
+
+			write_object_ddl(*tds, schema, object, bind_token, commit_id, filename);
+		} else if (cmd == "dump") {
+			int32_t repo_id;
+
+			{
+				string_view repo_id_str = argv[2];
+
+				auto [ptr, ec] = from_chars(repo_id_str.data(), repo_id_str.data() + repo_id_str.length(), repo_id);
+
+				if (ptr != repo_id_str.data() + repo_id_str.length())
+					throw formatted_error("Invalid repository ID \"{}\".", repo_id_str);
+			}
+
+			lockfile lf;
+
+			dump_sql2(*tds, repo_id);
 		}
 	} catch (const exception& e) {
 		fmt::print(stderr, "{}\n", e.what());
