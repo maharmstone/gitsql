@@ -770,7 +770,7 @@ static void write_object_ddl(tds::tds& tds, const string_view& schema, const str
 	bool has_perms;
 
 	if (bind_token.has_value()) {
-		tds::rpc r(tds, u"sp_bindsession", bind_token.value());
+		tds::rpc r(tds, u"sp_bindsession", tds::utf16_to_utf8(bind_token.value()));
 
 		while (r.fetch_row()) { } // wait for last packet
 	}
