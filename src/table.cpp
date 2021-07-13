@@ -239,7 +239,7 @@ WHERE objects.object_id = ?
 		tds::query sq(tds, "SELECT name, SCHEMA_NAME(schema_id) FROM sys.table_types WHERE type_table_object_id = ?", id);
 
 		if (!sq.fetch_row())
-			throw runtime_error("Could not find real name for table type "s + string(schema) + "."s + string(table) + "."s);
+			throw formatted_error("Could not find real name for table type {}.{}.", schema, table);
 
 		table = (string)sq[0];
 		schema = (string)sq[1];
@@ -282,6 +282,7 @@ ORDER BY columns.column_id
 
 		while (sq.fetch_row()) {
 			bool found = false;
+			auto col_id = (unsigned int)sq[4];
 
 			if ((string)sq[0] != last_name) {
 				last_name = (string)sq[0];
@@ -289,7 +290,7 @@ ORDER BY columns.column_id
 			}
 
 			for (const auto& col : columns) {
-				if (col.column_id == (unsigned int)sq[4]) {
+				if (col.column_id == col_id) {
 					indices.back().columns.emplace_back(col, (unsigned int)sq[5] != 0, (unsigned int)sq[6] != 0);
 					found = true;
 					break;
@@ -297,7 +298,7 @@ ORDER BY columns.column_id
 			}
 
 			if (!found)
-				throw runtime_error("Could not find column no. " + (string)sq[4] + ".");
+				throw formatted_error("Could not find column no. {}.", col_id);
 		}
 	}
 

@@ -211,7 +211,7 @@ git_oid GitRepo::blob_create_from_buffer(const string_view& data) {
 
 	err = deflateInit(&strm, Z_DEFAULT_COMPRESSION);
 	if (err != Z_OK)
-		throw runtime_error("deflateInit failed (error " + to_string(err) + ")");
+		throw formatted_error("deflateInit failed (error {})", err);
 
 	strm.next_in = (unsigned char*)header.data();
 	strm.avail_in = (unsigned int)header.length();
@@ -225,7 +225,7 @@ git_oid GitRepo::blob_create_from_buffer(const string_view& data) {
 
 		if (err != Z_OK && err != Z_STREAM_END) {
 			deflateEnd(&strm);
-			throw runtime_error("deflate returned " + to_string(err));
+			throw formatted_error("deflate returned {}", err);
 		}
 
 		if (strm.avail_out != sizeof(zbuf)) {
