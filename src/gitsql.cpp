@@ -919,8 +919,6 @@ int wmain(int argc, wchar_t* argv[]) {
 
 		tds.reset(new tds::tds(db_server, db_username, db_password, db_app));
 
-		string unixpath, def;
-
 		if (cmd == u"flush") {
 			lockfile lf;
 
