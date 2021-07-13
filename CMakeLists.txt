@@ -27,4 +27,5 @@ target_link_libraries(gitsql fmt::fmt-header-only)
 
 if(NOT MSVC)
 	target_compile_options(gitsql PUBLIC -Wall -Werror=cast-function-type -Wno-expansion-to-defined -Wunused-parameter -Wtype-limits -Wextra -Wconversion)
+	target_link_options(gitsql PUBLIC -municode)
 endif()

@@ -884,7 +884,7 @@ static void print_usage() {
 	fmt::print(stderr, "Usage:\n    gitsql flush\n    gitsql object <schema> <object> <commit> <filename>\n    gitsql dump <repo-id>\n");
 }
 
-int main(int argc, char** argv) {
+int wmain(int argc, wchar_t* argv[]) {
 	unique_ptr<tds::tds> tds;
 
 	try {
@@ -893,7 +893,7 @@ int main(int argc, char** argv) {
 			return 1;
 		}
 
-		string cmd = argv[1];
+		string cmd = tds::utf16_to_utf8(argv[1]);
 
 		if (cmd != "flush" && cmd != "object" && cmd != "dump") {
 			print_usage();
@@ -934,7 +934,7 @@ int main(int argc, char** argv) {
 			int32_t commit_id;
 
 			{
-				string_view commit_id_str = argv[4];
+				auto commit_id_str = tds::utf16_to_utf8(argv[4]);
 
 				auto [ptr, ec] = from_chars(commit_id_str.data(), commit_id_str.data() + commit_id_str.length(), commit_id);
 
@@ -943,16 +943,16 @@ int main(int argc, char** argv) {
 			}
 
 			// FIXME - also specify DB?
-			string schema = argv[2];
-			string object = argv[3];
-			string filename = argv[5];
+			string schema = tds::utf16_to_utf8(argv[2]);
+			string object = tds::utf16_to_utf8(argv[3]);
+			string filename = tds::utf16_to_utf8(argv[5]);
 
 			write_object_ddl(*tds, schema, object, bind_token, commit_id, filename);
 		} else if (cmd == "dump") {
 			int32_t repo_id;
 
 			{
-				string_view repo_id_str = argv[2];
+				string_view repo_id_str = tds::utf16_to_utf8(argv[2]);
 
 				auto [ptr, ec] = from_chars(repo_id_str.data(), repo_id_str.data() + repo_id_str.length(), repo_id);
 
