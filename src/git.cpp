@@ -9,21 +9,24 @@
 
 using namespace std;
 
-#ifdef _MSC_VER
-#define noret __declspec(noreturn)
-#else
-#define noret __attribute__((noreturn))
-#endif
+class git_exception : public exception {
+public:
+	git_exception(int error, const string_view& func) {
+		auto lg2err = git_error_last();
 
-noret
-static void throw_git_error(int error, const char* func) {
-	const git_error *lg2err;
+		if (lg2err && lg2err->message)
+			msg = string(func) + " failed (" + lg2err->message + ")";
+		else
+			msg = string(func) + " failed (error " + to_string(error) + ")";
+	}
 
-	if ((lg2err = git_error_last()) && lg2err->message)
-		throw runtime_error(string(func) + " failed (" + lg2err->message + ").");
+	const char* what() const noexcept {
+		return msg.c_str();
+	}
 
-	throw runtime_error(string(func) + " failed (error " + to_string(error) + ").");
-}
+private:
+	string msg;
+};
 
 static const auto jan1970 = chrono::duration_cast<chrono::seconds>(chrono::time_point{chrono::sys_days{1970y/chrono::January/1d}}.time_since_epoch());
 
@@ -35,10 +38,10 @@ GitSignature::GitSignature(const string& user, const string& email, const option
 		auto secs = chrono::duration_cast<chrono::seconds>(tp.time_since_epoch()) - jan1970;
 
 		if ((ret = git_signature_new(&sig, user.c_str(), email.c_str(), secs.count(), dto.value().offset)))
-			throw_git_error(ret, "git_signature_new");
+			throw git_exception(ret, "git_signature_new");
 	} else {
 		if ((ret = git_signature_now(&sig, user.c_str(), email.c_str())))
-			throw_git_error(ret, "git_signature_now");
+			throw git_exception(ret, "git_signature_now");
 	}
 }
 
@@ -50,21 +53,21 @@ GitTree::GitTree(const git_commit* commit) {
 	unsigned int ret;
 
 	if ((ret = git_commit_tree(&tree, commit)))
-		throw_git_error(ret, "git_commit_tree");
+		throw git_exception(ret, "git_commit_tree");
 }
 
 GitTree::GitTree(const GitRepo& repo, const git_oid& oid) {
 	unsigned int ret;
 
 	if ((ret = git_tree_lookup(&tree, repo, &oid)))
-		throw_git_error(ret, "git_tree_lookup");
+		throw git_exception(ret, "git_tree_lookup");
 }
 
 GitTree::GitTree(const GitRepo& repo, const GitTreeEntry& gte) {
 	unsigned int ret;
 
 	if ((ret = git_tree_entry_to_object((git_object**)&tree, repo, gte)))
-		throw_git_error(ret, "git_tree_entry_to_object");
+		throw git_exception(ret, "git_tree_entry_to_object");
 }
 
 GitTree::~GitTree() {
@@ -75,7 +78,7 @@ bool GitTree::entry_bypath(git_tree_entry** out, const string& path) {
 	int ret = git_tree_entry_bypath(out, tree, path.c_str());
 
 	if (ret != 0 && ret != GIT_ENOTFOUND)
-		throw_git_error(ret, "git_tree_entry_bypath");
+		throw git_exception(ret, "git_tree_entry_bypath");
 
 	return ret == 0;
 }
@@ -84,7 +87,7 @@ GitRepo::GitRepo(const string& dir) {
 	unsigned int ret;
 
 	if ((ret = git_repository_open(&repo, dir.c_str())))
-		throw_git_error(ret, "git_repository_open");
+		throw git_exception(ret, "git_repository_open");
 }
 
 GitRepo::~GitRepo() {
@@ -99,14 +102,14 @@ bool GitRepo::reference_name_to_id(git_oid* out, const string& name) {
 	else if (ret == GIT_ENOTFOUND)
 		return false;
 	else
-		throw_git_error(ret, "git_reference_name_to_id");
+		throw git_exception(ret, "git_reference_name_to_id");
 }
 
 void GitRepo::commit_lookup(git_commit** commit, const git_oid* oid) {
 	unsigned int ret;
 
 	if ((ret = git_commit_lookup(commit, repo, oid)))
-		throw_git_error(ret, "git_commit_lookup");
+		throw git_exception(ret, "git_commit_lookup");
 }
 
 git_oid GitRepo::commit_create(const GitSignature& author, const GitSignature& committer, const string& message, const GitTree& tree,
@@ -116,10 +119,10 @@ git_oid GitRepo::commit_create(const GitSignature& author, const GitSignature& c
 
 	if (parent) {
 		if ((ret = git_commit_create_v(&id, repo, nullptr, author, committer, nullptr, message.c_str(), tree, 1, parent)))
-			throw_git_error(ret, "git_commit_create_v");
+			throw git_exception(ret, "git_commit_create_v");
 	} else {
 		if ((ret = git_commit_create_v(&id, repo, nullptr, author, committer, nullptr, message.c_str(), tree, 0)))
-			throw_git_error(ret, "git_commit_create_v");
+			throw git_exception(ret, "git_commit_create_v");
 	}
 
 	return id;
@@ -169,13 +172,13 @@ git_oid GitRepo::blob_create_from_buffer(const string_view& data) {
 	unique_ptr<git_odb, decltype(&git_odb_free)> odb(nullptr, git_odb_free);
 
 	if ((ret = git_odb_hash(&blob, data.data(), data.length(), GIT_OBJECT_BLOB)))
-		throw_git_error(ret, "git_odb_hash");
+		throw git_exception(ret, "git_odb_hash");
 
 	{
 		git_odb* tmp;
 
 		if ((ret = git_repository_odb(&tmp, repo)))
-			throw_git_error(ret, "git_repository_odb");
+			throw git_exception(ret, "git_repository_odb");
 
 		odb.reset(tmp);
 	}
@@ -259,7 +262,7 @@ git_oid GitRepo::tree_create_updated(const GitTree& baseline, size_t nupdates, c
 	git_oid oid;
 
 	if ((ret = git_tree_create_updated(&oid, repo, baseline, nupdates, updates)))
-		throw_git_error(ret, "git_tree_create_updated");
+		throw git_exception(ret, "git_tree_create_updated");
 
 	return oid;
 }
@@ -268,7 +271,7 @@ GitDiff::GitDiff(const GitRepo& repo, const GitTree& old_tree, const GitTree& ne
 	unsigned int ret;
 
 	if ((ret = git_diff_tree_to_tree(&diff, repo, old_tree, new_tree, opts)))
-		throw_git_error(ret, "git_diff_tree_to_tree");
+		throw git_exception(ret, "git_diff_tree_to_tree");
 }
 
 GitDiff::~GitDiff() {
@@ -285,14 +288,12 @@ git_oid GitRepo::index_tree_id() const {
 	git_oid tree_id;
 
 	if ((ret = git_repository_index(&index, repo)))
-		throw_git_error(ret, "git_repository_index");
+		throw git_exception(ret, "git_repository_index");
 
-	try {
-		if ((ret = git_index_write_tree(&tree_id, index)))
-			throw_git_error(ret, "git_index_write_tree");
-	} catch (...) {
+	if ((ret = git_index_write_tree(&tree_id, index))) {
+		auto exc = git_exception(ret, "git_index_write_tree");
 		git_index_free(index);
-		throw;
+		throw exc;
 	}
 
 	git_index_free(index);
@@ -366,7 +367,7 @@ git_reference* GitRepo::branch_lookup(const std::string& branch_name, git_branch
 	auto ret = git_branch_lookup(&ref, repo, branch_name.c_str(), branch_type);
 
 	if (ret && ret != GIT_ENOTFOUND)
-		throw_git_error(ret, "git_branch_lookup");
+		throw git_exception(ret, "git_branch_lookup");
 
 	return !ret ? ref : nullptr;
 }
@@ -377,7 +378,7 @@ void GitRepo::branch_create(const string& branch_name, const git_commit* target,
 	auto ret = git_branch_create(&ref, repo, branch_name.c_str(), target, force ? 1 : 0);
 
 	if (ret)
-		throw_git_error(ret, "git_branch_create");
+		throw git_exception(ret, "git_branch_create");
 
 	if (ref)
 		git_reference_free(ref);
@@ -389,7 +390,7 @@ void GitRepo::reference_create(const string& name, const git_oid& id, bool force
 	auto ret = git_reference_create(&ref, repo, name.c_str(), &id, force ? 1 : 0, log_message.c_str());
 
 	if (ret)
-		throw_git_error(ret, "git_reference_create");
+		throw git_exception(ret, "git_reference_create");
 
 	if (ref)
 		git_reference_free(ref);
@@ -476,7 +477,7 @@ GitIndex::GitIndex(const GitRepo& repo) {
 	unsigned int ret;
 
 	if ((ret = git_repository_index(&index, repo)))
-		throw_git_error(ret, "git_repository_index");
+		throw git_exception(ret, "git_repository_index");
 }
 
 GitIndex::~GitIndex() {
@@ -487,28 +488,28 @@ void GitIndex::write_tree(git_oid* oid) {
 	unsigned int ret;
 
 	if ((ret = git_index_write_tree(oid, index)))
-		throw_git_error(ret, "git_index_write_tree");
+		throw git_exception(ret, "git_index_write_tree");
 }
 
 void GitIndex::add_bypath(const string& fn) {
 	unsigned int ret;
 
 	if ((ret = git_index_add_bypath(index, fn.c_str())))
-		throw_git_error(ret, "git_index_add_bypath");
+		throw git_exception(ret, "git_index_add_bypath");
 }
 
 void GitIndex::remove_bypath(const string& fn) {
 	unsigned int ret;
 
 	if ((ret = git_index_remove_bypath(index, fn.c_str())))
-		throw_git_error(ret, "git_index_remove_bypath");
+		throw git_exception(ret, "git_index_remove_bypath");
 }
 
 void GitIndex::clear() {
 	unsigned int ret;
 
 	if ((ret = git_index_clear(index)))
-		throw_git_error(ret, "git_index_clear");
+		throw git_exception(ret, "git_index_clear");
 }
 
 size_t GitTree::entrycount() const {
@@ -534,14 +535,14 @@ GitTree::GitTree(const GitRepo& repo, const string& rev) {
 	unsigned int ret;
 
 	if ((ret = git_revparse_single((git_object**)&tree, repo, rev.c_str())))
-		throw_git_error(ret, "git_revparse_single");
+		throw git_exception(ret, "git_revparse_single");
 }
 
 GitBlob::GitBlob(const GitTree& tree, const string& path) {
 	unsigned int ret;
 
 	if ((ret = git_object_lookup_bypath(&obj, (git_object*)(git_tree*)tree, path.c_str(), GIT_OBJECT_BLOB)))
-		throw_git_error(ret, "git_object_lookup_bypath");
+		throw git_exception(ret, "git_object_lookup_bypath");
 }
 
 GitBlob::~GitBlob() {
@@ -556,7 +557,7 @@ void GitRepo::checkout_head(const git_checkout_options* opts) {
 	unsigned int ret;
 
 	if ((ret = git_checkout_head(repo, opts)))
-		throw_git_error(ret, "git_checkout_head");
+		throw git_exception(ret, "git_checkout_head");
 }
 
 bool GitRepo::branch_is_head(const std::string& name) {
@@ -565,13 +566,14 @@ bool GitRepo::branch_is_head(const std::string& name) {
 
 	ret = git_reference_lookup(&ref, repo, ("refs/heads/" + name).c_str());
 	if (ret)
-		throw_git_error(ret, "git_reference_lookup");
+		throw git_exception(ret, "git_reference_lookup");
 
 	ret = git_branch_is_head(ref);
 
 	if (ret < 0) {
-		git_reference_free(ref); // FIXME - will this overwrite error?
-		throw_git_error(ret, "git_branch_is_head");
+		auto exc = git_exception(ret, "git_branch_is_head");
+		git_reference_free(ref);
+		throw exc;
 	}
 
 	git_reference_free(ref);
