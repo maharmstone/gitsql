@@ -226,7 +226,7 @@ WHERE objects.object_id = ?
 )", id);
 
 		if (!sq.fetch_row())
-			throw runtime_error("Cannot find object ID for "s + string(schema) + "."s + string(table) + "."s);
+			throw formatted_error("Cannot find name for object ID {}.", id);
 
 		table = (string)sq[0];
 		schema = (string)sq[1];
