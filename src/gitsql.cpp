@@ -762,9 +762,9 @@ private:
 #endif
 };
 
-static void write_object_ddl(tds::tds& tds, const string_view& schema, const string_view& object,
+static void write_object_ddl(tds::tds& tds, const u16string_view& schema, const u16string_view& object,
 							 const optional<u16string>& bind_token, unsigned int commit_id,
-							 const string_view& filename) {
+							 const u16string_view& filename) {
 	int64_t id;
 	string type, ddl;
 	bool has_perms;
@@ -814,7 +814,7 @@ WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 	ddl += "\n";
 
 	if (has_perms)
-		ddl += object_perms(tds, id, "", brackets_escape(schema) + "." + brackets_escape(object));
+		ddl += object_perms(tds, id, "", brackets_escape(tds::utf16_to_utf8(schema)) + "." + brackets_escape(tds::utf16_to_utf8(object)));
 
 	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, tds::to_bytes(ddl));
 }
@@ -893,9 +893,9 @@ int wmain(int argc, wchar_t* argv[]) {
 			return 1;
 		}
 
-		string cmd = tds::utf16_to_utf8(argv[1]);
+		u16string_view cmd = (char16_t*)argv[1];
 
-		if (cmd != "flush" && cmd != "object" && cmd != "dump") {
+		if (cmd != u"flush" && cmd != u"object" && cmd != u"dump") {
 			print_usage();
 			return 1;
 		}
@@ -921,11 +921,11 @@ int wmain(int argc, wchar_t* argv[]) {
 
 		string unixpath, def;
 
-		if (cmd == "flush") {
+		if (cmd == u"flush") {
 			lockfile lf;
 
 			flush_git(*tds);
-		} else if (cmd == "object") {
+		} else if (cmd == u"object") {
 			if (argc < 6)
 				throw runtime_error("Too few arguments.");
 
@@ -943,16 +943,16 @@ int wmain(int argc, wchar_t* argv[]) {
 			}
 
 			// FIXME - also specify DB?
-			string schema = tds::utf16_to_utf8(argv[2]);
-			string object = tds::utf16_to_utf8(argv[3]);
-			string filename = tds::utf16_to_utf8(argv[5]);
+			u16string_view schema = (char16_t*)argv[2];
+			u16string_view object = (char16_t*)argv[3];
+			u16string_view filename = (char16_t*)argv[5];
 
 			write_object_ddl(*tds, schema, object, bind_token, commit_id, filename);
-		} else if (cmd == "dump") {
+		} else if (cmd == u"dump") {
 			int32_t repo_id;
 
 			{
-				string_view repo_id_str = tds::utf16_to_utf8(argv[2]);
+				auto repo_id_str = tds::utf16_to_utf8(argv[2]);
 
 				auto [ptr, ec] = from_chars(repo_id_str.data(), repo_id_str.data() + repo_id_str.length(), repo_id);
 
