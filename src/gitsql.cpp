@@ -793,7 +793,7 @@ LEFT JOIN sys.sql_modules ON sql_modules.object_id = objects.object_id
 WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 
 		if (!sq.fetch_row())
-			throw formatted_error("Could not find ID for object {}.{}.", schema, object);
+			throw formatted_error("Could not find ID for object {}.{}.", tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object));
 
 		id = (int64_t)sq[0];
 		type = (string)sq[1];
