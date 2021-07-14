@@ -835,25 +835,19 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 	}
 
 	if (server.empty()) {
-		string old_db;
+		auto old_db = tds::utf16_to_utf8(tds.db_name());
 
-		{
-			tds::query sq(tds, "SELECT DB_NAME()");
+		if (db != old_db)
+			tds.run("USE " + brackets_escape(db));
 
-			if (!sq.fetch_row())
-				throw runtime_error("Could not get current database name.");
-
-			old_db = (string)sq[0];
-		}
-
-		tds.run("USE [" + db + "]");
 		dump_sql(tds, repo_dir, db, branch.empty() ? "master" : branch);
 
-		tds.run("USE [" + old_db + "]");
+		if (db != old_db)
+			tds.run("USE " + brackets_escape(old_db));
 	} else {
 		tds::tds tds2(server, db_username, db_password, db_app);
 
-		tds2.run("USE [" + db + "]");
+		tds2.run("USE " + brackets_escape(db));
 		dump_sql(tds2, repo_dir, db, branch.empty() ? "master" : branch);
 	}
 }
