@@ -64,6 +64,7 @@ private:
 
 // gitsql.cpp
 std::string object_perms(tds::tds& tds, int64_t id, const std::string& dbs, const std::string& name);
+void replace_all(std::string& source, const std::string& from, const std::string& to);
 
 // table.cpp
 std::string table_ddl(tds::tds& tds, int64_t id);
