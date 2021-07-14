@@ -764,15 +764,23 @@ private:
 
 static void write_object_ddl(tds::tds& tds, const u16string_view& schema, const u16string_view& object,
 							 const optional<u16string>& bind_token, unsigned int commit_id,
-							 const u16string_view& filename) {
+							 const u16string_view& filename, const u16string_view& db) {
 	int64_t id;
 	string type, ddl;
 	bool has_perms;
+	u16string old_db;
 
 	if (bind_token.has_value()) {
 		tds::rpc r(tds, u"sp_bindsession", tds::utf16_to_utf8(bind_token.value()));
 
 		while (r.fetch_row()) { } // wait for last packet
+	}
+
+	if (!db.empty()) {
+		old_db = tds.db_name();
+
+		if (db != old_db)
+			tds.run(u"USE " + brackets_escape(db));
 	}
 
 	{
@@ -815,6 +823,9 @@ WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 
 	if (has_perms)
 		ddl += object_perms(tds, id, "", brackets_escape(tds::utf16_to_utf8(schema)) + "." + brackets_escape(tds::utf16_to_utf8(object)));
+
+	if (!db.empty() && db != old_db)
+		tds.run(u"USE " + brackets_escape(old_db));
 
 	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, tds::to_bytes(ddl));
 }
@@ -875,7 +886,7 @@ static optional<u16string> get_environment_variable(const u16string& name) {
 }
 
 static void print_usage() {
-	fmt::print(stderr, "Usage:\n    gitsql flush\n    gitsql object <schema> <object> <commit> <filename>\n    gitsql dump <repo-id>\n");
+	fmt::print(stderr, "Usage:\n    gitsql flush\n    gitsql object <schema> <object> <commit> <filename> [database]\n    gitsql dump <repo-id>\n");
 }
 
 int wmain(int argc, wchar_t* argv[]) {
@@ -934,12 +945,12 @@ int wmain(int argc, wchar_t* argv[]) {
 					throw formatted_error("Invalid commit ID \"{}\".", commit_id_str);
 			}
 
-			// FIXME - also specify DB?
 			u16string_view schema = (char16_t*)argv[2];
 			u16string_view object = (char16_t*)argv[3];
 			u16string_view filename = (char16_t*)argv[5];
+			u16string_view db = argc >= 7 ? (char16_t*)argv[6] : u"";
 
-			write_object_ddl(*tds, schema, object, bind_token, commit_id, filename);
+			write_object_ddl(*tds, schema, object, bind_token, commit_id, filename, db);
 		} else if (cmd == u"dump") {
 			int32_t repo_id;
 

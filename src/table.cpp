@@ -16,27 +16,42 @@ using namespace std;
 
 static const vector<string_view> reserved_words{"ADD", "ALL", "ALTER", "AND", "ANY", "AS", "ASC", "AUTHORIZATION", "BACKUP", "BEGIN", "BETWEEN", "BREAK", "BROWSE", "BULK", "BY", "CASCADE", "CASE", "CHECK", "CHECKPOINT", "CLOSE", "CLUSTERED", "COALESCE", "COLLATE", "COLUMN", "COMMIT", "COMPUTE", "CONSTRAINT", "CONTAINS", "CONTAINSTABLE", "CONTINUE", "CONVERT", "CREATE", "CROSS", "CURRENT", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "CURRENT_USER", "CURSOR", "DATABASE", "DBCC", "DEALLOCATE", "DECLARE", "DEFAULT", "DELETE", "DENY", "DESC", "DISTINCT", "DISTRIBUTED", "DOUBLE", "DROP", "ELSE", "END", "ERRLVL", "ESCAPE", "EXCEPT", "EXEC", "EXECUTE", "EXISTS", "EXIT", "EXTERNAL", "FETCH", "FILE", "FILLFACTOR", "FOR", "FOREIGN", "FREETEXT", "FREETEXTTABLE", "FROM", "FULL", "FUNCTION", "GOTO", "GRANT", "GROUP", "HAVING", "HOLDLOCK", "IDENTITY", "IDENTITY_INSERT", "IDENTITYCOL", "IF", "IN", "INDEX", "INNER", "INSERT", "INTERSECT", "INTO", "IS", "JOIN", "KEY", "KILL", "LEFT", "LIKE", "LINENO", "MERGE", "NATIONAL", "NOCHECK", "NONCLUSTERED", "NOT", "SQL_NULL", "NULLIF", "OF", "OFF", "OFFSETS", "ON", "OPEN", "OPENDATASOURCE", "OPENQUERY", "OPENROWSET", "OPENXML", "OPTION", "OR", "ORDER", "OUTER", "OVER", "PERCENT", "PIVOT", "PLAN", "PRIMARY", "PRINT", "PROC", "PROCEDURE", "PUBLIC", "RAISERROR", "READ", "READTEXT", "RECONFIGURE", "REFERENCES", "REPLICATION", "RESTORE", "RESTRICT", "RETURN", "REVERT", "REVOKE", "RIGHT", "ROLLBACK", "ROWCOUNT", "ROWGUIDCOL", "RULE", "SAVE", "SCHEMA", "SELECT", "SEMANTICKEYPHRASETABLE", "SEMANTICSIMILARITYDETAILSTABLE", "SEMANTICSIMILARITYTABLE", "SESSION_USER", "SET", "SETUSER", "SHUTDOWN", "SOME", "STATISTICS", "SYSTEM_USER", "TABLE", "TABLESAMPLE", "TEXTSIZE", "THEN", "TO", "TOP", "TRAN", "TRANSACTION", "TRIGGER", "TRUNCATE", "TRY_CONVERT", "TSEQUAL", "UNION", "UNIQUE", "UNPIVOT", "UPDATE", "UPDATETEXT", "USE", "USER", "VALUES", "VARYING", "VIEW", "WAITFOR", "WHEN", "WHERE", "WHILE", "WITH", "WRITETEXT"};
 
-static bool is_reserved_word(string s) {
+static const vector<u16string_view> reserved_words16{u"ADD", u"ALL", u"ALTER", u"AND", u"ANY", u"AS", u"ASC", u"AUTHORIZATION", u"BACKUP", u"BEGIN", u"BETWEEN", u"BREAK", u"BROWSE", u"BULK", u"BY", u"CASCADE", u"CASE", u"CHECK", u"CHECKPOINT", u"CLOSE", u"CLUSTERED", u"COALESCE", u"COLLATE", u"COLUMN", u"COMMIT", u"COMPUTE", u"CONSTRAINT", u"CONTAINS", u"CONTAINSTABLE", u"CONTINUE", u"CONVERT", u"CREATE", u"CROSS", u"CURRENT", u"CURRENT_DATE", u"CURRENT_TIME", u"CURRENT_TIMESTAMP", u"CURRENT_USER", u"CURSOR", u"DATABASE", u"DBCC", u"DEALLOCATE", u"DECLARE", u"DEFAULT", u"DELETE", u"DENY", u"DESC", u"DISTINCT", u"DISTRIBUTED", u"DOUBLE", u"DROP", u"ELSE", u"END", u"ERRLVL", u"ESCAPE", u"EXCEPT", u"EXEC", u"EXECUTE", u"EXISTS", u"EXIT", u"EXTERNAL", u"FETCH", u"FILE", u"FILLFACTOR", u"FOR", u"FOREIGN", u"FREETEXT", u"FREETEXTTABLE", u"FROM", u"FULL", u"FUNCTION", u"GOTO", u"GRANT", u"GROUP", u"HAVING", u"HOLDLOCK", u"IDENTITY", u"IDENTITY_INSERT", u"IDENTITYCOL", u"IF", u"IN", u"INDEX", u"INNER", u"INSERT", u"INTERSECT", u"INTO", u"IS", u"JOIN", u"KEY", u"KILL", u"LEFT", u"LIKE", u"LINENO", u"MERGE", u"NATIONAL", u"NOCHECK", u"NONCLUSTERED", u"NOT", u"SQL_NULL", u"NULLIF", u"OF", u"OFF", u"OFFSETS", u"ON", u"OPEN", u"OPENDATASOURCE", u"OPENQUERY", u"OPENROWSET", u"OPENXML", u"OPTION", u"OR", u"ORDER", u"OUTER", u"OVER", u"PERCENT", u"PIVOT", u"PLAN", u"PRIMARY", u"PRINT", u"PROC", u"PROCEDURE", u"PUBLIC", u"RAISERROR", u"READ", u"READTEXT", u"RECONFIGURE", u"REFERENCES", u"REPLICATION", u"RESTORE", u"RESTRICT", u"RETURN", u"REVERT", u"REVOKE", u"RIGHT", u"ROLLBACK", u"ROWCOUNT", u"ROWGUIDCOL", u"RULE", u"SAVE", u"SCHEMA", u"SELECT", u"SEMANTICKEYPHRASETABLE", u"SEMANTICSIMILARITYDETAILSTABLE", u"SEMANTICSIMILARITYTABLE", u"SESSION_USER", u"SET", u"SETUSER", u"SHUTDOWN", u"SOME", u"STATISTICS", u"SYSTEM_USER", u"TABLE", u"TABLESAMPLE", u"TEXTSIZE", u"THEN", u"TO", u"TOP", u"TRAN", u"TRANSACTION", u"TRIGGER", u"TRUNCATE", u"TRY_CONVERT", u"TSEQUAL", u"UNION", u"UNIQUE", u"UNPIVOT", u"UPDATE", u"UPDATETEXT", u"USE", u"USER", u"VALUES", u"VARYING", u"VIEW", u"WAITFOR", u"WHEN", u"WHERE", u"WHILE", u"WITH", u"WRITETEXT"};
+
+template<typename T>
+static bool is_reserved_word(const basic_string_view<T>& sv) {
+	auto s = basic_string<T>(sv);
+
 	for (auto& c : s) {
 		if (c >= 'a' && c <= 'z')
 			c += 'A' - 'a';
+		else if (c < 'A' || c > 'Z')
+			return false;
 	}
 
-	for (const auto& w : reserved_words) {
-		if (w == s)
-			return true;
+	if constexpr (is_same_v<T, char>) {
+		for (const auto& w : reserved_words) {
+			if (w == s)
+				return true;
+		}
+	} else if constexpr (is_same_v<T, char16_t>) {
+		for (const auto& w : reserved_words16) {
+			if (w == s)
+				return true;
+		}
 	}
 
 	return false;
 }
 
-static bool need_escaping(const string_view& s) {
+template<typename T>
+static bool need_escaping(const basic_string_view<T>& s) {
 	// see https://docs.microsoft.com/en-us/previous-versions/sql/sql-server-2008-r2/ms175874(v=sql.105)
 
 	if (s.empty())
 		return true;
 
-	for (const auto& c : s) {
+	for (auto c : s) {
 		if ((c < 'A' || c > 'Z') && (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' && c != '@' && c != '#' && c != '$')
 			return true;
 	}
@@ -46,27 +61,38 @@ static bool need_escaping(const string_view& s) {
 	if ((s.front() >= '0' && s.front() <= '9') || s.front() == '$')
 		return true;
 
-	return is_reserved_word(string(s));
+	return is_reserved_word(s);
+}
+
+template<typename T>
+static basic_string<T> brackets_escape2(const basic_string_view<T>& s) {
+	basic_string<T> ret;
+
+	if (!need_escaping(s))
+		return basic_string<T>(s);
+
+	ret.reserve(s.length() + 2);
+	ret.push_back('[');
+
+	for (auto c : s) {
+		if (c == ']') {
+			ret.push_back(']');
+			ret.push_back(']');
+		} else
+			ret.push_back(c);
+	}
+
+	ret.push_back(']');
+
+	return ret;
 }
 
 string brackets_escape(const string_view& s) {
-	string ret;
+	return brackets_escape2(s);
+}
 
-	if (!need_escaping(s))
-		return string(s);
-
-	ret = "[";
-
-	for (const auto& c : s) {
-		if (c == ']')
-			ret += "]]";
-		else
-			ret += c;
-	}
-
-	ret += "]";
-
-	return ret;
+u16string brackets_escape(const u16string_view& s) {
+	return brackets_escape2(s);
 }
 
 struct column {

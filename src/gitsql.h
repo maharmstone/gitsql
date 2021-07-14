@@ -69,6 +69,7 @@ void replace_all(std::string& source, const std::string& from, const std::string
 // table.cpp
 std::string table_ddl(tds::tds& tds, int64_t id);
 std::string brackets_escape(const std::string_view& s);
+std::u16string brackets_escape(const std::u16string_view& s);
 
 // ldap.cpp
 void get_ldap_details_from_sid(PSID sid, std::string& name, std::string& email);
