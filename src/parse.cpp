@@ -249,7 +249,8 @@ static enum sql_word identify_word(const string_view& s) {
 		return sql_word::RAISERROR;
 	else if (s == "READ")
 		return sql_word::READ;
-	else if (s == "READTEXT")
+
+	if (s == "READTEXT")
 		return sql_word::READTEXT;
 	else if (s == "RECONFIGURE")
 		return sql_word::RECONFIGURE;
