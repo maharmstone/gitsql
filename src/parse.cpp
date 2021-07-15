@@ -628,3 +628,22 @@ static pair<enum sql_word, string_view> next_word(const string_view& sv) {
 
 	return {w, word};
 }
+
+static string_view strip_preamble(string_view& sv) {
+	auto s = sv;
+
+	while (!s.empty()) {
+		auto w = next_word(s);
+
+		if (w.first != sql_word::comment && w.first != sql_word::whitespace)
+			break;
+
+		s = s.substr(w.second.length());
+	}
+
+	auto preamble = sv.substr(0, sv.length() - s.length());
+
+	sv = s;
+
+	return preamble;
+}
