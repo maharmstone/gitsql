@@ -647,3 +647,87 @@ static string_view strip_preamble(string_view& sv) {
 
 	return preamble;
 }
+
+static void skip_whitespace(string_view& sv) {
+	if (sv.empty())
+		return;
+
+	do {
+		auto w = next_word(sv);
+
+		if (w.first != sql_word::whitespace && w.first != sql_word::comment)
+			break;
+
+		sv = sv.substr(w.second.length());
+	} while (true);
+}
+
+string munge_definition(const string_view& sql, const string_view& schema, const string_view& name) {
+	auto sv = sql;
+
+	strip_preamble(sv);
+
+	if (sv.empty())
+		return string{sql};
+
+	auto w = next_word(sv);
+
+	if (w.first != sql_word::CREATE)
+		return string{sql};
+
+	auto create = w.second;
+	sv = sv.substr(w.second.length());
+
+	skip_whitespace(sv);
+
+	if (sv.empty())
+		return string{sql};
+
+	w = next_word(sv);
+
+	if (w.first != sql_word::PROCEDURE)
+		return string{sql};
+
+	sv = sv.substr(w.second.length());
+
+	skip_whitespace(sv);
+
+	if (sv.empty())
+		return string{sql};
+
+	w = next_word(sv);
+
+	if (w.first != sql_word::identifier)
+		return string{sql};
+
+	sv = sv.substr(w.second.length());
+
+	skip_whitespace(sv);
+
+	if (!sv.empty()) {
+		w = next_word(sv);
+
+		if (w.first == sql_word::full_stop) {
+			sv = sv.substr(w.second.length());
+			skip_whitespace(sv);
+
+			if (!sv.empty()) {
+				w = next_word(sv);
+
+				if (w.first == sql_word::identifier) {
+					sv = sv.substr(w.second.length());
+				}
+			}
+		}
+	}
+
+	string sql2{string_view(sql).substr(0, create.data() - sql.data())};
+
+	sql2.append("CREATE OR ALTER PROCEDURE ");
+	sql2.append(brackets_escape(schema));
+	sql2.append(".");
+	sql2.append(brackets_escape(name));
+	sql2.append(sv);
+
+	return sql2;
+}

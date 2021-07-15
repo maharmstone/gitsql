@@ -675,4 +675,4 @@ std::u16string brackets_escape(const std::u16string_view& s);
 void get_ldap_details_from_sid(PSID sid, std::string& name, std::string& email);
 
 // parse.cpp
-void test_parse();
+std::string munge_definition(const std::string_view& sql, const std::string_view& schema, const std::string_view& name);
