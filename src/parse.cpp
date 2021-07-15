@@ -703,23 +703,32 @@ string munge_definition(const string_view& sql, const string_view& schema, const
 
 	sv = sv.substr(w.second.length());
 
-	skip_whitespace(sv);
+	{
+		auto sv2 = sv;
+		bool two_part = false;
 
-	if (!sv.empty()) {
-		w = next_word(sv);
+		skip_whitespace(sv);
 
-		if (w.first == sql_word::full_stop) {
-			sv = sv.substr(w.second.length());
-			skip_whitespace(sv);
+		if (!sv.empty()) {
+			w = next_word(sv);
 
-			if (!sv.empty()) {
-				w = next_word(sv);
+			if (w.first == sql_word::full_stop) {
+				sv = sv.substr(w.second.length());
+				skip_whitespace(sv);
 
-				if (w.first == sql_word::identifier) {
-					sv = sv.substr(w.second.length());
+				if (!sv.empty()) {
+					w = next_word(sv);
+
+					if (w.first == sql_word::identifier) {
+						sv = sv.substr(w.second.length());
+						two_part = true;
+					}
 				}
 			}
 		}
+
+		if (!two_part)
+			sv = sv2;
 	}
 
 	string sql2{string_view(sql).substr(0, create.data() - sql.data())};
