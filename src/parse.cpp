@@ -363,86 +363,109 @@ static enum sql_word identify_word(const string_view& s) {
 	return sql_word::identifier;
 }
 
-static enum sql_word next_word(string_view& sv) {
+static pair<enum sql_word, string_view> next_word(const string_view& sv) {
 	if (sv.empty())
-		return sql_word::whitespace;
+		return {sql_word::whitespace, ""};
+
+	enum sql_word w;
+	string_view word;
 
 	switch (sv.front()) {
 		case ' ':
 		case '\t':
 		case '\r':
 		case '\n':
-			sv = sv.substr(1);
+			word = sv;
 
-			while (!sv.empty() && (sv.front() == ' ' || sv.front() == '\t' || sv.front() == '\r' || sv.front() == '\n')) {
-				sv = sv.substr(1);
+			for (size_t i = 1; i < word.length(); i++) {
+				if (word[i] != ' ' && word[i] != '\t' && word[i] != '\r' && word[i] != '\n') {
+					word = word.substr(0, i);
+					break;
+				}
 			}
 
-			return sql_word::whitespace;
+			w = sql_word::whitespace;
+			break;
 
 		case '(':
-			sv = sv.substr(1);
-			return sql_word::open_bracket;
+			word = sv.substr(0, 1);
+			w = sql_word::open_bracket;
+			break;
 
 		case ')':
-			sv = sv.substr(1);
-			return sql_word::close_bracket;
+			word = sv.substr(0, 1);
+			w = sql_word::close_bracket;
+			break;
 
 		case ',':
-			sv = sv.substr(1);
-			return sql_word::comma;
+			word = sv.substr(0, 1);
+			w = sql_word::comma;
+			break;
 
 		case ';':
-			sv = sv.substr(1);
-			return sql_word::semicolon;
+			word = sv.substr(0, 1);
+			w = sql_word::semicolon;
+			break;
 
 		case '.':
-			sv = sv.substr(1);
-			return sql_word::full_stop;
+			word = sv.substr(0, 1);
+			w = sql_word::full_stop;
+			break;
 
 		case '-':
-			if (sv.length() >= 2 && sv[1] == '-') {
-				sv = sv.substr(2);
+			word = sv;
 
-				while (!sv.empty() && sv.front() != '\n') {
-					sv = sv.substr(1);
+			if (sv.length() >= 2 && sv[1] == '-') {
+				for (size_t i = 2; i < word.length(); i++) {
+					if (word[i] == '\n') {
+						word = word.substr(0, i);
+						break;
+					}
 				}
 
-				return sql_word::comment;
+				w = sql_word::comment;
+				break;
 			}
 
-			sv = sv.substr(1);
-			return sql_word::minus;
+			word = sv.substr(0, 1);
+			w = sql_word::minus;
+			break;
 
 		case '/':
 			if (sv.length() >= 2 && sv[1] == '*') {
 				unsigned int level = 1;
 
-				sv = sv.substr(2);
+				word = sv;
 
-				while (!sv.empty()) {
-					if (sv.length() >= 2 && sv[0] == '/' && sv[1] == '*') {
-						level++;
-						sv = sv.substr(2);
-					} else if (sv.length() >= 2 && sv[0] == '*' && sv[1] == '/') {
-						level--;
-						sv = sv.substr(2);
+				for (size_t i = 2; i < word.length(); i++) {
+					if (i < word.length() - 1) {
+						if (word[i] == '/' && word[i + 1] == '*') {
+							level++;
+							i++;
+						} else if (word[i] == '*' && word[i + 1] == '/') {
+							level--;
+							i++;
 
-						if (level == 0)
-							return sql_word::comment;
-					} else
-						sv = sv.substr(1);
+							if (level == 0) {
+								word = word.substr(0, i + 1);
+								break;
+							}
+						}
+					}
 				}
 
-				return sql_word::comment;
+				w = sql_word::comment;
+				break;
 			}
 
-			sv = sv.substr(1);
-			return sql_word::slash;
+			word = sv.substr(0, 1);
+			w = sql_word::slash;
+			break;
 
 		case '=':
-			sv = sv.substr(1);
-			return sql_word::equals;
+			word = sv.substr(0, 1);
+			w = sql_word::equals;
+			break;
 
 		case 'A':
 		case 'B':
@@ -499,8 +522,9 @@ static enum sql_word next_word(string_view& sv) {
 		case '_':
 		case '@':
 		case '#': {
-			auto word = sv;
 			bool uc = true, non_letter = false;
+
+			word = sv;
 
 			// can't have number or dollar sign at beginning
 
@@ -518,13 +542,13 @@ static enum sql_word next_word(string_view& sv) {
 				}
 			}
 
-			sv = sv.substr(word.length());
-
-			if (non_letter)
-				return sql_word::identifier;
+			if (non_letter) {
+				w = sql_word::identifier;
+				break;
+			}
 
 			if (uc)
-				return identify_word(word);
+				w = identify_word(word);
 			else {
 				string s(word.length(), 0);
 
@@ -535,8 +559,10 @@ static enum sql_word next_word(string_view& sv) {
 						s[i] = word[i] + 'A' - 'a';
 				}
 
-				return identify_word(s);
+				w = identify_word(s);
 			}
+
+			break;
 		}
 
 		case '0':
@@ -549,50 +575,56 @@ static enum sql_word next_word(string_view& sv) {
 		case '7':
 		case '8':
 		case '9':
-			sv = sv.substr(1);
+			word = sv;
 
-			while (!sv.empty() && (sv.front() >= '0' && sv.front() <= '9')) {
-				sv = sv.substr(1);
+			for (size_t i = 1; i < word.length(); i++) {
+				if (word[i] < '0' || word[i] > '9') {
+					word = word.substr(0, i);
+					break;
+				}
 			}
 
-			return sql_word::number;
+			w = sql_word::number;
+			break;
 
 		case '\'':
-			sv = sv.substr(1);
+			word = sv;
 
-			while (!sv.empty()) {
-				if (sv.front() == '\'') {
-					if (sv.length() >= 2 && sv[1] == '\'')
-						sv = sv.substr(2);
+			for (size_t i = 1; i < word.length(); i++) {
+				if (word[i] == '\'') {
+					if (i < word.length() - 1 && word[i + 1] == '\'')
+						i++;
 					else {
-						sv = sv.substr(1);
-						return sql_word::string;
+						word = word.substr(0, i + 1);
+						break;
 					}
-				} else
-					sv = sv.substr(1);
+				}
 			}
 
-			return sql_word::string;
+			w = sql_word::string;
+			break;
 
 		case '[':
-			sv = sv.substr(1);
+			word = sv;
 
-			while (!sv.empty()) {
-				if (sv.front() == ']') {
-					if (sv.length() >= 2 && sv[1] == ']')
-						sv = sv.substr(2);
+			for (size_t i = 1; i < word.length(); i++) {
+				if (word[i] == ']') {
+					if (i < word.length() - 1 && word[i + 1] == ']')
+						i++;
 					else {
-						sv = sv.substr(1);
-						return sql_word::identifier;
+						word = word.substr(0, i + 1);
+						break;
 					}
-				} else
-					sv = sv.substr(1);
+				}
 			}
 
-			return sql_word::identifier;
+			w = sql_word::identifier;
+			break;
+
+		default:
+			word = sv;
+			w = sql_word::unknown;
 	}
 
-	sv = "";
-
-	return sql_word::unknown;
+	return {w, word};
 }
