@@ -437,8 +437,10 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 
 		if (obj.type == "U" || obj.type == "TT")
 			obj.def = table_ddl(tds, obj.id);
+		else if (obj.type == "V")
+			obj.def = munge_definition(obj.def, obj.schema, obj.name, sql_word::VIEW);
 		else if (obj.type == "P")
-			obj.def = munge_definition(obj.def, obj.schema, obj.name);
+			obj.def = munge_definition(obj.def, obj.schema, obj.name, sql_word::PROCEDURE);
 
 		replace_all(obj.def, "\r\n", "\n");
 
@@ -806,8 +808,10 @@ WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 	if (type == "U") // table
 		ddl = table_ddl(tds, id);
 	else {
-		if (type == "P")
-			ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object));
+		if (type == "V")
+			ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), sql_word::VIEW);
+		else if (type == "P")
+			ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), sql_word::PROCEDURE);
 
 		replace_all(ddl, "\r\n", "\n");
 	}

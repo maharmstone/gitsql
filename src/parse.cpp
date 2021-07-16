@@ -663,7 +663,8 @@ static void skip_whitespace(string_view& sv) {
 	} while (true);
 }
 
-string munge_definition(const string_view& sql, const string_view& schema, const string_view& name) {
+string munge_definition(const string_view& sql, const string_view& schema, const string_view& name,
+						enum sql_word type) {
 	auto sv = sql;
 
 	strip_preamble(sv);
@@ -686,7 +687,7 @@ string munge_definition(const string_view& sql, const string_view& schema, const
 
 	w = next_word(sv);
 
-	if (w.first != sql_word::PROCEDURE)
+	if (w.first != type)
 		return string{sql};
 
 	sv = sv.substr(w.second.length());
@@ -733,7 +734,11 @@ string munge_definition(const string_view& sql, const string_view& schema, const
 
 	string sql2{string_view(sql).substr(0, create.data() - sql.data())};
 
-	sql2.append("CREATE OR ALTER PROCEDURE ");
+	if (type == sql_word::PROCEDURE)
+		sql2.append("CREATE OR ALTER PROCEDURE ");
+	else if (type == sql_word::VIEW)
+		sql2.append("CREATE OR ALTER VIEW ");
+
 	sql2.append(brackets_escape(schema));
 	sql2.append(".");
 	sql2.append(brackets_escape(name));
