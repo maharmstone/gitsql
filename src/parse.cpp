@@ -738,6 +738,8 @@ string munge_definition(const string_view& sql, const string_view& schema, const
 		sql2.append("CREATE OR ALTER PROCEDURE ");
 	else if (type == sql_word::VIEW)
 		sql2.append("CREATE OR ALTER VIEW ");
+	else if (type == sql_word::FUNCTION)
+		sql2.append("CREATE OR ALTER FUNCTION ");
 
 	sql2.append(brackets_escape(schema));
 	sql2.append(".");
