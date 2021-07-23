@@ -154,6 +154,24 @@ struct foreign_key {
 	vector<foreign_key_column> cols;
 };
 
+static void replace_all(string& source, const string& from, const string& to) {
+	string new_string;
+	new_string.reserve(source.length());
+
+	string::size_type last_pos = 0;
+	string::size_type find_pos;
+
+	while ((find_pos = source.find(from, last_pos)) != string::npos) {
+		new_string.append(source, last_pos, find_pos - last_pos);
+		new_string += to;
+		last_pos = find_pos + from.length();
+	}
+
+	new_string += source.substr(last_pos);
+
+	source.swap(new_string);
+}
+
 static string quote_escape(string s) {
 	replace_all(s, "'", "''");
 
