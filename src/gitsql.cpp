@@ -23,7 +23,6 @@ using namespace std;
 string db_username, db_password;
 const string db_app = "GitSQL";
 
-void replace_all(string& source, const string& from, const string& to);
 static void get_current_user_details(string& name, string& email);
 
 // strip out characters that NTFS doesn't like
@@ -332,6 +331,32 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 	return "GO\n\n" + grant_string(perms, name);
 }
 
+void replace_all(string& source, const string& from, const string& to) {
+	string new_string;
+	new_string.reserve(source.length());
+
+	string::size_type last_pos = 0;
+	string::size_type find_pos;
+
+	while ((find_pos = source.find(from, last_pos)) != string::npos) {
+		new_string.append(source, last_pos, find_pos - last_pos);
+		new_string += to;
+		last_pos = find_pos + from.length();
+	}
+
+	new_string += source.substr(last_pos);
+
+	source.swap(new_string);
+}
+
+static string fix_whitespace(const string_view& sv) {
+	string s{sv};
+
+	replace_all(s, "\r\n", "\n");
+
+	return s;
+}
+
 static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db, const string& branch) {
 	string s, dbs;
 	list<git_file> files;
@@ -444,7 +469,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 		else if (obj.type == "FN" || obj.type == "TF" || obj.type == "IF")
 			obj.def = munge_definition(obj.def, obj.schema, obj.name, sql_word::FUNCTION);
 
-		replace_all(obj.def, "\r\n", "\n");
+		obj.def = fix_whitespace(obj.def);
 
 		if (!obj.def.empty() && obj.def[0] == '\n') {
 			auto pos = obj.def.find_first_not_of("\n");
@@ -484,25 +509,6 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 
 		repo.checkout_head(&opts);
 	}
-}
-
-// taken from Stack Overflow: https://stackoverflow.com/questions/2896600/how-to-replace-all-occurrences-of-a-character-in-string
-void replace_all(string& source, const string& from, const string& to) {
-	string new_string;
-	new_string.reserve(source.length());
-
-	string::size_type last_pos = 0;
-	string::size_type find_pos;
-
-	while((find_pos = source.find(from, last_pos)) != string::npos) {
-		new_string.append(source, last_pos, find_pos - last_pos);
-		new_string += to;
-		last_pos = find_pos + from.length();
-	}
-
-	new_string += source.substr(last_pos);
-
-	source.swap(new_string);
 }
 
 static void get_user_details(const string& username, string& name, string& email) {
@@ -817,7 +823,7 @@ WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 		else if (type == "FN" || type == "TF" || type == "IF")
 			ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), sql_word::FUNCTION);
 
-		replace_all(ddl, "\r\n", "\n");
+		ddl = fix_whitespace(ddl);
 	}
 
 	if (!ddl.empty() && ddl.front() == '\n') {
