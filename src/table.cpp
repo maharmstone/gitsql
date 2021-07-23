@@ -154,7 +154,7 @@ struct foreign_key {
 	vector<foreign_key_column> cols;
 };
 
-static void replace_all(string& source, const string& from, const string& to) {
+static void replace_all(string& source, const string_view& from, const string_view& to) {
 	string new_string;
 	new_string.reserve(source.length());
 
