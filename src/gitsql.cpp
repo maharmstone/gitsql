@@ -349,10 +349,30 @@ void replace_all(string& source, const string& from, const string& to) {
 	source.swap(new_string);
 }
 
-static string fix_whitespace(const string_view& sv) {
-	string s{sv};
+static string fix_whitespace(string_view sv) {
+	string s;
 
-	replace_all(s, "\r\n", "\n");
+	s.reserve(sv.length());
+
+	do {
+		auto nl = sv.find('\n');
+
+		if (nl == string::npos) {
+			s += sv;
+			return s;
+		}
+
+		auto line = sv.substr(0, nl);
+
+		while (!line.empty() && (line.back() == '\t' || line.back() == '\r' || line.back() == ' ')) {
+			line.remove_suffix(1);
+		}
+
+		s += line;
+		s += "\n";
+
+		sv = sv.substr(nl + 1);
+	} while (true);
 
 	return s;
 }
