@@ -539,7 +539,13 @@ static void get_user_details(const string& username, string& name, string& email
 
 	if (email.empty()) {
 		domain[domainlen] = 0;
-		email = username + "@"s + domain;
+
+		auto bs = username.find("\\");
+
+		if (bs == string::npos)
+			email = username + "@"s + domain;
+		else
+			email = username.substr(bs + 1) + "@"s + domain;
 	}
 }
 
