@@ -34,7 +34,7 @@ GitSignature::GitSignature(const string& user, const string& email, const option
 	unsigned int ret;
 
 	if (dto.has_value()) {
-		auto tp = (chrono::time_point<chrono::system_clock>)dto.value() + chrono::minutes{dto.value().offset};
+		auto tp = (chrono::time_point<chrono::system_clock>)dto.value();
 		auto secs = chrono::duration_cast<chrono::seconds>(tp.time_since_epoch()) - jan1970;
 
 		if ((ret = git_signature_new(&sig, user.c_str(), email.c_str(), secs.count(), dto.value().offset)))
