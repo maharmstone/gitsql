@@ -28,7 +28,7 @@ private:
 	string msg;
 };
 
-static const auto jan1970 = chrono::duration_cast<chrono::seconds>(chrono::time_point{chrono::sys_days{1970y/chrono::January/1d}}.time_since_epoch());
+static constexpr auto jan1970 = chrono::duration_cast<chrono::seconds>(chrono::time_point{chrono::sys_days{1970y/chrono::January/1d}}.time_since_epoch());
 
 GitSignature::GitSignature(const string& user, const string& email, const optional<tds::datetimeoffset>& dto) {
 	unsigned int ret;
