@@ -513,17 +513,18 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 	}
 }
 
-static void get_user_details(const string& username, string& name, string& email) {
+static void get_user_details(const u16string& username, string& name, string& email) {
 	array<std::byte, 68> sid;
 	auto sidlen = (DWORD)sid.size();
-	char domain[100];
-	DWORD domainlen = sizeof(domain);
+	char16_t domain[100];
+	DWORD domainlen = sizeof(domain) / sizeof(domain[0]);
 	SID_NAME_USE use;
+	auto u8username = tds::utf16_to_utf8(username);
 
-	if (!LookupAccountNameA(nullptr, username.c_str(), sid.data(), &sidlen,
-							domain, &domainlen, &use)) {
-		name = username;
-		email = username + "@localhost"s;
+	if (!LookupAccountNameW(nullptr, (WCHAR*)username.c_str(), sid.data(), &sidlen,
+							(WCHAR*)domain, &domainlen, &use)) {
+		name = u8username;
+		email = u8username + "@localhost"s;
 		return;
 	}
 
@@ -531,21 +532,21 @@ static void get_user_details(const string& username, string& name, string& email
 		get_ldap_details_from_sid(sid.data(), name, email);
 
 		if (name.empty())
-			name = username;
+			name = u8username;
 	} catch (...) {
-		name = username;
-		email = "";
+		name = u8username;
+		email.clear();
 	}
 
 	if (email.empty()) {
 		domain[domainlen] = 0;
 
-		auto bs = username.find("\\");
+		auto bs = u8username.find("\\");
 
 		if (bs == string::npos)
-			email = username + "@"s + domain;
+			email = u8username + "@"s + tds::utf16_to_utf8(domain);
 		else
-			email = username.substr(bs + 1) + "@"s + domain;
+			email = u8username.substr(bs + 1) + "@"s + tds::utf16_to_utf8(domain);
 	}
 }
 
@@ -666,7 +667,7 @@ ORDER BY Git.id
 					break;
 
 				auto commit = (unsigned int)sq[0];
-				auto username = (string)sq[1];
+				auto username = (u16string)sq[1];
 				description = (string)sq[2];
 				dto = (tds::datetimeoffset)sq[3];
 
