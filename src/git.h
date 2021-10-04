@@ -135,8 +135,8 @@ struct git_file {
 	git_file(const std::string& filename, const tds::value& data) : filename(filename) {
 		if (!data.is_null) {
 			this->data = "";
-			this->data.value().resize(data.val.length());
-			memcpy(this->data.value().data(), data.val.data(), data.val.length());
+			this->data.value().resize(data.val.size());
+			memcpy(this->data.value().data(), data.val.data(), data.val.size());
 		}
 	}
 
