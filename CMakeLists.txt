@@ -16,15 +16,21 @@ set(SRC_FILES
 add_executable(gitsql ${SRC_FILES})
 
 find_package(tdscpp REQUIRED)
-find_package(libgit2 REQUIRED)
 find_package(fmt REQUIRED)
+find_package(PkgConfig REQUIRED)
+find_package(ZLIB REQUIRED)
+
+pkg_check_modules(LIBGIT2 REQUIRED libgit2)
+
+target_include_directories(gitsql PUBLIC ${LIBGIT2_INCLUDE_DIRS})
+target_link_libraries(gitsql ${LIBGIT2_LINK_LIBRARIES})
 
 add_definitions(-DNOMINMAX)
 
 target_link_libraries(gitsql tdscpp)
-target_link_libraries(gitsql libgit2)
 target_link_libraries(gitsql wldap32)
 target_link_libraries(gitsql fmt::fmt-header-only)
+target_link_libraries(gitsql ZLIB::ZLIB)
 
 if(NOT MSVC)
 	target_compile_options(gitsql PUBLIC -Wall -Werror=cast-function-type -Wno-expansion-to-defined -Wunused-parameter -Wtype-limits -Wextra -Wconversion)
