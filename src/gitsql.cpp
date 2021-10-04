@@ -635,14 +635,12 @@ static void flush_git(tds::tds& tds) {
 		GitRepo repo(r.dir);
 
 		while (true) {
-			unsigned int commit;
 			tds::datetimeoffset dto;
-			string username, name, email, description;
+			string name, email, description;
 			list<git_file> files;
 			bool clear_all = false;
 			list<unsigned int> delete_commits;
 			list<unsigned int> delete_files;
-			bool merged_trans = false;
 
 			{
 				tds::trans trans(tds);
@@ -667,14 +665,16 @@ ORDER BY Git.id
 				if (!sq.fetch_row())
 					break;
 
-				commit = (unsigned int)sq[0];
-				username = (string)sq[1];
+				auto commit = (unsigned int)sq[0];
+				auto username = (string)sq[1];
 				description = (string)sq[2];
 				dto = (tds::datetimeoffset)sq[3];
 
 				get_user_details(username, name, email);
 
 				delete_commits.push_back(commit);
+
+				bool merged_trans = false;
 
 				do {
 					delete_files.push_back((unsigned int)sq[4]);
