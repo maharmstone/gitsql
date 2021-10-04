@@ -360,7 +360,7 @@ static string fix_whitespace(string_view sv) {
 }
 
 static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db, const string& branch) {
-	string s, dbs;
+	string dbs;
 	list<git_file> files;
 
 	git_libgit2_init();
