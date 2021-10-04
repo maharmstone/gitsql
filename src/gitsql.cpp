@@ -559,23 +559,28 @@ static unique_handle open_process_token(HANDLE process_handle, DWORD desired_acc
 	return unique_handle{h};
 }
 
-static void get_current_user_details(string& name, string& email) {
+static vector<uint8_t> get_token_information(HANDLE token, TOKEN_INFORMATION_CLASS token_information_class) {
 	DWORD retlen;
+
+	if (!GetTokenInformation(token, token_information_class, nullptr, 0, &retlen) && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+		throw last_error("GetTokenInformation", GetLastError());
+
+	vector<uint8_t> buf(retlen);
+
+	if (!GetTokenInformation(token, token_information_class, buf.data(), (DWORD)buf.size(), &retlen))
+		throw last_error("GetTokenInformation", GetLastError());
+
+	return buf;
+}
+
+static void get_current_user_details(string& name, string& email) {
 	auto token = open_process_token(GetCurrentProcess(), TOKEN_QUERY);
 
-	if (!GetTokenInformation(token.get(), TokenUser, nullptr, 0, &retlen) && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-		throw last_error("GetTokenInformation", GetLastError());
-
-	vector<uint8_t> buf;
-	buf.resize(retlen);
-
-	auto tu = (TOKEN_USER*)buf.data();
-
-	if (!GetTokenInformation(token.get(), TokenUser, tu, (DWORD)buf.size(), &retlen))
-		throw last_error("GetTokenInformation", GetLastError());
+	auto buf = get_token_information(token.get(), TokenUser);
+	auto& tu = *(TOKEN_USER*)buf.data();
 
 	try {
-		get_ldap_details_from_sid(tu->User.Sid, name, email);
+		get_ldap_details_from_sid(tu.User.Sid, name, email);
 	} catch (...) {
 		name = "";
 		email = "";
@@ -586,7 +591,7 @@ static void get_current_user_details(string& name, string& email) {
 		DWORD usernamelen = sizeof(username), domainlen = sizeof(domain);
 		SID_NAME_USE use;
 
-		if (!LookupAccountSidA(nullptr, tu->User.Sid, username, &usernamelen, domain,
+		if (!LookupAccountSidA(nullptr, tu.User.Sid, username, &usernamelen, domain,
 							   &domainlen, &use)) {
 			throw last_error("LookupAccountSid", GetLastError());
 		}
