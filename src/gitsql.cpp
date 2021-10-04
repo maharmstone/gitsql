@@ -550,18 +550,18 @@ static void get_user_details(const u16string& username, string& name, string& em
 	}
 }
 
+static unique_handle open_process_token(HANDLE process_handle, DWORD desired_access) {
+	HANDLE h;
+
+	if (!OpenProcessToken(process_handle, desired_access, &h))
+		throw last_error("OpenProcessToken", GetLastError());
+
+	return unique_handle{h};
+}
+
 static void get_current_user_details(string& name, string& email) {
-	unique_handle token;
 	DWORD retlen;
-
-	{
-		HANDLE h;
-
-		if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &h))
-			throw last_error("OpenProcessToken", GetLastError());
-
-		token.reset(h);
-	}
+	auto token = open_process_token(GetCurrentProcess(), TOKEN_QUERY);
 
 	if (!GetTokenInformation(token.get(), TokenUser, nullptr, 0, &retlen) && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
 		throw last_error("GetTokenInformation", GetLastError());
