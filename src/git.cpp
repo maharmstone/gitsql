@@ -335,7 +335,7 @@ static void update_git_no_parent(GitRepo& repo, const GitSignature& sig, const s
 
 	repo.commit_lookup(&commit, &commit_oid);
 
-	repo.branch_create(branch.empty() ? "master" : branch.c_str(), commit, true);
+	repo.branch_create(branch.empty() ? "master" : branch, commit, true);
 
 	git_commit_free(commit);
 }
