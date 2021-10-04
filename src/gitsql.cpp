@@ -582,29 +582,28 @@ static void get_current_user_details(string& name, string& email) {
 	try {
 		get_ldap_details_from_sid(tu.User.Sid, name, email);
 	} catch (...) {
-		name = "";
-		email = "";
+		name.clear();
+		email.clear();
 	}
 
 	if (name.empty() || email.empty()) {
-		char username[255], domain[255];
-		DWORD usernamelen = sizeof(username), domainlen = sizeof(domain);
+		array<char16_t, 255> username, domain;
+		DWORD usernamelen = username.size(), domainlen = domain.size();
 		SID_NAME_USE use;
 
-		if (!LookupAccountSidA(nullptr, tu.User.Sid, username, &usernamelen, domain,
+		if (!LookupAccountSidW(nullptr, tu.User.Sid, (WCHAR*)username.data(), &usernamelen, (WCHAR*)domain.data(),
 							   &domainlen, &use)) {
 			throw last_error("LookupAccountSid", GetLastError());
 		}
 
-		username[usernamelen] = 0;
+		auto usernamesv = u16string_view(username.data(), usernamelen);
+		auto domainsv = u16string_view(domain.data(), domainlen);
 
 		if (name.empty())
-			name = username;
+			name = tds::utf16_to_utf8(usernamesv);
 
-		if (email.empty()) {
-			domain[domainlen] = 0;
-			email = username + "@"s + domain;
-		}
+		if (email.empty())
+			email = tds::utf16_to_utf8(usernamesv) + "@"s + tds::utf16_to_utf8(domainsv);
 	}
 }
 
