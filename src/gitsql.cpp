@@ -787,26 +787,10 @@ private:
 #endif
 };
 
-static void write_object_ddl(tds::tds& tds, const u16string_view& schema, const u16string_view& object,
-							 const optional<u16string>& bind_token, unsigned int commit_id,
-							 const u16string_view& filename, const u16string_view& db) {
+static string object_ddl(tds::tds& tds, const u16string_view& schema, const u16string_view& object) {
 	int64_t id;
 	string type, ddl;
 	bool has_perms;
-	u16string old_db;
-
-	if (bind_token.has_value()) {
-		tds::rpc r(tds, u"sp_bindsession", tds::utf16_to_utf8(bind_token.value()));
-
-		while (r.fetch_row()) { } // wait for last packet
-	}
-
-	if (!db.empty()) {
-		old_db = tds.db_name();
-
-		if (db != old_db)
-			tds.run(u"USE " + brackets_escape(db));
-	}
 
 	{
 		tds::query sq(tds, R"(SELECT objects.object_id,
@@ -856,6 +840,29 @@ WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 
 	if (has_perms)
 		ddl += object_perms(tds, id, "", brackets_escape(tds::utf16_to_utf8(schema)) + "." + brackets_escape(tds::utf16_to_utf8(object)));
+
+	return ddl;
+}
+
+static void write_object_ddl(tds::tds& tds, const u16string_view& schema, const u16string_view& object,
+							 const optional<u16string>& bind_token, unsigned int commit_id,
+							 const u16string_view& filename, const u16string_view& db) {
+	u16string old_db;
+
+	if (bind_token.has_value()) {
+		tds::rpc r(tds, u"sp_bindsession", tds::utf16_to_utf8(bind_token.value()));
+
+		while (r.fetch_row()) { } // wait for last packet
+	}
+
+	if (!db.empty()) {
+		old_db = tds.db_name();
+
+		if (db != old_db)
+			tds.run(u"USE " + brackets_escape(db));
+	}
+
+	auto ddl = object_ddl(tds, schema, object);
 
 	if (!db.empty() && db != old_db)
 		tds.run(u"USE " + brackets_escape(old_db));
@@ -919,7 +926,12 @@ static optional<u16string> get_environment_variable(const u16string& name) {
 }
 
 static void print_usage() {
-	fmt::print(stderr, "Usage:\n    gitsql flush\n    gitsql object <schema> <object> <commit> <filename> [database]\n    gitsql dump <repo-id>\n");
+	fmt::print(stderr, R"(Usage:
+    gitsql flush
+    gitsql object <schema> <object> <commit> <filename> [database]
+    gitsql dump <repo-id>
+    gitsql show <schema> <object> [database]
+)");
 }
 
 int wmain(int argc, wchar_t* argv[]) {
@@ -933,7 +945,7 @@ int wmain(int argc, wchar_t* argv[]) {
 
 		u16string_view cmd = (char16_t*)argv[1];
 
-		if (cmd != u"flush" && cmd != u"object" && cmd != u"dump") {
+		if (cmd != u"flush" && cmd != u"object" && cmd != u"dump" && cmd != u"show") {
 			print_usage();
 			return 1;
 		}
@@ -1002,6 +1014,33 @@ int wmain(int argc, wchar_t* argv[]) {
 			lockfile lf;
 
 			dump_sql2(*tds, repo_id);
+		} else if (cmd == u"show") {
+			try {
+				if (argc < 4)
+					throw runtime_error("Too few arguments.");
+
+				auto bind_token = get_environment_variable(u"DB_BIND_TOKEN");
+
+				u16string_view schema = (char16_t*)argv[2];
+				u16string_view object = (char16_t*)argv[3];
+				u16string_view db = argc >= 5 ? (char16_t*)argv[4] : u"";
+
+				if (bind_token.has_value()) {
+					tds::rpc r(*tds, u"sp_bindsession", tds::utf16_to_utf8(bind_token.value()));
+
+					while (r.fetch_row()) { } // wait for last packet
+				}
+
+				if (!db.empty())
+					tds->run(u"USE " + brackets_escape(db));
+
+				auto ddl = object_ddl(*tds, schema, object);
+
+				fmt::print("{}", ddl);
+			} catch (...) {
+				tds.reset(); // make sure error not put into DB
+				throw;
+			}
 		}
 	} catch (const exception& e) {
 		fmt::print(stderr, "{}\n", e.what());
