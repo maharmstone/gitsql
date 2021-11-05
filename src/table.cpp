@@ -378,7 +378,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 		}
 	}
 
-	escaped_name = brackets_escape(schema) + "." + brackets_escape(table);
+	escaped_name = ((!table.empty() && table.front() == '#') ? "" : (brackets_escape(schema) + ".")) + brackets_escape(table);
 
 	if (type == "TT") {
 		ddl = "DROP TYPE IF EXISTS " + escaped_name + ";\n\n";

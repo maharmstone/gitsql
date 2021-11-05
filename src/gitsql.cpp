@@ -792,7 +792,17 @@ static string object_ddl(tds::tds& tds, const u16string_view& schema, const u16s
 	string type, ddl;
 	bool has_perms;
 
-	{
+	if (!object.empty() && object.front() == u'#') {
+		tds::query sq(tds, "SELECT OBJECT_ID(?)", u"tempdb.dbo." + u16string(object));
+
+		if (!sq.fetch_row())
+			throw formatted_error("Could not find ID for temporary table {}.", tds::utf16_to_utf8(object));
+
+		id = (int64_t)sq[0];
+		type = "U";
+		has_perms = false;
+		ddl = "";
+	} else {
 		tds::query sq(tds, R"(SELECT objects.object_id,
 	RTRIM(objects.type),
 	CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END,
@@ -1036,6 +1046,8 @@ int wmain(int argc, wchar_t* argv[]) {
 
 				if (!onp.db.empty())
 					tds->run(u"USE " + brackets_escape(onp.db));
+				else if (!onp.name.empty() && onp.name.front() == u'#')
+					tds->run(u"USE tempdb");
 
 				auto ddl = object_ddl(*tds, onp.schema, onp.name);
 
