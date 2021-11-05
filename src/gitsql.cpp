@@ -795,7 +795,7 @@ static string object_ddl(tds::tds& tds, const u16string_view& schema, const u16s
 	if (!object.empty() && object.front() == u'#') {
 		tds::query sq(tds, "SELECT OBJECT_ID(?)", u"tempdb.dbo." + u16string(object));
 
-		if (!sq.fetch_row())
+		if (!sq.fetch_row() || sq[0].is_null)
 			throw formatted_error("Could not find ID for temporary table {}.", tds::utf16_to_utf8(object));
 
 		id = (int64_t)sq[0];
