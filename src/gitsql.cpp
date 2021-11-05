@@ -930,7 +930,7 @@ static void print_usage() {
     gitsql flush
     gitsql object <schema> <object> <commit> <filename> [database]
     gitsql dump <repo-id>
-    gitsql show <schema> <object> [database]
+    gitsql show <object>
 )");
 }
 
@@ -1016,14 +1016,12 @@ int wmain(int argc, wchar_t* argv[]) {
 			dump_sql2(*tds, repo_id);
 		} else if (cmd == u"show") {
 			try {
-				if (argc < 4)
+				if (argc < 3)
 					throw runtime_error("Too few arguments.");
 
 				auto bind_token = get_environment_variable(u"DB_BIND_TOKEN");
 
-				u16string_view schema = (char16_t*)argv[2];
-				u16string_view object = (char16_t*)argv[3];
-				u16string_view db = argc >= 5 ? (char16_t*)argv[4] : u"";
+				u16string_view object = (char16_t*)argv[2];
 
 				if (bind_token.has_value()) {
 					tds::rpc r(*tds, u"sp_bindsession", tds::utf16_to_utf8(bind_token.value()));
@@ -1031,10 +1029,15 @@ int wmain(int argc, wchar_t* argv[]) {
 					while (r.fetch_row()) { } // wait for last packet
 				}
 
-				if (!db.empty())
-					tds->run(u"USE " + brackets_escape(db));
+				auto onp = tds::parse_object_name(object);
 
-				auto ddl = object_ddl(*tds, schema, object);
+				if (!onp.server.empty())
+					throw runtime_error("Cannot show definition of objects on remote servers.");
+
+				if (!onp.db.empty())
+					tds->run(u"USE " + brackets_escape(onp.db));
+
+				auto ddl = object_ddl(*tds, onp.schema, onp.name);
 
 				fmt::print("{}", ddl);
 			} catch (...) {
