@@ -961,14 +961,16 @@ int wmain(int argc, wchar_t* argv[]) {
 		}
 
 		auto db_server_env = get_environment_variable(u"DB_RMTSERVER");
+		string db_server;
 
 		if (!db_server_env.has_value())
-			throw runtime_error("Environment variable DB_RMTSERVER not set.");
+			db_server = "localhost"; // SQL Import Wizard doesn't provide DB_RMTSERVER
+		else {
+			db_server = tds::utf16_to_utf8(db_server_env.value());
 
-		auto db_server = tds::utf16_to_utf8(db_server_env.value());
-
-		if (db_server == "(local)") // SQL Agent does this
-			db_server = "localhost";
+			if (db_server == "(local)") // SQL Agent does this
+				db_server = "localhost";
+		}
 
 		auto db_username_env = get_environment_variable(u"DB_USERNAME");
 
