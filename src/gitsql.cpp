@@ -86,7 +86,7 @@ static string get_schema_definition(tds::tds& tds, const string& name, const str
 	string ret = "CREATE SCHEMA " + brackets_escape(name) + ";\n";
 
 	{
-		tds::query sq(tds, R"(SELECT database_permissions.state_desc,
+		tds::query sq(tds, tds::no_check{R"(SELECT database_permissions.state_desc,
 	database_permissions.permission_name,
 	USER_NAME(database_permissions.grantee_principal_id)
 FROM )" + dbs + R"(sys.database_permissions
@@ -95,7 +95,7 @@ WHERE database_permissions.class_desc = 'SCHEMA' AND
 	database_permissions.major_id = SCHEMA_ID(?)
 ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 	database_permissions.state_desc,
-	database_permissions.permission_name)", name);
+	database_permissions.permission_name)"}, name);
 
 		while (sq.fetch_row()) {
 			bool found = false;
@@ -296,7 +296,7 @@ string object_perms(tds::tds& tds, int64_t id, const string& dbs, const string& 
 	vector<sql_perms> perms;
 
 	{
-		tds::query sq(tds, R"(SELECT database_permissions.state_desc,
+		tds::query sq(tds, tds::no_check{R"(SELECT database_permissions.state_desc,
 database_permissions.permission_name,
 USER_NAME(database_permissions.grantee_principal_id)
 FROM )" + dbs + R"(sys.database_permissions
@@ -305,7 +305,7 @@ WHERE database_permissions.class_desc = 'OBJECT_OR_COLUMN' AND
 	database_permissions.major_id = ?
 ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 	database_permissions.state_desc,
-	database_permissions.permission_name)", id);
+	database_permissions.permission_name)"}, id);
 
 		while (sq.fetch_row()) {
 			bool found = false;
@@ -372,7 +372,7 @@ static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const stri
 	vector<sql_obj> objs;
 
 	{
-		tds::query sq(tds, R"(SELECT schemas.name,
+		tds::query sq(tds, tds::no_check{R"(SELECT schemas.name,
 COALESCE(table_types.name, objects.name),
 sql_modules.definition,
 RTRIM(objects.type),
@@ -385,7 +385,7 @@ JOIN )" + dbs + R"(sys.schemas ON schemas.schema_id = COALESCE(table_types.schem
 LEFT JOIN )" + dbs + R"(sys.extended_properties ON extended_properties.major_id = objects.object_id AND extended_properties.minor_id = 0 AND extended_properties.name = 'microsoft_database_tools_support'
 WHERE objects.type IN ('V','P','FN','TF','IF','U','TT') AND
 	(extended_properties.value IS NULL OR extended_properties.value != 1)
-ORDER BY schemas.name, objects.name)");
+ORDER BY schemas.name, objects.name)"});
 
 		while (sq.fetch_row()) {
 			objs.emplace_back((string)sq[0], (string)sq[1], (string)sq[2], (string)sq[3], (int64_t)sq[4], (unsigned int)sq[5] != 0);
@@ -393,7 +393,7 @@ ORDER BY schemas.name, objects.name)");
 	}
 
 	{
-		tds::query sq(tds, "SELECT triggers.name, sql_modules.definition FROM " + dbs + "sys.triggers LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=triggers.object_id WHERE triggers.parent_class_desc = 'DATABASE'");
+		tds::query sq(tds, tds::no_check{"SELECT triggers.name, sql_modules.definition FROM " + dbs + "sys.triggers LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=triggers.object_id WHERE triggers.parent_class_desc = 'DATABASE'"});
 
 		while (sq.fetch_row()) {
 			objs.emplace_back("db_triggers", (string)sq[0], (string)sq[1]);
@@ -404,7 +404,7 @@ ORDER BY schemas.name, objects.name)");
 		vector<string> schemas;
 
 		{
-			tds::query sq(tds, "SELECT name FROM " + dbs + "sys.schemas WHERE name != 'sys' AND name != 'INFORMATION_SCHEMA'");
+			tds::query sq(tds, tds::no_check{"SELECT name FROM " + dbs + "sys.schemas WHERE name != 'sys' AND name != 'INFORMATION_SCHEMA'"});
 
 			while (sq.fetch_row()) {
 				schemas.emplace_back(sq[0]);
@@ -420,7 +420,7 @@ ORDER BY schemas.name, objects.name)");
 		vector<pair<string, int64_t>> roles;
 
 		{
-			tds::query sq(tds, "SELECT name, principal_id FROM " + dbs + "sys.database_principals WHERE type = 'R'");
+			tds::query sq(tds, tds::no_check{"SELECT name, principal_id FROM " + dbs + "sys.database_principals WHERE type = 'R'"});
 
 			while (sq.fetch_row()) {
 				roles.emplace_back(sq[0], (int64_t)sq[1]);
@@ -433,7 +433,7 @@ ORDER BY schemas.name, objects.name)");
 	}
 
 	{
-		tds::query sq(tds, R"(SELECT name,
+		tds::query sq(tds, tds::no_check{R"(SELECT name,
 system_type_id,
 SCHEMA_NAME(schema_id),
 max_length,
@@ -441,7 +441,7 @@ precision,
 scale,
 is_nullable
 FROM )" + dbs + R"(sys.types
-WHERE is_user_defined = 1 AND is_table_type = 0)");
+WHERE is_user_defined = 1 AND is_table_type = 0)"});
 
 		while (sq.fetch_row()) {
 			objs.emplace_back((string)sq[2], (string)sq[0], get_type_definition((string)sq[0], (string)sq[2], (int32_t)sq[1], (int16_t)sq[3], (uint8_t)sq[4], (uint8_t)sq[5], (unsigned int)sq[6] != 0), "T");
@@ -869,13 +869,13 @@ static void write_object_ddl(tds::tds& tds, const u16string_view& schema, const 
 		old_db = tds.db_name();
 
 		if (db != old_db)
-			tds.run(u"USE " + brackets_escape(db));
+			tds.run(tds::no_check{u"USE " + brackets_escape(db)});
 	}
 
 	auto ddl = object_ddl(tds, schema, object);
 
 	if (!db.empty() && db != old_db)
-		tds.run(u"USE " + brackets_escape(old_db));
+		tds.run(tds::no_check{u"USE " + brackets_escape(old_db)});
 
 	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, tds::to_bytes(ddl));
 }
@@ -899,16 +899,16 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 		auto old_db = tds::utf16_to_utf8(tds.db_name());
 
 		if (db != old_db)
-			tds.run("USE " + brackets_escape(db));
+			tds.run(tds::no_check{"USE " + brackets_escape(db)});
 
 		dump_sql(tds, repo_dir, db, branch.empty() ? "master" : branch);
 
 		if (db != old_db)
-			tds.run("USE " + brackets_escape(old_db));
+			tds.run(tds::no_check{"USE " + brackets_escape(old_db)});
 	} else {
 		tds::tds tds2(server, db_username, db_password, db_app);
 
-		tds2.run("USE " + brackets_escape(db));
+		tds2.run(tds::no_check{"USE " + brackets_escape(db)});
 		dump_sql(tds2, repo_dir, db, branch.empty() ? "master" : branch);
 	}
 }
@@ -1045,7 +1045,7 @@ int wmain(int argc, wchar_t* argv[]) {
 					throw runtime_error("Cannot show definition of objects on remote servers.");
 
 				if (!onp.db.empty())
-					tds->run(u"USE " + brackets_escape(onp.db));
+					tds->run(tds::no_check{u"USE " + brackets_escape(onp.db)});
 				else if (!onp.name.empty() && onp.name.front() == u'#')
 					tds->run(u"USE tempdb");
 

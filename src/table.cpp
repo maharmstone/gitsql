@@ -181,7 +181,7 @@ static string quote_escape(string s) {
 static string dump_table(tds::tds& tds, const string& escaped_name) {
 	string cols, s;
 
-	tds::query sq(tds, "SELECT * FROM " + escaped_name);
+	tds::query sq(tds, tds::no_check{"SELECT * FROM " + escaped_name});
 
 	while (sq.fetch_row()) {
 		string vals;
