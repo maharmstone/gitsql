@@ -945,23 +945,22 @@ static void print_usage() {
 }
 
 int wmain(int argc, wchar_t* argv[]) {
-	unique_ptr<tds::tds> tds;
+	string db_server;
+
+	if (argc < 2) {
+		print_usage();
+		return 1;
+	}
+
+	u16string_view cmd = (char16_t*)argv[1];
+
+	if (cmd != u"flush" && cmd != u"object" && cmd != u"dump" && cmd != u"show") {
+		print_usage();
+		return 1;
+	}
 
 	try {
-		if (argc < 2) {
-			print_usage();
-			return 1;
-		}
-
-		u16string_view cmd = (char16_t*)argv[1];
-
-		if (cmd != u"flush" && cmd != u"object" && cmd != u"dump" && cmd != u"show") {
-			print_usage();
-			return 1;
-		}
-
 		auto db_server_env = get_environment_variable(u"DB_RMTSERVER");
-		string db_server;
 
 		if (!db_server_env.has_value())
 			db_server = "localhost"; // SQL Import Wizard doesn't provide DB_RMTSERVER
@@ -982,12 +981,12 @@ int wmain(int argc, wchar_t* argv[]) {
 		if (db_password_env.has_value())
 			db_password = tds::utf16_to_utf8(db_password_env.value());
 
-		tds.reset(new tds::tds(db_server, db_username, db_password, db_app));
 
 		if (cmd == u"flush") {
 			lockfile lf;
+			tds::tds tds(db_server, db_username, db_password, db_app);
 
-			flush_git(*tds);
+			flush_git(tds);
 		} else if (cmd == u"object") {
 			if (argc < 6)
 				throw runtime_error("Too few arguments.");
@@ -1009,8 +1008,9 @@ int wmain(int argc, wchar_t* argv[]) {
 			u16string_view object = (char16_t*)argv[3];
 			u16string_view filename = (char16_t*)argv[5];
 			u16string_view db = argc >= 7 ? (char16_t*)argv[6] : u"";
+			tds::tds tds(db_server, db_username, db_password, db_app);
 
-			write_object_ddl(*tds, schema, object, bind_token, commit_id, filename, db);
+			write_object_ddl(tds, schema, object, bind_token, commit_id, filename, db);
 		} else if (cmd == u"dump") {
 			int32_t repo_id;
 
@@ -1024,48 +1024,47 @@ int wmain(int argc, wchar_t* argv[]) {
 			}
 
 			lockfile lf;
+			tds::tds tds(db_server, db_username, db_password, db_app);
 
-			dump_sql2(*tds, repo_id);
+			dump_sql2(tds, repo_id);
 		} else if (cmd == u"show") {
-			try {
-				if (argc < 3)
-					throw runtime_error("Too few arguments.");
+			if (argc < 3)
+				throw runtime_error("Too few arguments.");
 
-				auto bind_token = get_environment_variable(u"DB_BIND_TOKEN");
+			auto bind_token = get_environment_variable(u"DB_BIND_TOKEN");
 
-				u16string_view object = (char16_t*)argv[2];
+			u16string_view object = (char16_t*)argv[2];
+			tds::tds tds(db_server, db_username, db_password, db_app);
 
-				if (bind_token.has_value()) {
-					tds::rpc r(*tds, u"sp_bindsession", tds::utf16_to_utf8(bind_token.value()));
+			if (bind_token.has_value()) {
+				tds::rpc r(tds, u"sp_bindsession", tds::utf16_to_utf8(bind_token.value()));
 
-					while (r.fetch_row()) { } // wait for last packet
-				}
-
-				auto onp = tds::parse_object_name(object);
-
-				if (!onp.server.empty())
-					throw runtime_error("Cannot show definition of objects on remote servers.");
-
-				if (!onp.db.empty())
-					tds->run(tds::no_check{u"USE " + brackets_escape(onp.db)});
-				else if (!onp.name.empty() && onp.name.front() == u'#')
-					tds->run(u"USE tempdb");
-
-				auto ddl = object_ddl(*tds, onp.schema, onp.name);
-
-				fmt::print("{}", ddl);
-			} catch (...) {
-				tds.reset(); // make sure error not put into DB
-				throw;
+				while (r.fetch_row()) { } // wait for last packet
 			}
+
+			auto onp = tds::parse_object_name(object);
+
+			if (!onp.server.empty())
+				throw runtime_error("Cannot show definition of objects on remote servers.");
+
+			if (!onp.db.empty())
+				tds.run(tds::no_check{u"USE " + brackets_escape(onp.db)});
+			else if (!onp.name.empty() && onp.name.front() == u'#')
+				tds.run(u"USE tempdb");
+
+			auto ddl = object_ddl(tds, onp.schema, onp.name);
+
+			fmt::print("{}", ddl);
 		}
 	} catch (const exception& e) {
 		fmt::print(stderr, "{}\n", e.what());
 
-		try {
-			if (tds)
-				tds->run("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", string_view(e.what()));
-		} catch (...) {
+		if (cmd != u"show") {
+			try {
+				tds::tds tds(db_server, db_username, db_password, db_app);
+				tds.run("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", string_view(e.what()));
+			} catch (...) {
+			}
 		}
 
 		return 1;
