@@ -617,23 +617,26 @@ public:
 	string branch;
 };
 
-static void flush_git(tds::tds& tds) {
+static void flush_git(const string& db_server) {
 	vector<repo> repos;
 
 	git_libgit2_init();
 	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
 
-	tds.run("SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; DELETE FROM Restricted.Git WHERE (SELECT COUNT(*) FROM Restricted.GitFiles WHERE id = Git.id) = 0");
-
 	{
-		tds::query sq(tds, "SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; SELECT Git.repo, GitRepo.dir, GitRepo.branch FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
+		tds::tds tds(db_server, db_username, db_password, db_app);
+		tds.run("SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; DELETE FROM Restricted.Git WHERE (SELECT COUNT(*) FROM Restricted.GitFiles WHERE id = Git.id) = 0");
 
-		while (sq.fetch_row()) {
-			repos.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2]);
+		{
+			tds::query sq(tds, "SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; SELECT Git.repo, GitRepo.dir, GitRepo.branch FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
+
+			while (sq.fetch_row()) {
+				repos.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2]);
+			}
+
+			if (repos.size() == 0)
+				return;
 		}
-
-		if (repos.size() == 0)
-			return;
 	}
 
 	for (const auto& r : repos) {
@@ -646,6 +649,8 @@ static void flush_git(tds::tds& tds) {
 			bool clear_all = false;
 			list<unsigned int> delete_commits;
 			list<unsigned int> delete_files;
+
+			tds::tds tds(db_server, db_username, db_password, db_app);
 
 			{
 				tds::trans trans(tds);
@@ -729,7 +734,7 @@ ORDER BY Git.id
 			if (files.size() > 0 || clear_all)
 				update_git(repo, name, email, description, files, clear_all, dto, r.branch);
 
-			{
+			if (!delete_commits.empty()) {
 				tds::trans trans(tds);
 
 				while (!delete_commits.empty()) {
@@ -984,9 +989,8 @@ int wmain(int argc, wchar_t* argv[]) {
 
 		if (cmd == u"flush") {
 			lockfile lf;
-			tds::tds tds(db_server, db_username, db_password, db_app);
 
-			flush_git(tds);
+			flush_git(db_server);
 		} else if (cmd == u"object") {
 			if (argc < 6)
 				throw runtime_error("Too few arguments.");
