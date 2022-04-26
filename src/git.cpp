@@ -11,7 +11,7 @@ using namespace std;
 
 class git_exception : public exception {
 public:
-	git_exception(int error, const string_view& func) {
+	git_exception(int error, string_view func) {
 		auto lg2err = git_error_last();
 
 		if (lg2err && lg2err->message)
@@ -166,7 +166,7 @@ static filesystem::path get_object_filename(const filesystem::path& repopath, co
 	return file;
 }
 
-git_oid GitRepo::blob_create_from_buffer(const string_view& data) {
+git_oid GitRepo::blob_create_from_buffer(string_view data) {
 	unsigned int ret;
 	git_oid blob;
 	unique_ptr<git_odb, decltype(&git_odb_free)> odb(nullptr, git_odb_free);

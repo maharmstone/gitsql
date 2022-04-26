@@ -26,7 +26,7 @@ private:
 
 class last_error : public std::exception {
 public:
-	last_error(const std::string_view& function, int le) {
+	last_error(std::string_view function, int le) {
 		std::string nice_msg;
 
 		{
@@ -667,12 +667,12 @@ std::string object_perms(tds::tds& tds, int64_t id, const std::string& dbs, cons
 
 // table.cpp
 std::string table_ddl(tds::tds& tds, int64_t id);
-std::string brackets_escape(const std::string_view& s);
+std::string brackets_escape(std::string_view s);
 std::u16string brackets_escape(const std::u16string_view& s);
 
 // ldap.cpp
 void get_ldap_details_from_sid(PSID sid, std::string& name, std::string& email);
 
 // parse.cpp
-std::string munge_definition(const std::string_view& sql, const std::string_view& schema, const std::string_view& name,
+std::string munge_definition(std::string_view sql, std::string_view schema, std::string_view name,
 							 enum sql_word type);

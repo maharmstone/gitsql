@@ -2,7 +2,7 @@
 
 using namespace std;
 
-static enum sql_word identify_word(const string_view& s) {
+static enum sql_word identify_word(string_view s) {
 	if (s == "ADD")
 		return sql_word::ADD;
 	else if (s == "ALL")
@@ -364,7 +364,7 @@ static enum sql_word identify_word(const string_view& s) {
 	return sql_word::identifier;
 }
 
-static pair<enum sql_word, string_view> next_word(const string_view& sv) {
+static pair<enum sql_word, string_view> next_word(string_view sv) {
 	if (sv.empty())
 		return {sql_word::whitespace, ""};
 
@@ -663,7 +663,7 @@ static void skip_whitespace(string_view& sv) {
 	} while (true);
 }
 
-string munge_definition(const string_view& sql, const string_view& schema, const string_view& name,
+string munge_definition(string_view sql, string_view schema, string_view name,
 						enum sql_word type) {
 	auto sv = sql;
 

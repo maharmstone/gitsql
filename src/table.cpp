@@ -87,7 +87,7 @@ static basic_string<T> brackets_escape2(const basic_string_view<T>& s) {
 	return ret;
 }
 
-string brackets_escape(const string_view& s) {
+string brackets_escape(string_view s) {
 	return brackets_escape2(s);
 }
 
@@ -154,7 +154,7 @@ struct foreign_key {
 	vector<foreign_key_column> cols;
 };
 
-static void replace_all(string& source, const string_view& from, const string_view& to) {
+static void replace_all(string& source, string_view from, string_view to) {
 	string new_string;
 	new_string.reserve(source.length());
 

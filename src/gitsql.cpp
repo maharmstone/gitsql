@@ -26,7 +26,7 @@ const string db_app = "GitSQL";
 static void get_current_user_details(string& name, string& email);
 
 // strip out characters that NTFS doesn't like
-static string sanitize_fn(const string_view& fn) {
+static string sanitize_fn(string_view fn) {
 	string s;
 
 	for (auto c : fn) {
@@ -47,7 +47,7 @@ struct sql_obj {
 };
 
 struct sql_perms {
-	sql_perms(const string_view& user, const string_view& type, const string_view& perm) : user(user), type(type) {
+	sql_perms(string_view user, string_view type, string_view perm) : user(user), type(type) {
 		perms.emplace_back(perm);
 	}
 
@@ -124,7 +124,7 @@ ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 	return ret;
 }
 
-static string get_role_definition(tds::tds& tds, const string_view& name, int64_t id) {
+static string get_role_definition(tds::tds& tds, string_view name, int64_t id) {
 	string ret;
 	bool first = true;
 
@@ -148,7 +148,7 @@ ORDER BY database_principals.name)", id);
 	return ret;
 }
 
-static string get_type_definition(const string_view& name, const string_view& schema, int32_t system_type_id,
+static string get_type_definition(string_view name, string_view schema, int32_t system_type_id,
 								  int16_t max_length, uint8_t precision, uint8_t scale,
 								  bool is_nullable) {
 	string ret;
@@ -609,7 +609,7 @@ static void get_current_user_details(string& name, string& email) {
 
 class repo {
 public:
-	repo(unsigned int id, const string_view& dir, const string_view& branch) :
+	repo(unsigned int id, string_view dir, string_view branch) :
 		id(id), dir(dir), branch(branch) { }
 
 	unsigned int id;
