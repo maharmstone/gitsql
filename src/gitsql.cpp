@@ -668,9 +668,9 @@ SELECT
 	GitFiles.data
 FROM Restricted.Git
 JOIN Restricted.GitFiles ON GitFiles.id = Git.id
-WHERE Git.id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?) OR Git.tran_id = (SELECT tran_id FROM Restricted.Git WHERE id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?))
+WHERE Git.id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?) OR (Git.tran_id = (SELECT tran_id FROM Restricted.Git WHERE id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?)) AND Git.repo = ?)
 ORDER BY Git.id
-)", r.id, r.id);
+)", r.id, r.id, r.id);
 
 				if (!sq.fetch_row())
 					break;
