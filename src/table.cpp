@@ -56,9 +56,9 @@ static bool need_escaping(const basic_string_view<T>& s) {
 			return true;
 	}
 
-	// can't have number or dollar sign at beginning
+	// can't have number, dollar sign, or at sign at beginning
 
-	if ((s.front() >= '0' && s.front() <= '9') || s.front() == '$')
+	if ((s.front() >= '0' && s.front() <= '9') || s.front() == '$' || s.front() == '@')
 		return true;
 
 	return is_reserved_word(s);
