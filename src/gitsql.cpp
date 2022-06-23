@@ -38,12 +38,13 @@ static string sanitize_fn(string_view fn) {
 }
 
 struct sql_obj {
-	sql_obj(const string& schema, const string& name, const string& def, const string& type = "", int64_t id = 0, bool has_perms = false) :
-		schema(schema), name(name), def(def), type(type), id(id), has_perms(has_perms) { }
+	sql_obj(const string& schema, const string& name, const string& def, const string& type = "", int64_t id = 0, bool has_perms = false, bool quoted_identifier = false) :
+		schema(schema), name(name), def(def), type(type), id(id), has_perms(has_perms), quoted_identifier(quoted_identifier) { }
 
 	string schema, name, def, type;
 	int64_t id;
 	bool has_perms;
+	bool quoted_identifier;
 };
 
 struct sql_perms {
@@ -377,7 +378,8 @@ COALESCE(table_types.name, objects.name),
 sql_modules.definition,
 RTRIM(objects.type),
 objects.object_id,
-CASE WHEN EXISTS (SELECT * FROM )" + dbs + R"(sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END
+CASE WHEN EXISTS (SELECT * FROM )" + dbs + R"(sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END,
+sql_modules.uses_quoted_identifier
 FROM )" + dbs + R"(sys.objects
 LEFT JOIN )" + dbs + R"(sys.sql_modules ON sql_modules.object_id = objects.object_id
 LEFT JOIN )" + dbs + R"(sys.table_types ON objects.type = 'TT' AND table_types.type_table_object_id = objects.object_id
@@ -388,7 +390,8 @@ WHERE objects.type IN ('V','P','FN','TF','IF','U','TT') AND
 ORDER BY schemas.name, objects.name)"});
 
 		while (sq.fetch_row()) {
-			objs.emplace_back((string)sq[0], (string)sq[1], (string)sq[2], (string)sq[3], (int64_t)sq[4], (unsigned int)sq[5] != 0);
+			objs.emplace_back((string)sq[0], (string)sq[1], (string)sq[2], (string)sq[3], (int64_t)sq[4],
+							  (unsigned int)sq[5] != 0, (unsigned int)sq[6] != 0);
 		}
 	}
 
