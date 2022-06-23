@@ -494,6 +494,9 @@ WHERE is_user_defined = 1 AND is_table_type = 0)"});
 		if (obj.has_perms)
 			obj.def += object_perms(tds, obj.id, dbs, brackets_escape(obj.schema) + "." + brackets_escape(obj.name));
 
+		if (obj.type == "P" && !obj.quoted_identifier)
+			obj.def = "SET QUOTED_IDENTIFIER OFF;\nGO\n\n" + obj.def;
+
 		filename += sanitize_fn(obj.name) + ".sql";
 
 		files.emplace_back(filename, obj.def);
