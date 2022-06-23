@@ -38,7 +38,7 @@ static string sanitize_fn(string_view fn) {
 }
 
 struct sql_obj {
-	sql_obj(const string& schema, const string& name, const string& def, const string& type = "", int64_t id = 0, bool has_perms = false, bool quoted_identifier = false) :
+	sql_obj(string_view schema, string_view name, string_view def, string_view type = "", int64_t id = 0, bool has_perms = false, bool quoted_identifier = false) :
 		schema(schema), name(name), def(def), type(type), id(id), has_perms(has_perms), quoted_identifier(quoted_identifier) { }
 
 	string schema, name, def, type;
