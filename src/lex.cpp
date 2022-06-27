@@ -29,7 +29,7 @@ static enum lex identify_word(string_view s) {
 
 // FIXME - make this constexpr and add static_assert tests
 static size_t parse_number(string_view s) {
-    size_t ends = 0, ends2;
+    size_t ends = 0, ends2 = s.size();
 
     if (s[0] == '.' || s[0] == '-' || s[0] == '+') {
         // FIXME - +.e0 should be valid number
@@ -46,7 +46,7 @@ static size_t parse_number(string_view s) {
         }
     }
 
-    if (ends2 == 0)
+    if (ends2 == s.size())
         return s.size();
 
     ends = ends2;
