@@ -77,3 +77,4 @@ void get_ldap_details_from_sid(PSID sid, std::string& name, std::string& email);
 // parse.cpp
 std::string munge_definition(std::string_view sql, std::string_view schema, std::string_view name,
 							 enum lex type);
+std::string dequote(std::string_view sql);

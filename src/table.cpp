@@ -491,7 +491,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 					}
 				}
 			} else {
-				ddl += " AS " + col.computed_definition;
+				ddl += " AS " + dequote(col.computed_definition);
 
 				if (col.is_persisted)
 					ddl += " PERSISTED";
