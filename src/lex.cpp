@@ -108,7 +108,7 @@ list<word> parse(string_view s) {
                     if (sb2 == string::npos)
                         throw runtime_error("Unterminated quotation marks.");
 
-                    if (s.size() >= sb2 + 1 && s[sb2 + 1] == '\'') { // handle ''
+                    if (s.size() > sb2 + 1 && s[sb2 + 1] == '\'') { // handle ''
                         sb = sb2 + 2;
                         continue;
                     }
@@ -205,7 +205,7 @@ list<word> parse(string_view s) {
                 if (sb2 == string::npos)
                     throw runtime_error("Unterminated square brackets.");
 
-                if (s.size() >= sb2 + 1 && s[sb2 + 1] == ']') { // handle ]]
+                if (s.size() > sb2 + 1 && s[sb2 + 1] == ']') { // handle ]]
                     sb = sb2 + 2;
                     continue;
                 }
@@ -225,7 +225,7 @@ list<word> parse(string_view s) {
                 if (sb2 == string::npos)
                     throw runtime_error("Unterminated double quotation marks.");
 
-                if (s.size() >= sb2 + 1 && s[sb2 + 1] == '"') { // handle ""
+                if (s.size() > sb2 + 1 && s[sb2 + 1] == '"') { // handle ""
                     sb = sb2 + 2;
                     continue;
                 }
@@ -311,7 +311,7 @@ list<word> parse(string_view s) {
                 if (sb2 == string::npos)
                     throw runtime_error("Unterminated quotation marks.");
 
-                if (s.size() >= sb2 + 1 && s[sb2 + 1] == '\'') { // handle ''
+                if (s.size() > sb2 + 1 && s[sb2 + 1] == '\'') { // handle ''
                     sb = sb2 + 2;
                     continue;
                 }
