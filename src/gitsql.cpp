@@ -468,11 +468,11 @@ WHERE is_user_defined = 1 AND is_table_type = 0)"});
 		if (obj.type == "U" || obj.type == "TT")
 			obj.def = table_ddl(tds, obj.id);
 		else if (obj.type == "V")
-			obj.def = munge_definition(obj.def, obj.schema, obj.name, sql_word::VIEW);
+			obj.def = munge_definition(obj.def, obj.schema, obj.name, lex::VIEW);
 		else if (obj.type == "P")
-			obj.def = munge_definition(obj.def, obj.schema, obj.name, sql_word::PROCEDURE);
+			obj.def = munge_definition(obj.def, obj.schema, obj.name, lex::PROCEDURE);
 		else if (obj.type == "FN" || obj.type == "TF" || obj.type == "IF")
-			obj.def = munge_definition(obj.def, obj.schema, obj.name, sql_word::FUNCTION);
+			obj.def = munge_definition(obj.def, obj.schema, obj.name, lex::FUNCTION);
 
 		obj.def = fix_whitespace(obj.def);
 
@@ -834,11 +834,11 @@ WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 	if (type == "U") // table
 		ddl = table_ddl(tds, id);
 	else if (type == "V")
-		ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), sql_word::VIEW);
+		ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), lex::VIEW);
 	else if (type == "P")
-		ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), sql_word::PROCEDURE);
+		ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), lex::PROCEDURE);
 	else if (type == "FN" || type == "TF" || type == "IF")
-		ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), sql_word::FUNCTION);
+		ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), lex::FUNCTION);
 
 	ddl = fix_whitespace(ddl);
 

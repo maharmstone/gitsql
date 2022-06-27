@@ -2,373 +2,373 @@
 
 using namespace std;
 
-static enum sql_word identify_word(string_view s) {
+static enum lex identify_word(string_view s) {
 	if (s == "ADD")
-		return sql_word::ADD;
+		return lex::ADD;
 	else if (s == "ALL")
-		return sql_word::ALL;
+		return lex::ALL;
 	else if (s == "ALTER")
-		return sql_word::ALTER;
+		return lex::ALTER;
 	else if (s == "AND")
-		return sql_word::AND;
+		return lex::AND;
 	else if (s == "ANY")
-		return sql_word::ANY;
+		return lex::ANY;
 	else if (s == "AS")
-		return sql_word::AS;
+		return lex::AS;
 	else if (s == "ASC")
-		return sql_word::ASC;
+		return lex::ASC;
 	else if (s == "AUTHORIZATION")
-		return sql_word::AUTHORIZATION;
+		return lex::AUTHORIZATION;
 	else if (s == "BACKUP")
-		return sql_word::BACKUP;
+		return lex::BACKUP;
 	else if (s == "BEGIN")
-		return sql_word::BEGIN;
+		return lex::BEGIN;
 	else if (s == "BETWEEN")
-		return sql_word::BETWEEN;
+		return lex::BETWEEN;
 	else if (s == "BREAK")
-		return sql_word::BREAK;
+		return lex::BREAK;
 	else if (s == "BROWSE")
-		return sql_word::BROWSE;
+		return lex::BROWSE;
 	else if (s == "BULK")
-		return sql_word::BULK;
+		return lex::BULK;
 	else if (s == "BY")
-		return sql_word::BY;
+		return lex::BY;
 	else if (s == "CASCADE")
-		return sql_word::CASCADE;
+		return lex::CASCADE;
 	else if (s == "CASE")
-		return sql_word::CASE;
+		return lex::CASE;
 	else if (s == "CHECK")
-		return sql_word::CHECK;
+		return lex::CHECK;
 	else if (s == "CHECKPOINT")
-		return sql_word::CHECKPOINT;
+		return lex::CHECKPOINT;
 	else if (s == "CLOSE")
-		return sql_word::CLOSE;
+		return lex::CLOSE;
 	else if (s == "CLUSTERED")
-		return sql_word::CLUSTERED;
+		return lex::CLUSTERED;
 	else if (s == "COALESCE")
-		return sql_word::COALESCE;
+		return lex::COALESCE;
 	else if (s == "COLLATE")
-		return sql_word::COLLATE;
+		return lex::COLLATE;
 	else if (s == "COLUMN")
-		return sql_word::COLUMN;
+		return lex::COLUMN;
 	else if (s == "COMMIT")
-		return sql_word::COMMIT;
+		return lex::COMMIT;
 	else if (s == "COMPUTE")
-		return sql_word::COMPUTE;
+		return lex::COMPUTE;
 	else if (s == "CONSTRAINT")
-		return sql_word::CONSTRAINT;
+		return lex::CONSTRAINT;
 	else if (s == "CONTAINS")
-		return sql_word::CONTAINS;
+		return lex::CONTAINS;
 	else if (s == "CONTAINSTABLE")
-		return sql_word::CONTAINSTABLE;
+		return lex::CONTAINSTABLE;
 	else if (s == "CONTINUE")
-		return sql_word::CONTINUE;
+		return lex::CONTINUE;
 	else if (s == "CONVERT")
-		return sql_word::CONVERT;
+		return lex::CONVERT;
 	else if (s == "CREATE")
-		return sql_word::CREATE;
+		return lex::CREATE;
 	else if (s == "CROSS")
-		return sql_word::CROSS;
+		return lex::CROSS;
 	else if (s == "CURRENT")
-		return sql_word::CURRENT;
+		return lex::CURRENT;
 	else if (s == "CURRENT_DATE")
-		return sql_word::CURRENT_DATE;
+		return lex::CURRENT_DATE;
 	else if (s == "CURRENT_TIME")
-		return sql_word::CURRENT_TIME;
+		return lex::CURRENT_TIME;
 	else if (s == "CURRENT_TIMESTAMP")
-		return sql_word::CURRENT_TIMESTAMP;
+		return lex::CURRENT_TIMESTAMP;
 	else if (s == "CURRENT_USER")
-		return sql_word::CURRENT_USER;
+		return lex::CURRENT_USER;
 	else if (s == "CURSOR")
-		return sql_word::CURSOR;
+		return lex::CURSOR;
 	else if (s == "DATABASE")
-		return sql_word::DATABASE;
+		return lex::DATABASE;
 	else if (s == "DBCC")
-		return sql_word::DBCC;
+		return lex::DBCC;
 	else if (s == "DEALLOCATE")
-		return sql_word::DEALLOCATE;
+		return lex::DEALLOCATE;
 	else if (s == "DECLARE")
-		return sql_word::DECLARE;
+		return lex::DECLARE;
 	else if (s == "DEFAULT")
-		return sql_word::DEFAULT;
+		return lex::DEFAULT;
 	else if (s == "DELETE")
-		return sql_word::SQL_DELETE;
+		return lex::SQL_DELETE;
 	else if (s == "DENY")
-		return sql_word::DENY;
+		return lex::DENY;
 	else if (s == "DESC")
-		return sql_word::DESC;
+		return lex::DESC;
 	else if (s == "DISTINCT")
-		return sql_word::DISTINCT;
+		return lex::DISTINCT;
 	else if (s == "DISTRIBUTED")
-		return sql_word::DISTRIBUTED;
+		return lex::DISTRIBUTED;
 	else if (s == "DOUBLE")
-		return sql_word::DOUBLE;
+		return lex::DOUBLE;
 	else if (s == "DROP")
-		return sql_word::DROP;
+		return lex::DROP;
 	else if (s == "ELSE")
-		return sql_word::ELSE;
+		return lex::ELSE;
 	else if (s == "END")
-		return sql_word::END;
+		return lex::END;
 	else if (s == "ERRLVL")
-		return sql_word::ERRLVL;
+		return lex::ERRLVL;
 	else if (s == "ESCAPE")
-		return sql_word::ESCAPE;
+		return lex::ESCAPE;
 	else if (s == "EXCEPT")
-		return sql_word::EXCEPT;
+		return lex::EXCEPT;
 	else if (s == "EXEC")
-		return sql_word::EXEC;
+		return lex::EXEC;
 	else if (s == "EXECUTE")
-		return sql_word::EXECUTE;
+		return lex::EXECUTE;
 	else if (s == "EXISTS")
-		return sql_word::EXISTS;
+		return lex::EXISTS;
 	else if (s == "EXIT")
-		return sql_word::EXIT;
+		return lex::EXIT;
 	else if (s == "EXTERNAL")
-		return sql_word::EXTERNAL;
+		return lex::EXTERNAL;
 	else if (s == "FETCH")
-		return sql_word::FETCH;
+		return lex::FETCH;
 	else if (s == "FILE")
-		return sql_word::FILE;
+		return lex::FILE;
 	else if (s == "FILLFACTOR")
-		return sql_word::FILLFACTOR;
+		return lex::FILLFACTOR;
 	else if (s == "FOR")
-		return sql_word::FOR;
+		return lex::FOR;
 	else if (s == "FOREIGN")
-		return sql_word::FOREIGN;
+		return lex::FOREIGN;
 	else if (s == "FREETEXT")
-		return sql_word::FREETEXT;
+		return lex::FREETEXT;
 	else if (s == "FREETEXTTABLE")
-		return sql_word::FREETEXTTABLE;
+		return lex::FREETEXTTABLE;
 	else if (s == "FROM")
-		return sql_word::FROM;
+		return lex::FROM;
 	else if (s == "FULL")
-		return sql_word::FULL;
+		return lex::FULL;
 	else if (s == "FUNCTION")
-		return sql_word::FUNCTION;
+		return lex::FUNCTION;
 	else if (s == "GOTO")
-		return sql_word::GOTO;
+		return lex::GOTO;
 	else if (s == "GRANT")
-		return sql_word::GRANT;
+		return lex::GRANT;
 	else if (s == "GROUP")
-		return sql_word::GROUP;
+		return lex::GROUP;
 	else if (s == "HAVING")
-		return sql_word::HAVING;
+		return lex::HAVING;
 	else if (s == "HOLDLOCK")
-		return sql_word::HOLDLOCK;
+		return lex::HOLDLOCK;
 	else if (s == "IDENTITY")
-		return sql_word::IDENTITY;
+		return lex::IDENTITY;
 	else if (s == "IDENTITY_INSERT")
-		return sql_word::IDENTITY_INSERT;
+		return lex::IDENTITY_INSERT;
 	else if (s == "IDENTITYCOL")
-		return sql_word::IDENTITYCOL;
+		return lex::IDENTITYCOL;
 	else if (s == "IF")
-		return sql_word::IF;
+		return lex::IF;
 	else if (s == "IN")
-		return sql_word::SQL_IN;
+		return lex::SQL_IN;
 	else if (s == "INDEX")
-		return sql_word::INDEX;
+		return lex::INDEX;
 	else if (s == "INNER")
-		return sql_word::INNER;
+		return lex::INNER;
 	else if (s == "INSERT")
-		return sql_word::INSERT;
+		return lex::INSERT;
 	else if (s == "INTERSECT")
-		return sql_word::INTERSECT;
+		return lex::INTERSECT;
 	else if (s == "INTO")
-		return sql_word::INTO;
+		return lex::INTO;
 	else if (s == "IS")
-		return sql_word::IS;
+		return lex::IS;
 	else if (s == "JOIN")
-		return sql_word::JOIN;
+		return lex::JOIN;
 	else if (s == "KEY")
-		return sql_word::KEY;
+		return lex::KEY;
 	else if (s == "KILL")
-		return sql_word::KILL;
+		return lex::KILL;
 	else if (s == "LEFT")
-		return sql_word::LEFT;
+		return lex::LEFT;
 	else if (s == "LIKE")
-		return sql_word::LIKE;
+		return lex::LIKE;
 	else if (s == "LINENO")
-		return sql_word::LINENO;
+		return lex::LINENO;
 	else if (s == "MERGE")
-		return sql_word::MERGE;
+		return lex::MERGE;
 	else if (s == "NATIONAL")
-		return sql_word::NATIONAL;
+		return lex::NATIONAL;
 	else if (s == "NOCHECK")
-		return sql_word::NOCHECK;
+		return lex::NOCHECK;
 	else if (s == "NONCLUSTERED")
-		return sql_word::NONCLUSTERED;
+		return lex::NONCLUSTERED;
 	else if (s == "NOT")
-		return sql_word::NOT;
+		return lex::NOT;
 	else if (s == "NULL")
-		return sql_word::SQL_NULL;
+		return lex::SQL_NULL;
 	else if (s == "NULLIF")
-		return sql_word::NULLIF;
+		return lex::NULLIF;
 	else if (s == "OF")
-		return sql_word::OF;
+		return lex::OF;
 	else if (s == "OFF")
-		return sql_word::OFF;
+		return lex::OFF;
 	else if (s == "OFFSETS")
-		return sql_word::OFFSETS;
+		return lex::OFFSETS;
 	else if (s == "ON")
-		return sql_word::ON;
+		return lex::ON;
 	else if (s == "OPEN")
-		return sql_word::OPEN;
+		return lex::OPEN;
 	else if (s == "OPENDATASOURCE")
-		return sql_word::OPENDATASOURCE;
+		return lex::OPENDATASOURCE;
 	else if (s == "OPENQUERY")
-		return sql_word::OPENQUERY;
+		return lex::OPENQUERY;
 	else if (s == "OPENROWSET")
-		return sql_word::OPENROWSET;
+		return lex::OPENROWSET;
 	else if (s == "OPENXML")
-		return sql_word::OPENXML;
+		return lex::OPENXML;
 	else if (s == "OPTION")
-		return sql_word::OPTION;
+		return lex::OPTION;
 	else if (s == "OR")
-		return sql_word::OR;
+		return lex::OR;
 	else if (s == "ORDER")
-		return sql_word::ORDER;
+		return lex::ORDER;
 	else if (s == "OUTER")
-		return sql_word::OUTER;
+		return lex::OUTER;
 	else if (s == "OVER")
-		return sql_word::OVER;
+		return lex::OVER;
 	else if (s == "PERCENT")
-		return sql_word::PERCENT;
+		return lex::PERCENT;
 	else if (s == "PIVOT")
-		return sql_word::PIVOT;
+		return lex::PIVOT;
 	else if (s == "PLAN")
-		return sql_word::PLAN;
+		return lex::PLAN;
 	else if (s == "PRIMARY")
-		return sql_word::PRIMARY;
+		return lex::PRIMARY;
 	else if (s == "PRINT")
-		return sql_word::PRINT;
+		return lex::PRINT;
 	else if (s == "PROC" || s == "PROCEDURE")
-		return sql_word::PROCEDURE;
+		return lex::PROCEDURE;
 	else if (s == "PUBLIC")
-		return sql_word::PUBLIC;
+		return lex::PUBLIC;
 	else if (s == "RAISERROR")
-		return sql_word::RAISERROR;
+		return lex::RAISERROR;
 	else if (s == "READ")
-		return sql_word::READ;
+		return lex::READ;
 
 	if (s == "READTEXT")
-		return sql_word::READTEXT;
+		return lex::READTEXT;
 	else if (s == "RECONFIGURE")
-		return sql_word::RECONFIGURE;
+		return lex::RECONFIGURE;
 	else if (s == "REFERENCES")
-		return sql_word::REFERENCES;
+		return lex::REFERENCES;
 	else if (s == "REPLICATION")
-		return sql_word::REPLICATION;
+		return lex::REPLICATION;
 	else if (s == "RESTORE")
-		return sql_word::RESTORE;
+		return lex::RESTORE;
 	else if (s == "RESTRICT")
-		return sql_word::RESTRICT;
+		return lex::RESTRICT;
 	else if (s == "RETURN")
-		return sql_word::RETURN;
+		return lex::RETURN;
 	else if (s == "REVERT")
-		return sql_word::REVERT;
+		return lex::REVERT;
 	else if (s == "REVOKE")
-		return sql_word::REVOKE;
+		return lex::REVOKE;
 	else if (s == "RIGHT")
-		return sql_word::RIGHT;
+		return lex::RIGHT;
 	else if (s == "ROLLBACK")
-		return sql_word::ROLLBACK;
+		return lex::ROLLBACK;
 	else if (s == "ROWCOUNT")
-		return sql_word::ROWCOUNT;
+		return lex::ROWCOUNT;
 	else if (s == "ROWGUIDCOL")
-		return sql_word::ROWGUIDCOL;
+		return lex::ROWGUIDCOL;
 	else if (s == "RULE")
-		return sql_word::RULE;
+		return lex::RULE;
 	else if (s == "SAVE")
-		return sql_word::SAVE;
+		return lex::SAVE;
 	else if (s == "SCHEMA")
-		return sql_word::SCHEMA;
+		return lex::SCHEMA;
 	else if (s == "SELECT")
-		return sql_word::SELECT;
+		return lex::SELECT;
 	else if (s == "SEMANTICKEYPHRASETABLE")
-		return sql_word::SEMANTICKEYPHRASETABLE;
+		return lex::SEMANTICKEYPHRASETABLE;
 	else if (s == "SEMANTICSIMILARITYDETAILSTABLE")
-		return sql_word::SEMANTICSIMILARITYDETAILSTABLE;
+		return lex::SEMANTICSIMILARITYDETAILSTABLE;
 	else if (s == "SEMANTICSIMILARITYTABLE")
-		return sql_word::SEMANTICSIMILARITYTABLE;
+		return lex::SEMANTICSIMILARITYTABLE;
 	else if (s == "SESSION_USER")
-		return sql_word::SESSION_USER;
+		return lex::SESSION_USER;
 	else if (s == "SET")
-		return sql_word::SET;
+		return lex::SET;
 	else if (s == "SETUSER")
-		return sql_word::SETUSER;
+		return lex::SETUSER;
 	else if (s == "SHUTDOWN")
-		return sql_word::SHUTDOWN;
+		return lex::SHUTDOWN;
 	else if (s == "SOME")
-		return sql_word::SOME;
+		return lex::SOME;
 	else if (s == "STATISTICS")
-		return sql_word::STATISTICS;
+		return lex::STATISTICS;
 	else if (s == "SYSTEM_USER")
-		return sql_word::SYSTEM_USER;
+		return lex::SYSTEM_USER;
 	else if (s == "TABLE")
-		return sql_word::TABLE;
+		return lex::TABLE;
 	else if (s == "TABLESAMPLE")
-		return sql_word::TABLESAMPLE;
+		return lex::TABLESAMPLE;
 	else if (s == "TEXTSIZE")
-		return sql_word::TEXTSIZE;
+		return lex::TEXTSIZE;
 	else if (s == "THEN")
-		return sql_word::THEN;
+		return lex::THEN;
 	else if (s == "TO")
-		return sql_word::TO;
+		return lex::TO;
 	else if (s == "TOP")
-		return sql_word::TOP;
+		return lex::TOP;
 	else if (s == "TRAN")
-		return sql_word::TRAN;
+		return lex::TRAN;
 	else if (s == "TRANSACTION")
-		return sql_word::TRANSACTION;
+		return lex::TRANSACTION;
 	else if (s == "TRIGGER")
-		return sql_word::TRIGGER;
+		return lex::TRIGGER;
 	else if (s == "TRUNCATE")
-		return sql_word::TRUNCATE;
+		return lex::TRUNCATE;
 	else if (s == "TRY_CONVERT")
-		return sql_word::TRY_CONVERT;
+		return lex::TRY_CONVERT;
 	else if (s == "TSEQUAL")
-		return sql_word::TSEQUAL;
+		return lex::TSEQUAL;
 	else if (s == "UNION")
-		return sql_word::UNION;
+		return lex::UNION;
 	else if (s == "UNIQUE")
-		return sql_word::UNIQUE;
+		return lex::UNIQUE;
 	else if (s == "UNPIVOT")
-		return sql_word::UNPIVOT;
+		return lex::UNPIVOT;
 	else if (s == "UPDATE")
-		return sql_word::UPDATE;
+		return lex::UPDATE;
 	else if (s == "UPDATETEXT")
-		return sql_word::UPDATETEXT;
+		return lex::UPDATETEXT;
 	else if (s == "USE")
-		return sql_word::USE;
+		return lex::USE;
 	else if (s == "USER")
-		return sql_word::USER;
+		return lex::USER;
 	else if (s == "VALUES")
-		return sql_word::VALUES;
+		return lex::VALUES;
 	else if (s == "VARYING")
-		return sql_word::VARYING;
+		return lex::VARYING;
 	else if (s == "VIEW")
-		return sql_word::VIEW;
+		return lex::VIEW;
 	else if (s == "WAITFOR")
-		return sql_word::WAITFOR;
+		return lex::WAITFOR;
 	else if (s == "WHEN")
-		return sql_word::WHEN;
+		return lex::WHEN;
 	else if (s == "WHERE")
-		return sql_word::WHERE;
+		return lex::WHERE;
 	else if (s == "WHILE")
-		return sql_word::WHILE;
+		return lex::WHILE;
 	else if (s == "WITH")
-		return sql_word::WITH;
+		return lex::WITH;
 	else if (s == "WRITETEXT")
-		return sql_word::WRITETEXT;
+		return lex::WRITETEXT;
 
-	return sql_word::identifier;
+	return lex::identifier;
 }
 
-static pair<enum sql_word, string_view> next_word(string_view sv) {
+static pair<enum lex, string_view> next_word(string_view sv) {
 	if (sv.empty())
-		return {sql_word::whitespace, ""};
+		return {lex::whitespace, ""};
 
-	enum sql_word w;
+	enum lex w;
 	string_view word;
 
 	switch (sv.front()) {
@@ -385,32 +385,32 @@ static pair<enum sql_word, string_view> next_word(string_view sv) {
 				}
 			}
 
-			w = sql_word::whitespace;
+			w = lex::whitespace;
 			break;
 
 		case '(':
 			word = sv.substr(0, 1);
-			w = sql_word::open_bracket;
+			w = lex::open_bracket;
 			break;
 
 		case ')':
 			word = sv.substr(0, 1);
-			w = sql_word::close_bracket;
+			w = lex::close_bracket;
 			break;
 
 		case ',':
 			word = sv.substr(0, 1);
-			w = sql_word::comma;
+			w = lex::comma;
 			break;
 
 		case ';':
 			word = sv.substr(0, 1);
-			w = sql_word::semicolon;
+			w = lex::semicolon;
 			break;
 
 		case '.':
 			word = sv.substr(0, 1);
-			w = sql_word::full_stop;
+			w = lex::full_stop;
 			break;
 
 		case '-':
@@ -424,12 +424,12 @@ static pair<enum sql_word, string_view> next_word(string_view sv) {
 					}
 				}
 
-				w = sql_word::comment;
+				w = lex::comment;
 				break;
 			}
 
 			word = sv.substr(0, 1);
-			w = sql_word::minus;
+			w = lex::minus;
 			break;
 
 		case '/':
@@ -455,17 +455,17 @@ static pair<enum sql_word, string_view> next_word(string_view sv) {
 					}
 				}
 
-				w = sql_word::comment;
+				w = lex::comment;
 				break;
 			}
 
 			word = sv.substr(0, 1);
-			w = sql_word::slash;
+			w = lex::slash;
 			break;
 
 		case '=':
 			word = sv.substr(0, 1);
-			w = sql_word::equals;
+			w = lex::equals;
 			break;
 
 		case 'A':
@@ -544,7 +544,7 @@ static pair<enum sql_word, string_view> next_word(string_view sv) {
 			}
 
 			if (non_letter) {
-				w = sql_word::identifier;
+				w = lex::identifier;
 				break;
 			}
 
@@ -585,7 +585,7 @@ static pair<enum sql_word, string_view> next_word(string_view sv) {
 				}
 			}
 
-			w = sql_word::number;
+			w = lex::number;
 			break;
 
 		case '\'':
@@ -602,7 +602,7 @@ static pair<enum sql_word, string_view> next_word(string_view sv) {
 				}
 			}
 
-			w = sql_word::string;
+			w = lex::string;
 			break;
 
 		case '[':
@@ -619,12 +619,12 @@ static pair<enum sql_word, string_view> next_word(string_view sv) {
 				}
 			}
 
-			w = sql_word::identifier;
+			w = lex::identifier;
 			break;
 
 		default:
 			word = sv;
-			w = sql_word::unknown;
+			w = lex::unknown;
 	}
 
 	return {w, word};
@@ -636,7 +636,7 @@ static string_view strip_preamble(string_view& sv) {
 	while (!s.empty()) {
 		auto w = next_word(s);
 
-		if (w.first != sql_word::comment && w.first != sql_word::whitespace)
+		if (w.first != lex::comment && w.first != lex::whitespace)
 			break;
 
 		s = s.substr(w.second.length());
@@ -656,7 +656,7 @@ static void skip_whitespace(string_view& sv) {
 	do {
 		auto w = next_word(sv);
 
-		if (w.first != sql_word::whitespace && w.first != sql_word::comment)
+		if (w.first != lex::whitespace && w.first != lex::comment)
 			break;
 
 		sv = sv.substr(w.second.length());
@@ -664,7 +664,7 @@ static void skip_whitespace(string_view& sv) {
 }
 
 string munge_definition(string_view sql, string_view schema, string_view name,
-						enum sql_word type) {
+						enum lex type) {
 	auto sv = sql;
 
 	strip_preamble(sv);
@@ -674,7 +674,7 @@ string munge_definition(string_view sql, string_view schema, string_view name,
 
 	auto w = next_word(sv);
 
-	if (w.first != sql_word::CREATE)
+	if (w.first != lex::CREATE)
 		return string{sql};
 
 	auto create = w.second;
@@ -699,7 +699,7 @@ string munge_definition(string_view sql, string_view schema, string_view name,
 
 	w = next_word(sv);
 
-	if (w.first != sql_word::identifier)
+	if (w.first != lex::identifier)
 		return string{sql};
 
 	sv = sv.substr(w.second.length());
@@ -713,14 +713,14 @@ string munge_definition(string_view sql, string_view schema, string_view name,
 		if (!sv.empty()) {
 			w = next_word(sv);
 
-			if (w.first == sql_word::full_stop) {
+			if (w.first == lex::full_stop) {
 				sv = sv.substr(w.second.length());
 				skip_whitespace(sv);
 
 				if (!sv.empty()) {
 					w = next_word(sv);
 
-					if (w.first == sql_word::identifier) {
+					if (w.first == lex::identifier) {
 						sv = sv.substr(w.second.length());
 						two_part = true;
 					}
@@ -734,11 +734,11 @@ string munge_definition(string_view sql, string_view schema, string_view name,
 
 	string sql2{string_view(sql).substr(0, create.data() - sql.data())};
 
-	if (type == sql_word::PROCEDURE)
+	if (type == lex::PROCEDURE)
 		sql2.append("CREATE OR ALTER PROCEDURE ");
-	else if (type == sql_word::VIEW)
+	else if (type == lex::VIEW)
 		sql2.append("CREATE OR ALTER VIEW ");
-	else if (type == sql_word::FUNCTION)
+	else if (type == lex::FUNCTION)
 		sql2.append("CREATE OR ALTER FUNCTION ");
 
 	sql2.append(brackets_escape(schema));
