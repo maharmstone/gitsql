@@ -938,6 +938,7 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 }
 
 #ifdef _WIN32
+
 static optional<u16string> get_environment_variable(const u16string& name) {
 	auto len = GetEnvironmentVariableW((WCHAR*)name.c_str(), nullptr, 0);
 
@@ -959,6 +960,18 @@ static optional<u16string> get_environment_variable(const u16string& name) {
 
 	return ret;
 }
+
+#else
+
+static optional<string> get_environment_variable(const string& name) {
+	auto ret = getenv(name.c_str());
+
+	if (!ret)
+		return nullopt;
+
+	return ret;
+}
+
 #endif
 
 static void print_usage() {
@@ -1013,7 +1026,26 @@ int main(int argc, char* argv[])
 		if (db_password_env.has_value())
 			db_password = tds::utf16_to_utf8(db_password_env.value());
 #else
-		// FIXME
+		auto db_server_env = get_environment_variable("DB_RMTSERVER");
+
+		if (!db_server_env.has_value())
+			db_server = "localhost"; // SQL Import Wizard doesn't provide DB_RMTSERVER
+			else {
+				db_server = db_server_env.value();
+
+				if (db_server == "(local)") // SQL Agent does this
+					db_server = "localhost";
+			}
+
+			auto db_username_env = get_environment_variable("DB_USERNAME");
+
+		if (db_username_env.has_value())
+			db_username = db_username_env.value();
+
+		auto db_password_env = get_environment_variable("DB_PASSWORD");
+
+		if (db_password_env.has_value())
+			db_password = db_password_env.value();
 #endif
 
 		if (cmd == u"flush") {
@@ -1024,10 +1056,15 @@ int main(int argc, char* argv[])
 			if (argc < 6)
 				throw runtime_error("Too few arguments.");
 
+			optional<u16string> bind_token;
+
 #ifdef _WIN32
-			auto bind_token = get_environment_variable(u"DB_BIND_TOKEN");
+			bind_token = get_environment_variable(u"DB_BIND_TOKEN");
 #else
-			optional<u16string> bind_token; // FIXME
+			auto bind_token_u8 = get_environment_variable("DB_BIND_TOKEN");
+
+			if (bind_token_u8.has_value())
+				bind_token = tds::utf8_to_utf16(bind_token_u8.value());
 #endif
 
 			int32_t commit_id;
@@ -1076,10 +1113,15 @@ int main(int argc, char* argv[])
 			if (argc < 3)
 				throw runtime_error("Too few arguments.");
 
+			optional<u16string> bind_token;
+
 #ifdef _WIN32
-			auto bind_token = get_environment_variable(u"DB_BIND_TOKEN");
+			bind_token = get_environment_variable(u"DB_BIND_TOKEN");
 #else
-			optional<u16string> bind_token; // FIXME
+			auto bind_token_u8 = get_environment_variable("DB_BIND_TOKEN");
+
+			if (bind_token_u8.has_value())
+				bind_token = tds::utf8_to_utf16(bind_token_u8.value());
 #endif
 
 			u16string_view object = (char16_t*)argv[2];
