@@ -29,6 +29,7 @@ private:
 #define formatted_error(s, ...) _formatted_error(FMT_COMPILE(s), __VA_ARGS__)
 
 #ifdef _WIN32
+
 class last_error : public std::exception {
 public:
 	last_error(std::string_view function, int le) {
@@ -66,6 +67,21 @@ public:
 private:
 	std::string msg;
 };
+
+#else
+
+class errno_error : public std::exception {
+public:
+	errno_error(std::string_view function, int en);
+
+	const char* what() const noexcept {
+		return msg.c_str();
+	}
+
+private:
+	std::string msg;
+};
+
 #endif
 
 // gitsql.cpp

@@ -163,6 +163,60 @@ public:
 
 typedef std::unique_ptr<HANDLE, handle_closer> unique_handle;
 
+#else
+
+class unique_handle {
+public:
+	unique_handle() : fd(0) {
+	}
+
+	explicit unique_handle(int fd) : fd(fd) {
+	}
+
+	unique_handle(unique_handle&& that) noexcept {
+		fd = that.fd;
+		that.fd = 0;
+	}
+
+	unique_handle(const unique_handle&) = delete;
+	unique_handle& operator=(const unique_handle&) = delete;
+
+	unique_handle& operator=(unique_handle&& that) noexcept {
+		if (fd > 0)
+			close(fd);
+
+		fd = that.fd;
+		that.fd = 0;
+
+		return *this;
+	}
+
+	~unique_handle() {
+		if (fd <= 0)
+			return;
+
+		close(fd);
+	}
+
+	explicit operator bool() const noexcept {
+		return fd != 0;
+	}
+
+	void reset(int new_fd = 0) noexcept {
+		if (fd > 0)
+			close(fd);
+
+		fd = new_fd;
+	}
+
+	int get() const noexcept {
+		return fd;
+	}
+
+private:
+	int fd;
+};
+
 #endif
 
 void update_git(GitRepo& repo, const std::string& user, const std::string& email, const std::string& description,

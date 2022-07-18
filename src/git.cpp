@@ -7,6 +7,10 @@
 #include "git.h"
 #include "gitsql.h"
 
+#ifndef _WIN32
+#include <fcntl.h>
+#endif
+
 using namespace std;
 
 class git_exception : public exception {
@@ -188,8 +192,9 @@ git_oid GitRepo::blob_create_from_buffer(string_view data) {
 	if (git_odb_exists(odb.get(), &blob) == 1)
 		return blob;
 
-	string repopath = git_repository_path(repo); // FIXME - should be Unicode
+	string repopath = git_repository_path(repo); // FIXME - should be Unicode on Windows
 
+#ifdef _WIN32
 	for (auto& c : repopath) {
 		if (c == '/')
 			c = '\\';
@@ -198,12 +203,17 @@ git_oid GitRepo::blob_create_from_buffer(string_view data) {
 	filesystem::path tmpfile = repopath;
 	tmpfile /= "newblob";
 
-#ifdef _WIN32
 	unique_handle h{CreateFileW((WCHAR*)tmpfile.u16string().c_str(), FILE_WRITE_DATA | DELETE, 0, nullptr, CREATE_ALWAYS,
 								FILE_ATTRIBUTE_NORMAL, nullptr)};
 
 	if (h.get() == INVALID_HANDLE_VALUE)
 		throw last_error("CreateFile(" + tmpfile.string() + ")", GetLastError());
+#else
+	unique_handle h{open(repopath.c_str(), O_TMPFILE | O_RDWR, 0644)};
+
+	if (h.get() == -1)
+		throw errno_error("open", errno);
+#endif
 
 	string header = "blob " + to_string(data.length());
 	header.push_back(0);
@@ -225,7 +235,6 @@ git_oid GitRepo::blob_create_from_buffer(string_view data) {
 	strm.avail_out = sizeof(zbuf);
 
 	do {
-		DWORD written;
 
 		err = deflate(&strm, writing_header ? Z_NO_FLUSH : Z_FINISH);
 
@@ -235,10 +244,30 @@ git_oid GitRepo::blob_create_from_buffer(string_view data) {
 		}
 
 		if (strm.avail_out != sizeof(zbuf)) {
+#ifdef _WIN32
+			DWORD written;
+
 			if (!WriteFile(h.get(), zbuf, sizeof(zbuf) - strm.avail_out, &written, nullptr)) {
 				deflateEnd(&strm);
 				throw last_error("WriteFile(" + tmpfile.string() + ")", GetLastError());
 			}
+#else
+			do {
+				auto ret = write(h.get(), zbuf, sizeof(zbuf) - strm.avail_out);
+
+				if (ret == -1) {
+					if (errno == EINTR)
+						continue;
+
+					throw errno_error("write", errno);
+				}
+
+				if (ret != (decltype(ret))(sizeof(zbuf) - strm.avail_out))
+					throw runtime_error("short write");
+
+				break;
+			} while (true);
+#endif
 
 			strm.next_out = zbuf;
 			strm.avail_out = sizeof(zbuf);
@@ -255,9 +284,13 @@ git_oid GitRepo::blob_create_from_buffer(string_view data) {
 
 	auto blobfile = get_object_filename(repopath, blob);
 
+#ifdef _WIN32
 	rename_open_file(h.get(), blobfile);
 #else
-	throw runtime_error("FIXME"); // FIXME
+	string procfile = "/proc/self/fd/" + to_string(h.get());
+
+	if (linkat(AT_FDCWD, procfile.c_str(), AT_FDCWD, blobfile.string().c_str(), AT_SYMLINK_FOLLOW) == -1)
+		throw errno_error("linkat", errno);
 #endif
 
 	return blob;
