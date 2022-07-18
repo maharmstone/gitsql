@@ -128,6 +128,7 @@ git_oid GitRepo::commit_create(const GitSignature& author, const GitSignature& c
 	return id;
 }
 
+#ifdef _WIN32
 static void rename_open_file(HANDLE h, const filesystem::path& fn) {
 	vector<uint8_t> buf;
 	auto dest = fn.u16string();
@@ -145,6 +146,7 @@ static void rename_open_file(HANDLE h, const filesystem::path& fn) {
 	if (!SetFileInformationByHandle(h, FileRenameInfo, fri, (DWORD)buf.size()))
 		throw last_error("SetFileInformationByHandle", GetLastError());
 }
+#endif
 
 static filesystem::path get_object_filename(const filesystem::path& repopath, const git_oid& oid) {
 	filesystem::path file = repopath;
@@ -196,6 +198,7 @@ git_oid GitRepo::blob_create_from_buffer(string_view data) {
 	filesystem::path tmpfile = repopath;
 	tmpfile /= "newblob";
 
+#ifdef _WIN32
 	unique_handle h{CreateFileW((WCHAR*)tmpfile.u16string().c_str(), FILE_WRITE_DATA | DELETE, 0, nullptr, CREATE_ALWAYS,
 								FILE_ATTRIBUTE_NORMAL, nullptr)};
 
@@ -253,6 +256,9 @@ git_oid GitRepo::blob_create_from_buffer(string_view data) {
 	auto blobfile = get_object_filename(repopath, blob);
 
 	rename_open_file(h.get(), blobfile);
+#else
+	throw runtime_error("FIXME"); // FIXME
+#endif
 
 	return blob;
 }

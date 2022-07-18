@@ -28,17 +28,25 @@ find_package(ZLIB REQUIRED)
 
 pkg_check_modules(LIBGIT2 REQUIRED libgit2)
 
-add_definitions(-DNOMINMAX)
+add_definitions(-DNOMINMAX -DLDAP_DEPRECATED)
 
 target_link_libraries(gitsql tdscpp)
-target_link_libraries(gitsql wldap32)
 target_link_libraries(gitsql fmt::fmt-header-only)
 target_link_libraries(gitsql ZLIB::ZLIB)
+
+if(WIN32)
+	target_link_libraries(gitsql wldap32)
+else()
+	target_link_libraries(gitsql ldap lber)
+endif()
 
 target_include_directories(gitsql PUBLIC ${LIBGIT2_INCLUDE_DIRS})
 target_link_libraries(gitsql ${LIBGIT2_LINK_LIBRARIES})
 
 if(NOT MSVC)
 	target_compile_options(gitsql PUBLIC -Wall -Werror=cast-function-type -Wno-expansion-to-defined -Wunused-parameter -Wtype-limits -Wextra -Wconversion)
-	target_link_options(gitsql PUBLIC -municode)
+
+	if(WIN32)
+		target_link_options(gitsql PUBLIC -municode)
+	endif()
 endif()

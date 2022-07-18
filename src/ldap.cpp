@@ -4,7 +4,7 @@
 #include <winber.h>
 #include <sddl.h>
 #else
-// FIXME
+#include <ldap.h>
 #endif
 
 #include <iostream>
@@ -18,7 +18,7 @@ using namespace std;
 
 class ldap_error : public exception {
 public:
-	ldap_error(const string& func, ULONG err) {
+	ldap_error(const string& func, int err) {
 		auto errmsg = ldap_err2string(err);
 
 		if (errmsg)
@@ -50,18 +50,25 @@ private:
 ldapobj::ldapobj() {
 	LDAPMessage* res = nullptr;
 	BerElement* ber = nullptr;
+	int err;
 
 	ld = ldap_init(nullptr, LDAP_PORT);
 	if (!ld)
+#ifdef _WIN32
 		throw ldap_error("ldap_init", LdapGetLastError());
+#else
+		throw runtime_error("ldap_init failed");
+#endif
 
-	auto err = ldap_connect(ld, nullptr);
+#ifdef _WIN32
+	err = ldap_connect(ld, nullptr);
 
 	if (err != LDAP_SUCCESS) {
 		auto exc = ldap_error("ldap_connect", err);
 		ldap_unbind(ld);
 		throw exc;
 	}
+#endif
 
 	err = ldap_bind_s(ld, nullptr, nullptr, LDAP_AUTH_NEGOTIATE);
 
@@ -227,6 +234,7 @@ static string hex_byte(uint8_t v) {
 	return s;
 }
 
+#ifdef _WIN32
 void get_ldap_details_from_sid(PSID sid, string& name, string& email) {
 	ldapobj l;
 	string binsid;
@@ -253,3 +261,4 @@ void get_ldap_details_from_sid(PSID sid, string& name, string& email) {
 	else
 		email = "";
 }
+#endif

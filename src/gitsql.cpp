@@ -520,6 +520,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)"});
 }
 
 static void get_user_details(const u16string& username, string& name, string& email) {
+#ifdef _WIN32
 	array<std::byte, 68> sid;
 	auto sidlen = (DWORD)sid.size();
 	char16_t domain[100];
@@ -554,8 +555,16 @@ static void get_user_details(const u16string& username, string& name, string& em
 		else
 			email = u8username.substr(bs + 1) + "@"s + tds::utf16_to_utf8(domain);
 	}
+#else
+	// FIXME
+	auto u8username = tds::utf16_to_utf8(username);
+
+	name = u8username;
+	email = u8username + "@localhost"s;
+#endif
 }
 
+#ifdef _WIN32
 static unique_handle open_process_token(HANDLE process_handle, DWORD desired_access) {
 	HANDLE h;
 
@@ -578,8 +587,10 @@ static vector<uint8_t> get_token_information(HANDLE token, TOKEN_INFORMATION_CLA
 
 	return buf;
 }
+#endif
 
 static void get_current_user_details(string& name, string& email) {
+#ifdef _WIN32
 	auto token = open_process_token(GetCurrentProcess(), TOKEN_QUERY);
 
 	auto buf = get_token_information(token.get(), TokenUser);
@@ -611,6 +622,10 @@ static void get_current_user_details(string& name, string& email) {
 		if (email.empty())
 			email = tds::utf16_to_utf8(usernamesv) + "@"s + tds::utf16_to_utf8(domainsv);
 	}
+#else
+	name = "name"; // FIXME
+	email = "a@b.com"; // FIXME
+#endif
 }
 
 class repo {
@@ -922,6 +937,7 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 	}
 }
 
+#ifdef _WIN32
 static optional<u16string> get_environment_variable(const u16string& name) {
 	auto len = GetEnvironmentVariableW((WCHAR*)name.c_str(), nullptr, 0);
 
@@ -943,6 +959,7 @@ static optional<u16string> get_environment_variable(const u16string& name) {
 
 	return ret;
 }
+#endif
 
 static void print_usage() {
 	fmt::print(stderr, R"(Usage:
@@ -953,7 +970,12 @@ static void print_usage() {
 )");
 }
 
-int wmain(int argc, wchar_t* argv[]) {
+#ifdef _WIN32
+int wmain(int argc, wchar_t* argv[])
+#else
+int main(int argc, char* argv[])
+#endif
+{
 	string db_server;
 
 	if (argc < 2) {
@@ -969,6 +991,7 @@ int wmain(int argc, wchar_t* argv[]) {
 	}
 
 	try {
+#ifdef _WIN32
 		auto db_server_env = get_environment_variable(u"DB_RMTSERVER");
 
 		if (!db_server_env.has_value())
@@ -989,7 +1012,9 @@ int wmain(int argc, wchar_t* argv[]) {
 
 		if (db_password_env.has_value())
 			db_password = tds::utf16_to_utf8(db_password_env.value());
-
+#else
+		// FIXME
+#endif
 
 		if (cmd == u"flush") {
 			lockfile lf;
@@ -999,12 +1024,20 @@ int wmain(int argc, wchar_t* argv[]) {
 			if (argc < 6)
 				throw runtime_error("Too few arguments.");
 
+#ifdef _WIN32
 			auto bind_token = get_environment_variable(u"DB_BIND_TOKEN");
+#else
+			optional<u16string> bind_token; // FIXME
+#endif
 
 			int32_t commit_id;
 
 			{
+#ifdef _WIN32
 				auto commit_id_str = tds::utf16_to_utf8(argv[4]);
+#else
+				string commit_id_str = argv[4];
+#endif
 
 				auto [ptr, ec] = from_chars(commit_id_str.data(), commit_id_str.data() + commit_id_str.length(), commit_id);
 
@@ -1023,7 +1056,11 @@ int wmain(int argc, wchar_t* argv[]) {
 			int32_t repo_id;
 
 			{
+#ifdef _WIN32
 				auto repo_id_str = tds::utf16_to_utf8(argv[2]);
+#else
+				string repo_id_str = argv[2];
+#endif
 
 				auto [ptr, ec] = from_chars(repo_id_str.data(), repo_id_str.data() + repo_id_str.length(), repo_id);
 
@@ -1039,7 +1076,11 @@ int wmain(int argc, wchar_t* argv[]) {
 			if (argc < 3)
 				throw runtime_error("Too few arguments.");
 
+#ifdef _WIN32
 			auto bind_token = get_environment_variable(u"DB_BIND_TOKEN");
+#else
+			optional<u16string> bind_token; // FIXME
+#endif
 
 			u16string_view object = (char16_t*)argv[2];
 			tds::tds tds(db_server, db_username, db_password, db_app);

@@ -1,6 +1,9 @@
 #pragma once
 
+#ifdef _WIN32
 #include <windows.h>
+#endif
+
 #include <string>
 #include <span>
 #include <tdscpp.h>
@@ -25,6 +28,7 @@ private:
 
 #define formatted_error(s, ...) _formatted_error(FMT_COMPILE(s), __VA_ARGS__)
 
+#ifdef _WIN32
 class last_error : public std::exception {
 public:
 	last_error(std::string_view function, int le) {
@@ -49,7 +53,7 @@ public:
 				}
 
 				LocalFree(fm);
-				}
+			}
 		}
 
 		msg = std::string(function) + " failed (error " + std::to_string(le) + (!nice_msg.empty() ? (", " + nice_msg) : "") + ").";
@@ -62,6 +66,7 @@ public:
 private:
 	std::string msg;
 };
+#endif
 
 // gitsql.cpp
 std::string object_perms(tds::tds& tds, int64_t id, const std::string& dbs, const std::string& name);
@@ -72,7 +77,9 @@ std::string brackets_escape(std::string_view s);
 std::u16string brackets_escape(const std::u16string_view& s);
 
 // ldap.cpp
+#ifdef _WIN32
 void get_ldap_details_from_sid(PSID sid, std::string& name, std::string& email);
+#endif
 
 // parse.cpp
 std::string munge_definition(std::string_view sql, std::string_view schema, std::string_view name,

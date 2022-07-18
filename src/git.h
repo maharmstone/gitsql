@@ -1,6 +1,9 @@
 #pragma once
 
+#ifdef _WIN32
 #include <windows.h>
+#endif
+
 #include <git2.h>
 #include <string>
 #include <list>
@@ -144,6 +147,8 @@ struct git_file {
 	std::optional<std::string> data;
 };
 
+#ifdef _WIN32
+
 class handle_closer {
 public:
 	typedef HANDLE pointer;
@@ -157,6 +162,8 @@ public:
 };
 
 typedef std::unique_ptr<HANDLE, handle_closer> unique_handle;
+
+#endif
 
 void update_git(GitRepo& repo, const std::string& user, const std::string& email, const std::string& description,
 				std::list<git_file>& files, bool clear_all = false, const std::optional<tds::datetimeoffset>& dto = std::nullopt,
