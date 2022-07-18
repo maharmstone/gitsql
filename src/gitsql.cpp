@@ -996,12 +996,16 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	u16string_view cmd = (char16_t*)argv[1];
+#ifdef _WIN32
+	auto cmd = tds::utf16_to_utf8((char16_t*)argv[1]);
 
-	if (cmd != u"flush" && cmd != u"object" && cmd != u"dump" && cmd != u"show") {
+	if (cmd != "flush" && cmd != "object" && cmd != "dump" && cmd != "show") {
 		print_usage();
 		return 1;
 	}
+#else
+	string_view cmd = argv[1];
+#endif
 
 	try {
 #ifdef _WIN32
@@ -1048,11 +1052,11 @@ int main(int argc, char* argv[])
 			db_password = db_password_env.value();
 #endif
 
-		if (cmd == u"flush") {
+		if (cmd == "flush") {
 			lockfile lf;
 
 			flush_git(db_server);
-		} else if (cmd == u"object") {
+		} else if (cmd == "object") {
 			if (argc < 6)
 				throw runtime_error("Too few arguments.");
 
@@ -1089,7 +1093,7 @@ int main(int argc, char* argv[])
 			tds::tds tds(db_server, db_username, db_password, db_app);
 
 			write_object_ddl(tds, schema, object, bind_token, commit_id, filename, db);
-		} else if (cmd == u"dump") {
+		} else if (cmd == "dump") {
 			int32_t repo_id;
 
 			{
@@ -1109,7 +1113,7 @@ int main(int argc, char* argv[])
 			tds::tds tds(db_server, db_username, db_password, db_app);
 
 			dump_sql2(tds, repo_id);
-		} else if (cmd == u"show") {
+		} else if (cmd == "show") {
 			if (argc < 3)
 				throw runtime_error("Too few arguments.");
 
@@ -1150,7 +1154,7 @@ int main(int argc, char* argv[])
 	} catch (const exception& e) {
 		fmt::print(stderr, "{}\n", e.what());
 
-		if (cmd != u"show") {
+		if (cmd != "show") {
 			try {
 				tds::tds tds(db_server, db_username, db_password, db_app);
 				tds.run("INSERT INTO Sandbox.gitsql(timestamp, message) VALUES(GETDATE(), ?)", string_view(e.what()));
