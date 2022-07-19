@@ -4,6 +4,9 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <shlwapi.h>
+#else
+#include <fcntl.h>
+#include <sys/file.h>
 #endif
 
 #include <string>
@@ -1201,7 +1204,23 @@ public:
         else if (res != WAIT_OBJECT_0)
             throw formatted_error("WaitForSingleObject returned {}", res);
 #else
-		// FIXME
+		h.reset(open("/tmp/gitsql_lock", O_CREAT, 0666));
+
+		if (h.get() == -1)
+			throw errno_error("open", errno);
+
+		do {
+			auto ret = flock(h.get(), LOCK_EX);
+
+			if (ret == -1) {
+				if (errno == EINTR)
+					continue;
+
+				throw errno_error("flock", errno);
+			}
+
+			break;
+		} while (true);
 #endif
 	}
 
@@ -1209,14 +1228,12 @@ public:
 #ifdef _WIN32
         ReleaseMutex(h.get());
 #else
-		// FIXME
+		flock(h.get(), LOCK_UN);
 #endif
 	}
 
 private:
-#ifdef _WIN32
-	unique_handle h{INVALID_HANDLE_VALUE};
-#endif
+	unique_handle h;
 };
 
 static string object_ddl(tds::tds& tds, const u16string_view& schema, const u16string_view& object) {
