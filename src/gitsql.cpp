@@ -26,8 +26,6 @@ using namespace std;
 string db_username, db_password;
 const string db_app = "GitSQL";
 
-static void get_current_user_details(string& name, string& email);
-
 #ifndef _WIN32
 errno_error::errno_error(string_view function, int en) : msg(function) {
 	msg += " failed (";
@@ -770,6 +768,70 @@ static string fix_whitespace(string_view sv) {
 	return s;
 }
 
+#ifdef _WIN32
+static unique_handle open_process_token(HANDLE process_handle, DWORD desired_access) {
+	HANDLE h;
+
+	if (!OpenProcessToken(process_handle, desired_access, &h))
+		throw last_error("OpenProcessToken", GetLastError());
+
+	return unique_handle{h};
+}
+
+static vector<uint8_t> get_token_information(HANDLE token, TOKEN_INFORMATION_CLASS token_information_class) {
+	DWORD retlen;
+
+	if (!GetTokenInformation(token, token_information_class, nullptr, 0, &retlen) && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+		throw last_error("GetTokenInformation", GetLastError());
+
+	vector<uint8_t> buf(retlen);
+
+	if (!GetTokenInformation(token, token_information_class, buf.data(), (DWORD)buf.size(), &retlen))
+		throw last_error("GetTokenInformation", GetLastError());
+
+	return buf;
+}
+#endif
+
+static void get_current_user_details(string& name, string& email) {
+#ifdef _WIN32
+	auto token = open_process_token(GetCurrentProcess(), TOKEN_QUERY);
+
+	auto buf = get_token_information(token.get(), TokenUser);
+	auto& tu = *(TOKEN_USER*)buf.data();
+
+	try {
+		get_ldap_details_from_sid(tu.User.Sid, name, email);
+	} catch (...) {
+		name.clear();
+		email.clear();
+	}
+
+	if (name.empty() || email.empty()) {
+		array<char16_t, 255> username, domain;
+		auto usernamelen = (DWORD)username.size(), domainlen = (DWORD)domain.size();
+		SID_NAME_USE use;
+
+		if (!LookupAccountSidW(nullptr, tu.User.Sid, (WCHAR*)username.data(), &usernamelen, (WCHAR*)domain.data(),
+							   &domainlen, &use)) {
+			throw last_error("LookupAccountSid", GetLastError());
+		}
+
+		auto usernamesv = u16string_view(username.data(), usernamelen);
+		auto domainsv = u16string_view(domain.data(), domainlen);
+
+		if (name.empty())
+			name = tds::utf16_to_utf8(usernamesv);
+
+		if (email.empty())
+			email = tds::utf16_to_utf8(usernamesv) + "@"s + tds::utf16_to_utf8(domainsv);
+	}
+#else
+	name = "name"; // FIXME
+	email = "a@b.com"; // FIXME
+#endif
+}
+
 static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db, const string& branch) {
 	string dbs;
 	list<git_file> files;
@@ -971,70 +1033,6 @@ static void get_user_details(const u16string& username, string& name, string& em
 
 	name = u8username;
 	email = u8username + "@localhost"s;
-#endif
-}
-
-#ifdef _WIN32
-static unique_handle open_process_token(HANDLE process_handle, DWORD desired_access) {
-	HANDLE h;
-
-	if (!OpenProcessToken(process_handle, desired_access, &h))
-		throw last_error("OpenProcessToken", GetLastError());
-
-	return unique_handle{h};
-}
-
-static vector<uint8_t> get_token_information(HANDLE token, TOKEN_INFORMATION_CLASS token_information_class) {
-	DWORD retlen;
-
-	if (!GetTokenInformation(token, token_information_class, nullptr, 0, &retlen) && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-		throw last_error("GetTokenInformation", GetLastError());
-
-	vector<uint8_t> buf(retlen);
-
-	if (!GetTokenInformation(token, token_information_class, buf.data(), (DWORD)buf.size(), &retlen))
-		throw last_error("GetTokenInformation", GetLastError());
-
-	return buf;
-}
-#endif
-
-static void get_current_user_details(string& name, string& email) {
-#ifdef _WIN32
-	auto token = open_process_token(GetCurrentProcess(), TOKEN_QUERY);
-
-	auto buf = get_token_information(token.get(), TokenUser);
-	auto& tu = *(TOKEN_USER*)buf.data();
-
-	try {
-		get_ldap_details_from_sid(tu.User.Sid, name, email);
-	} catch (...) {
-		name.clear();
-		email.clear();
-	}
-
-	if (name.empty() || email.empty()) {
-		array<char16_t, 255> username, domain;
-		auto usernamelen = (DWORD)username.size(), domainlen = (DWORD)domain.size();
-		SID_NAME_USE use;
-
-		if (!LookupAccountSidW(nullptr, tu.User.Sid, (WCHAR*)username.data(), &usernamelen, (WCHAR*)domain.data(),
-							   &domainlen, &use)) {
-			throw last_error("LookupAccountSid", GetLastError());
-		}
-
-		auto usernamesv = u16string_view(username.data(), usernamelen);
-		auto domainsv = u16string_view(domain.data(), domainlen);
-
-		if (name.empty())
-			name = tds::utf16_to_utf8(usernamesv);
-
-		if (email.empty())
-			email = tds::utf16_to_utf8(usernamesv) + "@"s + tds::utf16_to_utf8(domainsv);
-	}
-#else
-	name = "name"; // FIXME
-	email = "a@b.com"; // FIXME
 #endif
 }
 
