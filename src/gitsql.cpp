@@ -1189,12 +1189,12 @@ class lockfile {
 public:
 	lockfile() {
 #ifdef _WIN32
-        h = CreateMutexW(nullptr, false, L"Global\\gitsql_mutant");
+        h.reset(CreateMutexW(nullptr, false, L"Global\\gitsql_mutant"));
 
-        if (!h || h == INVALID_HANDLE_VALUE)
+        if (!h || h.get() == INVALID_HANDLE_VALUE)
             throw last_error("CreateMutex", GetLastError());
 
-        auto res = WaitForSingleObject(h, INFINITE);
+        auto res = WaitForSingleObject(h.get(), INFINITE);
 
 		if (res == WAIT_FAILED)
 			throw last_error("WaitForSingleObject", GetLastError());
@@ -1207,8 +1207,7 @@ public:
 
 	~lockfile() {
 #ifdef _WIN32
-        ReleaseMutex(h);
-        CloseHandle(h);
+        ReleaseMutex(h.get());
 #else
 		// FIXME
 #endif
@@ -1216,7 +1215,7 @@ public:
 
 private:
 #ifdef _WIN32
-	HANDLE h = INVALID_HANDLE_VALUE;
+	unique_handle h{INVALID_HANDLE_VALUE};
 #endif
 };
 
