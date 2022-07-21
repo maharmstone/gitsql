@@ -162,13 +162,10 @@ void ldapobj::find_naming_context() {
 	auto att = ldap_first_attribute(ld.get(), res.get(), &ber);
 
 	while (att) {
-		auto val = ldap_get_values(ld.get(), res.get(), att);
+		bervals_ptr bv{ldap_get_values_len(ld.get(), res.get(), att)};
 
-		if (val && val[0])
-			naming_context = val[0];
-
-		if (val)
-			ldap_value_free(val);
+		if (bv && ldap_count_values_len(bv.get()) > 0)
+			naming_context = string_view(bv.get()[0]->bv_val, bv.get()[0]->bv_len);
 
 		att = ldap_next_attribute(ld.get(), res.get(), ber);
 	}
@@ -214,7 +211,7 @@ map<string, string> ldapobj::search(const string& filter, const vector<string>& 
 		bervals_ptr bv{ldap_get_values_len(ld.get(), res.get(), att)};
 
 		if (bv && ldap_count_values_len(bv.get()) > 0)
-			values[att] = string(bv.get()[0]->bv_val, bv.get()[0]->bv_len);
+			values[att] = string_view(bv.get()[0]->bv_val, bv.get()[0]->bv_len);
 		else
 			values[att] = "";
 
