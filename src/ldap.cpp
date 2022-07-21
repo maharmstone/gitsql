@@ -13,6 +13,7 @@
 #include <span>
 #include <array>
 #include <string>
+#include <memory>
 
 using namespace std;
 
@@ -35,15 +36,28 @@ private:
 	string msg;
 };
 
+class ldap_closer {
+public:
+	typedef LDAP* pointer;
+
+	void operator()(LDAP* ldap) {
+		if (!ldap)
+			return;
+
+		ldap_unbind(ldap);
+	}
+};
+
+using ldap_t = unique_ptr<LDAP*, ldap_closer>;
+
 class ldapobj {
 public:
 	ldapobj();
-	~ldapobj();
 	map<string, string> search(const string& filter, const vector<string>& atts);
 	vector<string> search_multiple(const string& filter, const string& att);
 
 private:
-	LDAP* ld;
+	ldap_t ld;
 	string naming_context;
 };
 
@@ -52,7 +66,7 @@ ldapobj::ldapobj() {
 	BerElement* ber = nullptr;
 	int err;
 
-	ld = ldap_init(nullptr, LDAP_PORT);
+	ld.reset(ldap_init(nullptr, LDAP_PORT));
 	if (!ld)
 #ifdef _WIN32
 		throw ldap_error("ldap_init", LdapGetLastError());
@@ -61,37 +75,28 @@ ldapobj::ldapobj() {
 #endif
 
 #ifdef _WIN32
-	err = ldap_connect(ld, nullptr);
+	err = ldap_connect(ld.get(), nullptr);
 
-	if (err != LDAP_SUCCESS) {
-		auto exc = ldap_error("ldap_connect", err);
-		ldap_unbind(ld);
-		throw exc;
-	}
+	if (err != LDAP_SUCCESS)
+		throw ldap_error("ldap_connect", err);
 #endif
 
-	err = ldap_bind_s(ld, nullptr, nullptr, LDAP_AUTH_NEGOTIATE);
+	err = ldap_bind_s(ld.get(), nullptr, nullptr, LDAP_AUTH_NEGOTIATE);
 
-	if (err != LDAP_SUCCESS) {
-		auto exc = ldap_error("ldap_bind_s", err);
-		ldap_unbind(ld);
-		throw exc;
-	}
+	if (err != LDAP_SUCCESS)
+		throw ldap_error("ldap_bind_s", err);
 
 	const char* atts[] = { "defaultNamingContext", nullptr };
 
-	err = ldap_search_s(ld, nullptr, LDAP_SCOPE_BASE, nullptr,
+	err = ldap_search_s(ld.get(), nullptr, LDAP_SCOPE_BASE, nullptr,
 						(char**)atts, false, &res);
-	if (err != LDAP_SUCCESS) {
-		auto exc = ldap_error("ldap_search_s", err);
-		ldap_unbind(ld);
-		throw exc;
-	}
+	if (err != LDAP_SUCCESS)
+		throw ldap_error("ldap_search_s", err);
 
-	auto att = ldap_first_attribute(ld, res, &ber);
+	auto att = ldap_first_attribute(ld.get(), res, &ber);
 
 	while (att) {
-		auto val = ldap_get_values(ld, res, att);
+		auto val = ldap_get_values(ld.get(), res, att);
 
 		if (val && val[0])
 			naming_context = val[0];
@@ -99,7 +104,7 @@ ldapobj::ldapobj() {
 		if (val)
 			ldap_value_free(val);
 
-		att = ldap_next_attribute(ld, res, ber);
+		att = ldap_next_attribute(ld.get(), res, ber);
 	}
 
 	if (ber)
@@ -108,14 +113,8 @@ ldapobj::ldapobj() {
 	if (res)
 		ldap_msgfree(res);
 
-	if (naming_context.empty()) {
-		ldap_unbind(ld);
+	if (naming_context.empty())
 		throw runtime_error("Could not get LDAP naming context.");
-	}
-}
-
-ldapobj::~ldapobj() {
-	ldap_unbind(ld);
 }
 
 map<string, string> ldapobj::search(const string& filter, const vector<string>& atts) {
@@ -133,8 +132,8 @@ map<string, string> ldapobj::search(const string& filter, const vector<string>& 
 		attlist.push_back(nullptr);
 	}
 
-	auto ret = ldap_search_s(ld, (char*)naming_context.c_str(), LDAP_SCOPE_SUBTREE, (char*)filter.c_str(),
-								atts.empty() ? nullptr : &attlist[0], false, &res);
+	auto ret = ldap_search_s(ld.get(), (char*)naming_context.c_str(), LDAP_SCOPE_SUBTREE, (char*)filter.c_str(),
+							 atts.empty() ? nullptr : &attlist[0], false, &res);
 
 	if (ret != LDAP_SUCCESS) {
 		if (res)
@@ -143,10 +142,10 @@ map<string, string> ldapobj::search(const string& filter, const vector<string>& 
 		throw ldap_error("ldap_search_s", ret);
 	}
 
-	att = ldap_first_attribute(ld, res, &ber);
+	att = ldap_first_attribute(ld.get(), res, &ber);
 
 	while (att) {
-		auto val = ldap_get_values_len(ld, res, att);
+		auto val = ldap_get_values_len(ld.get(), res, att);
 
 		if (val && val[0])
 			values[att] = string(val[0]->bv_val, val[0]->bv_len);
@@ -156,7 +155,7 @@ map<string, string> ldapobj::search(const string& filter, const vector<string>& 
 		if (val)
 			ldap_value_free_len(val);
 
-		att = ldap_next_attribute(ld, res, ber);
+		att = ldap_next_attribute(ld.get(), res, ber);
 	}
 
 	if (ber)
@@ -178,8 +177,8 @@ vector<string> ldapobj::search_multiple(const string& filter, const string& att)
 	attlist[0] = (char*)att.c_str();
 	attlist[1] = nullptr;
 
-	auto ret = ldap_search_s(ld, (char*)naming_context.c_str(), LDAP_SCOPE_SUBTREE, (char*)filter.c_str(),
-								&attlist[0], false, &res);
+	auto ret = ldap_search_s(ld.get(), (char*)naming_context.c_str(), LDAP_SCOPE_SUBTREE, (char*)filter.c_str(),
+							 &attlist[0], false, &res);
 
 	if (ret != LDAP_SUCCESS) {
 		if (res)
@@ -188,10 +187,10 @@ vector<string> ldapobj::search_multiple(const string& filter, const string& att)
 		throw ldap_error("ldap_search_s", ret);
 	}
 
-	s = ldap_first_attribute(ld, res, &ber);
+	s = ldap_first_attribute(ld.get(), res, &ber);
 
 	while (s) {
-		auto val = ldap_get_values_len(ld, res, s);
+		auto val = ldap_get_values_len(ld.get(), res, s);
 
 		if (val) {
 			unsigned int i = 0;
@@ -204,7 +203,7 @@ vector<string> ldapobj::search_multiple(const string& filter, const string& att)
 			ldap_value_free_len(val);
 		}
 
-		s = ldap_next_attribute(ld, res, ber);
+		s = ldap_next_attribute(ld.get(), res, ber);
 	}
 
 	if (ber)
