@@ -55,7 +55,6 @@ class ldapobj {
 public:
 	ldapobj();
 	map<string, string> search(const string& filter, const vector<string>& atts);
-	vector<string> search_multiple(const string& filter, const string& att);
 
 private:
 	ldap_t ld;
@@ -183,54 +182,6 @@ map<string, string> ldapobj::search(const string& filter, const vector<string>& 
 			ldap_value_free_len(val);
 
 		att = ldap_next_attribute(ld.get(), res, ber);
-	}
-
-	if (ber)
-		ber_free(ber, 0);
-
-	if (res)
-		ldap_msgfree(res);
-
-	return values;
-}
-
-vector<string> ldapobj::search_multiple(const string& filter, const string& att) {
-	vector<string> values;
-	char* s;
-	LDAPMessage* res = nullptr;
-	BerElement* ber = nullptr;
-	array<char*, 2> attlist;
-
-	attlist[0] = (char*)att.c_str();
-	attlist[1] = nullptr;
-
-	auto ret = ldap_search_s(ld.get(), (char*)naming_context.c_str(), LDAP_SCOPE_SUBTREE, (char*)filter.c_str(),
-							 &attlist[0], false, &res);
-
-	if (ret != LDAP_SUCCESS) {
-		if (res)
-			ldap_msgfree(res);
-
-		throw ldap_error("ldap_search_s", ret);
-	}
-
-	s = ldap_first_attribute(ld.get(), res, &ber);
-
-	while (s) {
-		auto val = ldap_get_values_len(ld.get(), res, s);
-
-		if (val) {
-			unsigned int i = 0;
-
-			while (val[i]) {
-				values.emplace_back(string_view(val[i]->bv_val, val[i]->bv_len));
-				i++;
-			}
-
-			ldap_value_free_len(val);
-		}
-
-		s = ldap_next_attribute(ld.get(), res, ber);
 	}
 
 	if (ber)
