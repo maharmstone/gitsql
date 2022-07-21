@@ -5,6 +5,7 @@
 #include <sddl.h>
 #else
 #include <ldap.h>
+#include <sasl/sasl.h>
 #endif
 
 #include <iostream>
@@ -61,6 +62,18 @@ private:
 	string naming_context;
 };
 
+#ifndef _WIN32
+static int lutil_sasl_interact(LDAP*, unsigned int, void*, void* in) {
+	auto v = (sasl_interact_t*)in;
+
+	while (v->id != SASL_CB_LIST_END) {
+		v++;
+	}
+
+	return LDAP_SUCCESS;
+}
+#endif
+
 ldapobj::ldapobj() {
 	LDAPMessage* res = nullptr;
 	BerElement* ber = nullptr;
@@ -81,10 +94,24 @@ ldapobj::ldapobj() {
 		throw ldap_error("ldap_connect", err);
 #endif
 
+	int version = LDAP_VERSION3;
+	err = ldap_set_option(ld.get(), LDAP_OPT_PROTOCOL_VERSION, &version);
+
+	if (err != LDAP_SUCCESS)
+		throw ldap_error("ldap_set_option", err);
+
+#ifdef _WIN32
 	err = ldap_bind_s(ld.get(), nullptr, nullptr, LDAP_AUTH_NEGOTIATE);
 
 	if (err != LDAP_SUCCESS)
 		throw ldap_error("ldap_bind_s", err);
+#else
+	err = ldap_sasl_interactive_bind_s(ld.get(), nullptr, nullptr, nullptr, nullptr,
+									   LDAP_SASL_QUIET, lutil_sasl_interact, nullptr);
+
+	if (err != LDAP_SUCCESS)
+		throw ldap_error("ldap_sasl_interactive_bind_s", err);
+#endif
 
 	const char* atts[] = { "defaultNamingContext", nullptr };
 
