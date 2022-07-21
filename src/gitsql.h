@@ -103,3 +103,6 @@ void get_ldap_details_from_name(std::string_view username, std::string& name, st
 std::string munge_definition(std::string_view sql, std::string_view schema, std::string_view name,
 							 enum lex type);
 std::string dequote(std::string_view sql);
+
+// master.cpp
+void dump_master(const std::string& db_server, unsigned int repo);

@@ -17,7 +17,8 @@ set(SRC_FILES
 	src/table.cpp
 	src/ldap.cpp
 	src/lex.cpp
-	src/parse.cpp)
+	src/parse.cpp
+	src/master.cpp)
 
 add_executable(gitsql ${SRC_FILES})
 

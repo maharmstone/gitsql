@@ -1626,6 +1626,23 @@ int main(int argc, char* argv[])
 			auto ddl = object_ddl(tds, onp.schema, onp.name);
 
 			fmt::print("{}", ddl);
+		} else if (cmd == "master") {
+			unsigned int repo;
+
+			if (argc < 3)
+				throw runtime_error("Too few arguments.");
+
+#ifdef _WIN32
+			auto repo_str = tds::utf16_to_utf8((char16_t*)argv[2]);
+#else
+			string_view repo_str = argv[2];
+#endif
+			auto [ptr, ec] = from_chars(repo_str.data(), repo_str.data() + repo_str.length(), repo);
+
+			if (ptr != repo_str.data() + repo_str.length())
+				throw formatted_error("Unable to interpret \"{}\" as integer.", repo_str);
+
+			dump_master(db_server, repo);
 		}
 	} catch (const exception& e) {
 		fmt::print(stderr, "{}\n", e.what());
