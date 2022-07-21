@@ -11,6 +11,8 @@
 #include <fmt/compile.h>
 #include "lex.h"
 
+static const std::string_view db_app = "GitSQL";
+
 class _formatted_error : public std::exception {
 public:
 	template<typename T, typename... Args>

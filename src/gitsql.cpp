@@ -25,7 +25,6 @@
 using namespace std;
 
 string db_username, db_password;
-const string db_app = "GitSQL";
 
 #ifndef _WIN32
 errno_error::errno_error(string_view function, int en) : msg(function) {
