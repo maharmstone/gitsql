@@ -854,7 +854,7 @@ static void get_current_user_details(string& name, string& email) {
 		name = pwd.pw_name;
 
 	if (email.empty())
-		email = name + "@localhost"; // FIXME - computer name?
+		email = pwd.pw_name + "@localhost"s; // FIXME - computer name?
 #endif
 }
 
