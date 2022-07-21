@@ -61,6 +61,18 @@ private:
 	string naming_context;
 };
 
+class ldap_message_closer {
+public:
+	typedef LDAPMessage* pointer;
+
+	void operator()(LDAPMessage* msg) {
+		if (msg)
+			ldap_msgfree(msg);
+	}
+};
+
+using ldap_message = std::unique_ptr<LDAPMessage*, ldap_message_closer>;
+
 #ifndef _WIN32
 static int lutil_sasl_interact(LDAP*, unsigned int, void*, void* in) {
 	auto v = (sasl_interact_t*)in;
@@ -145,7 +157,7 @@ ldapobj::ldapobj() {
 
 map<string, string> ldapobj::search(const string& filter, const vector<string>& atts) {
 	char* att;
-	LDAPMessage* res = nullptr;
+	ldap_message res;
 	BerElement* ber = nullptr;
 	vector<char*> attlist;
 	map<string, string> values;
@@ -158,21 +170,23 @@ map<string, string> ldapobj::search(const string& filter, const vector<string>& 
 		attlist.push_back(nullptr);
 	}
 
-	auto ret = ldap_search_ext_s(ld.get(), (char*)naming_context.c_str(), LDAP_SCOPE_SUBTREE, (char*)filter.c_str(),
-								 atts.empty() ? nullptr : &attlist[0], false, nullptr, nullptr, nullptr,
-								 0, &res);
+	{
+		LDAPMessage* tmp = nullptr;
 
-	if (ret != LDAP_SUCCESS) {
-		if (res)
-			ldap_msgfree(res);
+		auto ret = ldap_search_ext_s(ld.get(), (char*)naming_context.c_str(), LDAP_SCOPE_SUBTREE, (char*)filter.c_str(),
+									atts.empty() ? nullptr : &attlist[0], false, nullptr, nullptr, nullptr,
+									0, &tmp);
 
-		throw ldap_error("ldap_search_ext_s", ret);
+		res.reset(tmp);
+
+		if (ret != LDAP_SUCCESS)
+			throw ldap_error("ldap_search_ext_s", ret);
 	}
 
-	att = ldap_first_attribute(ld.get(), res, &ber);
+	att = ldap_first_attribute(ld.get(), res.get(), &ber);
 
 	while (att) {
-		auto val = ldap_get_values_len(ld.get(), res, att);
+		auto val = ldap_get_values_len(ld.get(), res.get(), att);
 
 		if (val && val[0])
 			values[att] = string(val[0]->bv_val, val[0]->bv_len);
@@ -182,14 +196,11 @@ map<string, string> ldapobj::search(const string& filter, const vector<string>& 
 		if (val)
 			ldap_value_free_len(val);
 
-		att = ldap_next_attribute(ld.get(), res, ber);
+		att = ldap_next_attribute(ld.get(), res.get(), ber);
 	}
 
 	if (ber)
 		ber_free(ber, 0);
-
-	if (res)
-		ldap_msgfree(res);
 
 	return values;
 }
