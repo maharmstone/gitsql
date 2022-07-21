@@ -57,6 +57,8 @@ public:
 	map<string, string> search(const string& filter, const vector<string>& atts);
 
 private:
+	void find_naming_context();
+
 	ldap_t ld;
 	string naming_context;
 };
@@ -86,8 +88,6 @@ static int lutil_sasl_interact(LDAP*, unsigned int, void*, void* in) {
 #endif
 
 ldapobj::ldapobj() {
-	LDAPMessage* res = nullptr;
-	BerElement* ber = nullptr;
 	int err;
 
 	ld.reset(ldap_init(nullptr, LDAP_PORT));
@@ -123,6 +123,14 @@ ldapobj::ldapobj() {
 	if (err != LDAP_SUCCESS)
 		throw ldap_error("ldap_sasl_interactive_bind_s", err);
 #endif
+
+	find_naming_context();
+}
+
+void ldapobj::find_naming_context() {
+	LDAPMessage* res = nullptr;
+	BerElement* ber = nullptr;
+	int err;
 
 	const char* atts[] = { "defaultNamingContext", nullptr };
 
