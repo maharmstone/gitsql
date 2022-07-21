@@ -73,7 +73,19 @@ public:
 	}
 };
 
-using ldap_message = std::unique_ptr<LDAPMessage*, ldap_message_closer>;
+using ldap_message = unique_ptr<LDAPMessage*, ldap_message_closer>;
+
+class bervals_closer {
+public:
+	typedef berval** pointer;
+
+	void operator()(berval** bv) {
+		if (bv)
+			ldap_value_free_len(bv);
+	}
+};
+
+using bervals_ptr = unique_ptr<berval**, bervals_closer>;
 
 #ifndef _WIN32
 static int lutil_sasl_interact(LDAP*, unsigned int, void*, void* in) {
@@ -199,15 +211,12 @@ map<string, string> ldapobj::search(const string& filter, const vector<string>& 
 	att = ldap_first_attribute(ld.get(), res.get(), &ber);
 
 	while (att) {
-		auto val = ldap_get_values_len(ld.get(), res.get(), att);
+		bervals_ptr bv{ldap_get_values_len(ld.get(), res.get(), att)};
 
-		if (val && val[0])
-			values[att] = string(val[0]->bv_val, val[0]->bv_len);
+		if (bv && ldap_count_values_len(bv.get()) > 0)
+			values[att] = string(bv.get()[0]->bv_val, bv.get()[0]->bv_len);
 		else
 			values[att] = "";
-
-		if (val)
-			ldap_value_free_len(val);
 
 		att = ldap_next_attribute(ld.get(), res.get(), ber);
 	}
