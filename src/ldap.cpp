@@ -158,14 +158,15 @@ map<string, string> ldapobj::search(const string& filter, const vector<string>& 
 		attlist.push_back(nullptr);
 	}
 
-	auto ret = ldap_search_s(ld.get(), (char*)naming_context.c_str(), LDAP_SCOPE_SUBTREE, (char*)filter.c_str(),
-							 atts.empty() ? nullptr : &attlist[0], false, &res);
+	auto ret = ldap_search_ext_s(ld.get(), (char*)naming_context.c_str(), LDAP_SCOPE_SUBTREE, (char*)filter.c_str(),
+								 atts.empty() ? nullptr : &attlist[0], false, nullptr, nullptr, nullptr,
+								 0, &res);
 
 	if (ret != LDAP_SUCCESS) {
 		if (res)
 			ldap_msgfree(res);
 
-		throw ldap_error("ldap_search_s", ret);
+		throw ldap_error("ldap_search_ext_s", ret);
 	}
 
 	att = ldap_first_attribute(ld.get(), res, &ber);
