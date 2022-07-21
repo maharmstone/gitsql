@@ -1056,6 +1056,9 @@ static void get_user_details(const u16string& username, string& name, string& em
 #else
 	auto u8username = tds::utf16_to_utf8(username);
 
+	if (auto bs = u8username.find("\\"); bs != string::npos)
+		u8username = u8username.substr(bs + 1);
+
 	try {
 		get_ldap_details_from_name(u8username, name, email);
 	} catch (...) {
