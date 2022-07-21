@@ -128,21 +128,28 @@ ldapobj::ldapobj() {
 }
 
 void ldapobj::find_naming_context() {
-	LDAPMessage* res = nullptr;
+	ldap_message res;
 	BerElement* ber = nullptr;
 	int err;
 
 	const char* atts[] = { "defaultNamingContext", nullptr };
 
-	err = ldap_search_s(ld.get(), nullptr, LDAP_SCOPE_BASE, nullptr,
-						(char**)atts, false, &res);
-	if (err != LDAP_SUCCESS)
-		throw ldap_error("ldap_search_s", err);
+	{
+		LDAPMessage* tmp = nullptr;
 
-	auto att = ldap_first_attribute(ld.get(), res, &ber);
+		err = ldap_search_s(ld.get(), nullptr, LDAP_SCOPE_BASE, nullptr,
+							(char**)atts, false, &tmp);
+
+		res.reset(tmp);
+
+		if (err != LDAP_SUCCESS)
+			throw ldap_error("ldap_search_s", err);
+	}
+
+	auto att = ldap_first_attribute(ld.get(), res.get(), &ber);
 
 	while (att) {
-		auto val = ldap_get_values(ld.get(), res, att);
+		auto val = ldap_get_values(ld.get(), res.get(), att);
 
 		if (val && val[0])
 			naming_context = val[0];
@@ -150,14 +157,11 @@ void ldapobj::find_naming_context() {
 		if (val)
 			ldap_value_free(val);
 
-		att = ldap_next_attribute(ld.get(), res, ber);
+		att = ldap_next_attribute(ld.get(), res.get(), ber);
 	}
 
 	if (ber)
 		ber_free(ber, 0);
-
-	if (res)
-		ldap_msgfree(res);
 
 	if (naming_context.empty())
 		throw runtime_error("Could not get LDAP naming context.");
