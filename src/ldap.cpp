@@ -106,12 +106,21 @@ static int lutil_sasl_interact(LDAP*, unsigned int, void*, void* in) {
 ldapobj::ldapobj() {
 	int err;
 
+#ifdef _WIN32
 	ld.reset(ldap_init(nullptr, LDAP_PORT));
 	if (!ld)
-#ifdef _WIN32
 		throw ldap_error("ldap_init", LdapGetLastError());
 #else
-		throw runtime_error("ldap_init failed");
+	{
+		LDAP* tmp = nullptr;
+
+		err = ldap_initialize(&tmp, nullptr);
+
+		if (err != LDAP_SUCCESS)
+			throw ldap_error("ldap_initialize", err);
+
+		ld.reset(tmp);
+	}
 #endif
 
 #ifdef _WIN32

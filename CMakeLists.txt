@@ -28,7 +28,7 @@ find_package(ZLIB REQUIRED)
 
 pkg_check_modules(LIBGIT2 REQUIRED libgit2)
 
-add_definitions(-DNOMINMAX -DLDAP_DEPRECATED)
+add_definitions(-DNOMINMAX)
 
 target_link_libraries(gitsql tdscpp)
 target_link_libraries(gitsql fmt::fmt-header-only)
