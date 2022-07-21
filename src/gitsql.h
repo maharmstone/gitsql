@@ -90,7 +90,7 @@ std::string object_perms(tds::tds& tds, int64_t id, const std::string& dbs, cons
 // table.cpp
 std::string table_ddl(tds::tds& tds, int64_t id);
 std::string brackets_escape(std::string_view s);
-std::u16string brackets_escape(const std::u16string_view& s);
+std::u16string brackets_escape(std::u16string_view s);
 
 // ldap.cpp
 #ifdef _WIN32

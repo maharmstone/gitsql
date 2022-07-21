@@ -1272,7 +1272,7 @@ private:
 	unique_handle h;
 };
 
-static string object_ddl(tds::tds& tds, const u16string_view& schema, const u16string_view& object) {
+static string object_ddl(tds::tds& tds, u16string_view schema, u16string_view object) {
 	int64_t id;
 	string type, ddl;
 	bool has_perms;
@@ -1337,9 +1337,9 @@ WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 	return ddl;
 }
 
-static void write_object_ddl(tds::tds& tds, const u16string_view& schema, const u16string_view& object,
+static void write_object_ddl(tds::tds& tds, u16string_view schema, u16string_view object,
 							 const optional<u16string>& bind_token, unsigned int commit_id,
-							 const u16string_view& filename, const u16string_view& db) {
+							 u16string_view filename, u16string_view db) {
 	u16string old_db;
 
 	if (bind_token.has_value()) {

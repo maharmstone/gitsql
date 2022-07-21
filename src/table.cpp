@@ -89,7 +89,7 @@ string brackets_escape(string_view s) {
 	return brackets_escape2(s);
 }
 
-u16string brackets_escape(const u16string_view& s) {
+u16string brackets_escape(u16string_view s) {
 	return brackets_escape2(s);
 }
 
