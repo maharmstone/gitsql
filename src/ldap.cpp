@@ -45,7 +45,11 @@ public:
 		if (!ldap)
 			return;
 
+#ifdef _WIN32
 		ldap_unbind(ldap);
+#else
+		ldap_unbind_ext_s(ldap, nullptr, nullptr);
+#endif
 	}
 };
 
