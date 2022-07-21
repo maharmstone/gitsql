@@ -137,13 +137,14 @@ void ldapobj::find_naming_context() {
 	{
 		LDAPMessage* tmp = nullptr;
 
-		err = ldap_search_s(ld.get(), nullptr, LDAP_SCOPE_BASE, nullptr,
-							(char**)atts, false, &tmp);
+		err = ldap_search_ext_s(ld.get(), nullptr, LDAP_SCOPE_BASE, nullptr,
+								(char**)atts, false, nullptr, nullptr, nullptr,
+								0, &tmp);
 
 		res.reset(tmp);
 
 		if (err != LDAP_SUCCESS)
-			throw ldap_error("ldap_search_s", err);
+			throw ldap_error("ldap_search_ext_s", err);
 	}
 
 	auto att = ldap_first_attribute(ld.get(), res.get(), &ber);
