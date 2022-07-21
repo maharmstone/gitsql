@@ -95,6 +95,8 @@ std::u16string brackets_escape(const std::u16string_view& s);
 // ldap.cpp
 #ifdef _WIN32
 void get_ldap_details_from_sid(PSID sid, std::string& name, std::string& email);
+#else
+void get_ldap_details_from_name(std::string_view username, std::string& name, std::string& email);
 #endif
 
 // parse.cpp

@@ -7,6 +7,7 @@
 #else
 #include <fcntl.h>
 #include <sys/file.h>
+#include <pwd.h>
 #endif
 
 #include <string>
@@ -827,8 +828,33 @@ static void get_current_user_details(string& name, string& email) {
 			email = tds::utf16_to_utf8(usernamesv) + "@"s + tds::utf16_to_utf8(domainsv);
 	}
 #else
-	name = "name"; // FIXME
-	email = "a@b.com"; // FIXME
+	auto uid = getuid();
+
+	passwd pwd;
+	passwd* pwdp = nullptr;
+	char buf[1024];
+
+	// FIXME - ERANGE
+
+	auto ret = getpwuid_r(uid, &pwd, buf, sizeof(buf), &pwdp);
+	if (ret)
+		throw errno_error("getpwduid_r", errno);
+
+	if (!pwdp)
+		throw formatted_error("Unable to get name for UID {}.", uid);
+
+	try {
+		get_ldap_details_from_name(pwd.pw_name, name, email);
+	} catch (...) {
+		name.clear();
+		email.clear();
+	}
+
+	if (name.empty())
+		name = pwd.pw_name;
+
+	if (email.empty())
+		email = name + "@localhost"; // FIXME - computer name?
 #endif
 }
 

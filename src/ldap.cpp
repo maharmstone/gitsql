@@ -216,6 +216,8 @@ vector<string> ldapobj::search_multiple(const string& filter, const string& att)
 	return values;
 }
 
+#ifdef _WIN32
+
 static string hex_byte(uint8_t v) {
 	char s[3];
 
@@ -234,7 +236,6 @@ static string hex_byte(uint8_t v) {
 	return s;
 }
 
-#ifdef _WIN32
 void get_ldap_details_from_sid(PSID sid, string& name, string& email) {
 	ldapobj l;
 	string binsid;
@@ -261,4 +262,25 @@ void get_ldap_details_from_sid(PSID sid, string& name, string& email) {
 	else
 		email = "";
 }
+
+#else
+
+void get_ldap_details_from_name(string_view username, string& name, string& email) {
+	ldapobj l;
+
+	auto ret = l.search("(sAMAccountName=" + string(username) + ")", { "givenName", "sn", "name", "mail" });
+
+	if (ret.count("givenName") != 0 && ret.count("sn") != 0)
+		name = ret.at("givenName") + " " + ret.at("sn");
+	else if (ret.count("name") != 0)
+		name = ret.at("name");
+	else
+		name = "";
+
+	if (ret.count("mail") != 0)
+		email = ret.at("mail");
+	else
+		email = "";
+}
+
 #endif
