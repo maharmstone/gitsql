@@ -1545,10 +1545,22 @@ int main(int argc, char* argv[])
 					throw formatted_error("Invalid commit ID \"{}\".", commit_id_str);
 			}
 
+#ifdef _WIN32
 			u16string_view schema = (char16_t*)argv[2];
 			u16string_view object = (char16_t*)argv[3];
 			u16string_view filename = (char16_t*)argv[5];
 			u16string_view db = argc >= 7 ? (char16_t*)argv[6] : u"";
+#else
+			string_view u8schema = argv[2];
+			string_view u8object = argv[3];
+			string_view u8filename = argv[5];
+			string_view u8db = argc >= 7 ? argv[6] : "";
+
+			auto schema = tds::utf8_to_utf16(u8schema);
+			auto object = tds::utf8_to_utf16(u8object);
+			auto filename = tds::utf8_to_utf16(u8filename);
+			auto db = tds::utf8_to_utf16(u8db);
+#endif
 			tds::tds tds(db_server, db_username, db_password, db_app);
 
 			write_object_ddl(tds, schema, object, bind_token, commit_id, filename, db);
@@ -1587,7 +1599,12 @@ int main(int argc, char* argv[])
 				bind_token = tds::utf8_to_utf16(bind_token_u8.value());
 #endif
 
+#ifdef _WIN32
 			u16string_view object = (char16_t*)argv[2];
+#else
+			string_view u8object = argv[2];
+			auto object = tds::utf8_to_utf16(u8object);
+#endif
 			tds::tds tds(db_server, db_username, db_password, db_app);
 
 			if (bind_token.has_value()) {
