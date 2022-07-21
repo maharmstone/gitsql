@@ -1054,11 +1054,20 @@ static void get_user_details(const u16string& username, string& name, string& em
 			email = u8username.substr(bs + 1) + "@"s + tds::utf16_to_utf8(domain);
 	}
 #else
-	// FIXME
 	auto u8username = tds::utf16_to_utf8(username);
 
-	name = u8username;
-	email = u8username + "@localhost"s;
+	try {
+		get_ldap_details_from_name(u8username, name, email);
+	} catch (...) {
+		name.clear();
+		email.clear();
+	}
+
+	if (name.empty())
+		name = u8username;
+
+	if (email.empty())
+		email = u8username + "@localhost"; // FIXME - computer name?
 #endif
 }
 
