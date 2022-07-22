@@ -51,14 +51,16 @@ void dump_master(const string& db_server, unsigned int repo, span<std::byte> smk
 	opts.app_name = db_app;
 	opts.port = 1434; // FIXME - find DAC port by querying server
 
+	// FIXME - also log user mappings (syslnklgns.lgnid != 0)
+
 	{
 		tds::tds dac(opts);
 
 		{
 			tds::query sq(dac, R"(SELECT sysservers.srvname, syslnklgns.name, syslnklgns.pwdhash, sysservers.srvproduct, sysservers.providername, sysservers.datasource, sysservers.providerstring
 FROM master.sys.syslnklgns
-JOIN master.sys.sysservers on syslnklgns.srvid=sysservers.srvid
-WHERE LEN(syslnklgns.pwdhash) > 0)");
+JOIN master.sys.sysservers on syslnklgns.srvid = sysservers.srvid
+WHERE LEN(syslnklgns.pwdhash) > 0 AND syslnklgns.lgnid = 0)");
 
 			while (sq.fetch_row()) {
 				servs.emplace_back((string)sq[0], (string)sq[1], sq[2].val, (string)sq[3], (string)sq[4], (string)sq[5], (string)sq[6]);
