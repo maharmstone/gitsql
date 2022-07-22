@@ -32,6 +32,7 @@ struct linked_server {
 	string datasource;
 	string providerstring;
 	user_pass up;
+	map<string, user_pass> mappings;
 };
 
 struct linked_server_logins {
@@ -72,10 +73,21 @@ static vector<uint8_t> aes256_cbc_decrypt(span<const std::byte> key, span<const 
 	return ret;
 }
 
+static optional<string> decrypt_pwdhash(span<const uint8_t> hash, span<std::byte> smk) {
+	auto plaintext = aes256_cbc_decrypt(smk, hash.subspan(4, 16), hash.subspan(20));
+
+	if (plaintext.size() < 8 || *(uint32_t*)plaintext.data() != 0xbaadf00d)
+		return nullopt;
+
+	auto len = *(uint16_t*)&plaintext[6];
+	auto u16sv = u16string_view((char16_t*)&plaintext[8], len / sizeof(char16_t));
+
+	return tds::utf16_to_utf8(u16sv);
+}
+
 static void dump_linked_servers(const tds::options& opts, tds::tds& tds, unsigned int commit, span<std::byte> smk) {
 	vector<linked_server> servs;
 
-	// FIXME - also log user mappings (syslnklgns.lgnid != 0)
 	// FIXME - log how undefined logins will be handled
 
 	// FIXME - don't include self
@@ -121,9 +133,8 @@ WHERE syslnklgns.pwdhash IS NOT NULL)");
 
 		if (l.lgnid == 0)
 			serv.up = l.up;
-		else {
-			// FIXME
-		}
+		else
+			serv.mappings.try_emplace(l.local_name, l.up);
 	}
 
 	for (const auto& serv : servs) {
@@ -147,15 +158,29 @@ WHERE syslnklgns.pwdhash IS NOT NULL)");
 			j["providerstring"] = serv.providerstring;
 
 		if (!serv.up.pwdhash.empty()) {
-			auto hash = span(serv.up.pwdhash);
-			auto plaintext = aes256_cbc_decrypt(smk, hash.subspan(4, 16), hash.subspan(20));
+			auto pw = decrypt_pwdhash(serv.up.pwdhash, smk);
 
-			if (plaintext.size() >= 8 && *(uint32_t*)plaintext.data() == 0xbaadf00d) {
-				auto len = *(uint16_t*)&plaintext[6];
-				auto u16sv = u16string_view((char16_t*)&plaintext[8], len / sizeof(char16_t));
+			if (pw)
+				j["password"] = pw.value();
+		}
 
-				j["password"] = tds::utf16_to_utf8(u16sv);
+		if (!serv.mappings.empty()) {
+			auto m = json::object();
+
+			for (const auto& mp : serv.mappings) {
+				auto v = json::object();
+
+				v["username"] = mp.second.username;
+
+				auto pw = decrypt_pwdhash(mp.second.pwdhash, smk);
+
+				if (pw)
+					v["password"] = pw.value();
+
+				m[mp.first] = v;
 			}
+
+			j["mappings"] = m;
 		}
 
 		auto fn = serv.srvname;
