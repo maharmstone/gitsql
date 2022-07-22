@@ -7,20 +7,43 @@ using json = nlohmann::json;
 
 extern string db_username, db_password;
 
+struct user_pass {
+	user_pass() = default;
+
+	user_pass(string_view username, span<const uint8_t> pwdhash) :
+			 username(username), pwdhash(pwdhash.begin(), pwdhash.end()) {
+	}
+
+	string username;
+	vector<uint8_t> pwdhash;
+};
+
 struct linked_server {
-	linked_server(string_view srvname, string_view name, span<const uint8_t> pwdhash, string_view srvproduct,
+	linked_server(unsigned int srvid, string_view srvname, string_view srvproduct,
 				  string_view providername, string_view datasource, string_view providerstring) :
-				  srvname(srvname), name(name), pwdhash(pwdhash.begin(), pwdhash.end()), srvproduct(srvproduct),
+				  srvid(srvid), srvname(srvname), srvproduct(srvproduct),
 				  providername(providername), datasource(datasource), providerstring(providerstring) {
 	}
 
+	unsigned int srvid;
 	string srvname;
-	string name;
-	vector<uint8_t> pwdhash;
 	string srvproduct;
 	string providername;
 	string datasource;
 	string providerstring;
+	user_pass up;
+};
+
+struct linked_server_logins {
+	linked_server_logins(unsigned int srvid, string_view name, span<const uint8_t> pwdhash,
+						 unsigned int lgnid, string_view local_name) :
+						 srvid(srvid), up(name, pwdhash), lgnid(lgnid), local_name(local_name) {
+	}
+
+	unsigned int srvid;
+	user_pass up;
+	unsigned int lgnid;
+	string local_name;
 };
 
 struct principal {
@@ -53,20 +76,53 @@ static void dump_linked_servers(const tds::options& opts, tds::tds& tds, unsigne
 	vector<linked_server> servs;
 
 	// FIXME - also log user mappings (syslnklgns.lgnid != 0)
-	// FIXME - also log linked servers using Kerberos passthrough
+	// FIXME - log how undefined logins will be handled
+
+	// FIXME - don't include self
+	{
+		tds::query sq(tds, "SELECT srvid, srvname, srvproduct, providername, datasource, providerstring FROM master.sys.sysservers");
+
+		while (sq.fetch_row()) {
+			servs.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2], (string)sq[3], (string)sq[4], (string)sq[5]);
+		}
+	}
+
+	vector<linked_server_logins> logins;
 
 	{
 		tds::tds dac(opts);
 
 		{
-			tds::query sq(dac, R"(SELECT sysservers.srvname, syslnklgns.name, syslnklgns.pwdhash, sysservers.srvproduct, sysservers.providername, sysservers.datasource, sysservers.providerstring
+			tds::query sq(dac, R"(SELECT syslnklgns.srvid, syslnklgns.name, syslnklgns.pwdhash, syslnklgns.lgnid, sysxlgns.name
 FROM master.sys.syslnklgns
-JOIN master.sys.sysservers on syslnklgns.srvid = sysservers.srvid
-WHERE LEN(syslnklgns.pwdhash) > 0 AND syslnklgns.lgnid = 0)");
+LEFT JOIN master.sys.sysxlgns ON sysxlgns.id = syslnklgns.lgnid
+WHERE syslnklgns.pwdhash IS NOT NULL)");
 
 			while (sq.fetch_row()) {
-				servs.emplace_back((string)sq[0], (string)sq[1], sq[2].val, (string)sq[3], (string)sq[4], (string)sq[5], (string)sq[6]);
+				logins.emplace_back((unsigned int)sq[0], (string)sq[1], sq[2].val, (unsigned int)sq[3], (string)sq[4]);
 			}
+		}
+	}
+
+	for (const auto& l : logins) {
+		optional<reference_wrapper<linked_server>> servrw;
+
+		for (auto& s : servs) {
+			if (s.srvid == l.srvid) {
+				servrw = s;
+				break;
+			}
+		}
+
+		if (!servrw)
+			continue;
+
+		auto& serv = servrw.value().get();
+
+		if (l.lgnid == 0)
+			serv.up = l.up;
+		else {
+			// FIXME
 		}
 	}
 
@@ -74,7 +130,9 @@ WHERE LEN(syslnklgns.pwdhash) > 0 AND syslnklgns.lgnid = 0)");
 		auto j = json::object();
 
 		j["srvname"] = serv.srvname;
-		j["username"] = serv.name;
+
+		if (!serv.up.username.empty())
+			j["username"] = serv.up.username;
 
 		if (!serv.srvproduct.empty())
 			j["srvproduct"] = serv.srvproduct;
@@ -88,14 +146,16 @@ WHERE LEN(syslnklgns.pwdhash) > 0 AND syslnklgns.lgnid = 0)");
 		if (!serv.providerstring.empty())
 			j["providerstring"] = serv.providerstring;
 
-		auto hash = span(serv.pwdhash);
-		auto plaintext = aes256_cbc_decrypt(smk, hash.subspan(4, 16), hash.subspan(20));
+		if (!serv.up.pwdhash.empty()) {
+			auto hash = span(serv.up.pwdhash);
+			auto plaintext = aes256_cbc_decrypt(smk, hash.subspan(4, 16), hash.subspan(20));
 
-		if (plaintext.size() >= 8 && *(uint32_t*)plaintext.data() == 0xbaadf00d) {
-			auto len = *(uint16_t*)&plaintext[6];
-			auto u16sv = u16string_view((char16_t*)&plaintext[8], len / sizeof(char16_t));
+			if (plaintext.size() >= 8 && *(uint32_t*)plaintext.data() == 0xbaadf00d) {
+				auto len = *(uint16_t*)&plaintext[6];
+				auto u16sv = u16string_view((char16_t*)&plaintext[8], len / sizeof(char16_t));
 
-			j["password"] = tds::utf16_to_utf8(u16sv);
+				j["password"] = tds::utf16_to_utf8(u16sv);
+			}
 		}
 
 		auto fn = serv.srvname;
