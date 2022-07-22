@@ -49,15 +49,8 @@ static vector<uint8_t> aes256_cbc_decrypt(span<const std::byte> key, span<const 
 	return ret;
 }
 
-static void dump_linked_servers(const string& db_server, tds::tds& tds, unsigned int commit, span<std::byte> smk) {
+static void dump_linked_servers(const tds::options& opts, tds::tds& tds, unsigned int commit, span<std::byte> smk) {
 	vector<linked_server> servs;
-
-	tds::options opts(db_server, db_username, db_password);
-
-	// FIXME - different instances?
-
-	opts.app_name = db_app;
-	opts.port = 1434; // FIXME - find DAC port by querying server
 
 	// FIXME - also log user mappings (syslnklgns.lgnid != 0)
 	// FIXME - also log linked servers using Kerberos passthrough
@@ -159,15 +152,8 @@ static string sid_to_string(span<const uint8_t> sid) {
 	return ret;
 }
 
-static void dump_principals(const string& db_server, tds::tds& tds, unsigned int commit) {
+static void dump_principals(const tds::options& opts, tds::tds& tds, unsigned int commit) {
 	vector<principal> principals;
-
-	tds::options opts(db_server, db_username, db_password);
-
-	// FIXME - different instances?
-
-	opts.app_name = db_app;
-	opts.port = 1434; // FIXME - find DAC port by querying server
 
 	{
 		tds::tds dac(opts);
@@ -216,6 +202,13 @@ void dump_master(const string& db_server, unsigned int repo, span<std::byte> smk
 	else if (smk.size() != 32)
 		throw runtime_error("Invalid SMK length.");
 
+	tds::options opts(db_server, db_username, db_password);
+
+	// FIXME - different instances?
+
+	opts.app_name = db_app;
+	opts.port = 1434; // FIXME - find DAC port by querying server
+
 	tds::tds tds(db_server, db_username, db_password, db_app);
 
 	tds::trans trans(tds);
@@ -238,8 +231,8 @@ void dump_master(const string& db_server, unsigned int repo, span<std::byte> smk
 	// clear existing files
 	tds.run("INSERT INTO Restricted.GitFiles(id) VALUES(?)", commit);
 
-	dump_linked_servers(db_server, tds, commit, smk);
-	dump_principals(db_server, tds, commit);
+	dump_linked_servers(opts, tds, commit, smk);
+	dump_principals(opts, tds, commit);
 
 	trans.commit();
 }
