@@ -52,6 +52,7 @@ void dump_master(const string& db_server, unsigned int repo, span<std::byte> smk
 	opts.port = 1434; // FIXME - find DAC port by querying server
 
 	// FIXME - also log user mappings (syslnklgns.lgnid != 0)
+	// FIXME - also log linked servers using Kerberos passthrough
 
 	{
 		tds::tds dac(opts);
