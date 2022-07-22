@@ -107,4 +107,4 @@ std::string munge_definition(std::string_view sql, std::string_view schema, std:
 std::string dequote(std::string_view sql);
 
 // master.cpp
-void dump_master(const std::string& db_server, unsigned int repo);
+void dump_master(const std::string& db_server, unsigned int repo, std::span<std::byte> smk);

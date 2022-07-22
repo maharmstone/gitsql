@@ -1628,7 +1628,7 @@ int main(int argc, char* argv[])
 		} else if (cmd == "master") {
 			unsigned int repo;
 
-			if (argc < 3)
+			if (argc < 4)
 				throw runtime_error("Too few arguments.");
 
 #ifdef _WIN32
@@ -1641,7 +1641,31 @@ int main(int argc, char* argv[])
 			if (ptr != repo_str.data() + repo_str.length())
 				throw formatted_error("Unable to interpret \"{}\" as integer.", repo_str);
 
-			dump_master(db_server, repo);
+#ifdef _WIN32
+			auto smk_str = tds::utf16_to_utf8((char16_t*)argv[3]);
+#else
+			string_view smk_str = argv[3];
+#endif
+
+			if (smk_str.size() % 2)
+				throw runtime_error("SMK must be even number of characters.");
+
+			vector<std::byte> smk;
+
+			smk.reserve(smk_str.size() / 2);
+
+			for (size_t i = 0; i < smk_str.size(); i += 2) {
+				uint8_t b;
+
+				auto [ptr, ec] = from_chars(&smk_str[i], &smk_str[i] + 2, b, 16);
+
+				if (ptr != &smk_str[i] + 2)
+					throw runtime_error("Malformed SMK.");
+
+				smk.push_back(std::byte{b});
+			}
+
+			dump_master(db_server, repo, smk);
 		}
 	} catch (const exception& e) {
 		fmt::print(stderr, "{}\n", e.what());
