@@ -74,7 +74,7 @@ WHERE LEN(syslnklgns.pwdhash) > 0)");
 
 	{
 		tds::query sq(tds, "INSERT INTO Restricted.Git(repo, username, description, dto) OUTPUT inserted.id VALUES(?, ?, 'Update', SYSDATETIMEOFFSET())",
-					  repo, "GitSQL"); // FIXME - get current username
+					  repo, get_current_username());
 
 		if (!sq.fetch_row())
 			throw runtime_error("Error inserting entry into Restricted.Git.");

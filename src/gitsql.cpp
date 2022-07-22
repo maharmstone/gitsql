@@ -793,6 +793,46 @@ static vector<uint8_t> get_token_information(HANDLE token, TOKEN_INFORMATION_CLA
 }
 #endif
 
+string get_current_username() {
+#ifdef _WIN32
+	auto token = open_process_token(GetCurrentProcess(), TOKEN_QUERY);
+
+	auto buf = get_token_information(token.get(), TokenUser);
+	auto& tu = *(TOKEN_USER*)buf.data();
+
+	array<char16_t, 255> username, domain;
+	auto usernamelen = (DWORD)username.size(), domainlen = (DWORD)domain.size();
+	SID_NAME_USE use;
+
+	if (!LookupAccountSidW(nullptr, tu.User.Sid, (WCHAR*)username.data(), &usernamelen, (WCHAR*)domain.data(),
+						   &domainlen, &use)) {
+		throw last_error("LookupAccountSid", GetLastError());
+	}
+
+	auto usernamesv = u16string_view(username.data(), usernamelen);
+	auto domainsv = u16string_view(domain.data(), domainlen);
+
+	return tds::utf16_to_utf8(domainsv) + "\\" + tds::utf16_to_utf8(usernamesv);
+#else
+	auto uid = getuid();
+
+	passwd pwd;
+	passwd* pwdp = nullptr;
+	char buf[1024];
+
+	// FIXME - ERANGE
+
+	auto ret = getpwuid_r(uid, &pwd, buf, sizeof(buf), &pwdp);
+	if (ret)
+		throw errno_error("getpwduid_r", errno);
+
+	if (!pwdp)
+		throw formatted_error("Unable to get name for UID {}.", uid);
+
+	return pwd.pw_name;
+#endif
+}
+
 static void get_current_user_details(string& name, string& email) {
 #ifdef _WIN32
 	auto token = open_process_token(GetCurrentProcess(), TOKEN_QUERY);
@@ -827,33 +867,20 @@ static void get_current_user_details(string& name, string& email) {
 			email = tds::utf16_to_utf8(usernamesv) + "@"s + tds::utf16_to_utf8(domainsv);
 	}
 #else
-	auto uid = getuid();
-
-	passwd pwd;
-	passwd* pwdp = nullptr;
-	char buf[1024];
-
-	// FIXME - ERANGE
-
-	auto ret = getpwuid_r(uid, &pwd, buf, sizeof(buf), &pwdp);
-	if (ret)
-		throw errno_error("getpwduid_r", errno);
-
-	if (!pwdp)
-		throw formatted_error("Unable to get name for UID {}.", uid);
+	auto username = get_current_username();
 
 	try {
-		get_ldap_details_from_name(pwd.pw_name, name, email);
+		get_ldap_details_from_name(username, name, email);
 	} catch (...) {
 		name.clear();
 		email.clear();
 	}
 
 	if (name.empty())
-		name = pwd.pw_name;
+		name = username;
 
 	if (email.empty())
-		email = pwd.pw_name + "@localhost"s; // FIXME - computer name?
+		email = username + "@localhost"s; // FIXME - computer name?
 #endif
 }
 
