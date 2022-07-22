@@ -25,9 +25,8 @@ struct linked_server {
 
 struct principal {
 	principal(string_view name, span<const uint8_t> sid, string_view type, string_view dbname,
-			  string_view lang, span<const uint8_t> pwdhash) :
-			  name(name), sid(sid.begin(), sid.end()), type(type), dbname(dbname), lang(lang),
-			  pwdhash(pwdhash.begin(), pwdhash.end()) {
+			  string_view lang) :
+			  name(name), sid(sid.begin(), sid.end()), type(type), dbname(dbname), lang(lang) {
 	}
 
 	string name;
@@ -35,7 +34,6 @@ struct principal {
 	string type;
 	string dbname;
 	string lang;
-	vector<uint8_t> pwdhash;
 };
 
 static vector<uint8_t> aes256_cbc_decrypt(span<const std::byte> key, span<const uint8_t> iv, span<const uint8_t> enc) {
@@ -161,7 +159,7 @@ static string sid_to_string(span<const uint8_t> sid) {
 	return ret;
 }
 
-static void dump_principals(const string& db_server, tds::tds& tds, unsigned int commit, span<std::byte> smk) {
+static void dump_principals(const string& db_server, tds::tds& tds, unsigned int commit) {
 	vector<principal> principals;
 
 	tds::options opts(db_server, db_username, db_password);
@@ -175,10 +173,10 @@ static void dump_principals(const string& db_server, tds::tds& tds, unsigned int
 		tds::tds dac(opts);
 
 		{
-			tds::query sq(dac, "SELECT name, sid, type, dbname, lang, pwdhash FROM master.sys.sysxlgns");
+			tds::query sq(dac, "SELECT name, sid, type, dbname, lang FROM master.sys.sysxlgns");
 
 			while (sq.fetch_row()) {
-				principals.emplace_back((string)sq[0], sq[1].val, (string)sq[2], (string)sq[3], (string)sq[4], sq[5].val);
+				principals.emplace_back((string)sq[0], sq[1].val, (string)sq[2], (string)sq[3], (string)sq[4]);
 			}
 		}
 	}
@@ -198,8 +196,6 @@ static void dump_principals(const string& db_server, tds::tds& tds, unsigned int
 
 		if (!p.lang.empty())
 			j["lang"] = p.lang;
-
-		// FIXME - pwdhash
 
 		auto fn = p.name;
 
@@ -243,7 +239,7 @@ void dump_master(const string& db_server, unsigned int repo, span<std::byte> smk
 	tds.run("INSERT INTO Restricted.GitFiles(id) VALUES(?)", commit);
 
 	dump_linked_servers(db_server, tds, commit, smk);
-	dump_principals(db_server, tds, commit, smk);
+	dump_principals(db_server, tds, commit);
 
 	trans.commit();
 }
