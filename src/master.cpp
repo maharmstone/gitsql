@@ -1,7 +1,9 @@
 #include "gitsql.h"
 #include "aes.h"
+#include <nlohmann/json.hpp>
 
 using namespace std;
+using json = nlohmann::json;
 
 extern string db_username, db_password;
 
@@ -30,8 +32,6 @@ static vector<uint8_t> aes256_cbc_decrypt(span<const std::byte> key, span<const 
 
 	AES256_init_ctx_iv(&ctx, (uint8_t*)key.data(), iv.data());
 	AES256_CBC_decrypt_buffer(&ctx, ret.data(), ret.size());
-
-	fmt::print("ret.size() = {}\n", ret.size());
 
 	return ret;
 }
@@ -67,36 +67,35 @@ WHERE LEN(syslnklgns.pwdhash) > 0)");
 	}
 
 	for (const auto& serv : servs) {
-		fmt::print("srvname: {}\n", serv.srvname);
-		fmt::print("name: {}\n", serv.name);
-		fmt::print("srvproduct: {}\n", serv.srvproduct);
-		fmt::print("providername: {}\n", serv.providername);
-		fmt::print("datasource: {}\n", serv.datasource);
-		fmt::print("providerstring: {}\n", serv.providerstring);
-		fmt::print("pwdhash: ");
+		auto j = json::object();
 
-		for (auto b : serv.pwdhash) {
-			fmt::print("{:02x} ", b);
-		}
-		fmt::print("\n");
+		fmt::print("srvname: {}\n", serv.srvname);
+
+		j["username"] = serv.name;
+
+		if (!serv.srvproduct.empty())
+			j["srvproduct"] = serv.srvproduct;
+
+		if (!serv.providername.empty())
+			j["providername"] = serv.providername;
+
+		if (!serv.datasource.empty())
+			j["datasource"] = serv.datasource;
+
+		if (!serv.providerstring.empty())
+			j["providerstring"] = serv.providerstring;
 
 		auto hash = span(serv.pwdhash);
 		auto plaintext = aes256_cbc_decrypt(smk, hash.subspan(4, 16), hash.subspan(20));
-
-		fmt::print("plaintext: ");
-		for (auto b : plaintext) {
-			fmt::print("{:02x} ", b);
-		}
-		fmt::print("\n");
 
 		if (plaintext.size() >= 8 && *(uint32_t*)plaintext.data() == 0xbaadf00d) {
 			auto len = *(uint16_t*)&plaintext[6];
 			auto u16sv = u16string_view((char16_t*)&plaintext[8], len / sizeof(char16_t));
 
-			fmt::print("\"{}\"\n", tds::utf16_to_utf8(u16sv));
+			j["password"] = tds::utf16_to_utf8(u16sv);
 		}
 
-		fmt::print("\n");
+		fmt::print("{}", j.dump(3) + "\n");
 	}
 
 	// FIXME
