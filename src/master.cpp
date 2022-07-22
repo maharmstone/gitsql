@@ -120,6 +120,47 @@ WHERE LEN(syslnklgns.pwdhash) > 0 AND syslnklgns.lgnid = 0)");
 	}
 }
 
+static string sid_to_string(span<const uint8_t> sid) {
+	uint64_t first_part;
+	string ret;
+
+	if (sid.empty() || sid.front() != 0x01)
+		return "(invalid SID)";
+
+	sid = sid.subspan(1);
+
+	if (sid.empty())
+		return "(invalid SID)";
+
+	auto num_parts = sid.front();
+
+	sid = sid.subspan(1);
+
+	if (sid.size() < 6 + (num_parts * sizeof(uint32_t)))
+		return "(invalid SID)";
+
+	first_part = (uint64_t)sid[0] << 40;
+	first_part |= (uint64_t)sid[1] << 32;
+	first_part |= sid[2] << 24;
+	first_part |= sid[3] << 16;
+	first_part |= sid[4] << 8;
+	first_part |= sid[5];
+
+	sid = sid.subspan(6);
+
+	ret = fmt::format("S-1-{}", first_part);
+
+	for (unsigned int i = 0; i < num_parts; i++) {
+		auto num = *(uint32_t*)sid.data();
+
+		ret += fmt::format("-{}", num);
+
+		sid = sid.subspan(sizeof(uint32_t));
+	}
+
+	return ret;
+}
+
 static void dump_principals(const string& db_server, tds::tds& tds, unsigned int commit, span<std::byte> smk) {
 	vector<principal> principals;
 
@@ -147,7 +188,8 @@ static void dump_principals(const string& db_server, tds::tds& tds, unsigned int
 
 		j["name"] = p.name;
 
-		// FIXME - sid
+		if (p.type == "C" || p.type == "M" || p.type == "G" || p.type == "U")
+			j["sid"] = sid_to_string(p.sid);
 
 		j["type"] = p.type;
 
