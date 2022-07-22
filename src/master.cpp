@@ -66,10 +66,30 @@ WHERE LEN(syslnklgns.pwdhash) > 0)");
 		}
 	}
 
+	tds::tds tds(db_server, db_username, db_password, db_app);
+
+	tds::trans trans(tds);
+
+	unsigned int commit;
+
+	{
+		tds::query sq(tds, "INSERT INTO Restricted.Git(repo, username, description, dto) OUTPUT inserted.id VALUES(?, ?, 'Update', SYSDATETIMEOFFSET())",
+					  repo, "GitSQL"); // FIXME - get current username
+
+		if (!sq.fetch_row())
+			throw runtime_error("Error inserting entry into Restricted.Git.");
+
+		if (sq[0].is_null)
+			throw runtime_error("Returned commit ID was NULL.");
+
+		commit = (unsigned int)sq[0];
+	}
+
+	// clear existing files
+	tds.run("INSERT INTO Restricted.GitFiles(id) VALUES(?)", commit);
+
 	for (const auto& serv : servs) {
 		auto j = json::object();
-
-		fmt::print("srvname: {}\n", serv.srvname);
 
 		j["username"] = serv.name;
 
@@ -95,10 +115,8 @@ WHERE LEN(syslnklgns.pwdhash) > 0)");
 			j["password"] = tds::utf16_to_utf8(u16sv);
 		}
 
-		fmt::print("{}", j.dump(3) + "\n");
+		tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, CONVERT(VARBINARY(MAX), ?))", commit, "linked_servers/" + serv.srvname + ".json", j.dump(3) + "\n");
 	}
 
-	// FIXME
-
-	fmt::print("FIXME\n");
+	trans.commit();
 }
