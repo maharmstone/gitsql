@@ -6,12 +6,19 @@ using namespace std;
 extern string db_username, db_password;
 
 struct linked_server {
-	linked_server(string_view srvname, string_view name, span<const uint8_t> pwdhash) : srvname(srvname), name(name), pwdhash(pwdhash.begin(), pwdhash.end()) {
+	linked_server(string_view srvname, string_view name, span<const uint8_t> pwdhash, string_view srvproduct,
+				  string_view providername, string_view datasource, string_view providerstring) :
+				  srvname(srvname), name(name), pwdhash(pwdhash.begin(), pwdhash.end()), srvproduct(srvproduct),
+				  providername(providername), datasource(datasource), providerstring(providerstring) {
 	}
 
 	string srvname;
 	string name;
 	vector<uint8_t> pwdhash;
+	string srvproduct;
+	string providername;
+	string datasource;
+	string providerstring;
 };
 
 static vector<uint8_t> aes256_cbc_decrypt(span<const std::byte> key, span<const uint8_t> iv, span<const uint8_t> enc) {
@@ -48,13 +55,13 @@ void dump_master(const string& db_server, unsigned int repo, span<std::byte> smk
 		tds::tds dac(opts);
 
 		{
-			tds::query sq(dac, R"(SELECT sysservers.srvname, syslnklgns.name, syslnklgns.pwdhash
+			tds::query sq(dac, R"(SELECT sysservers.srvname, syslnklgns.name, syslnklgns.pwdhash, sysservers.srvproduct, sysservers.providername, sysservers.datasource, sysservers.providerstring
 FROM master.sys.syslnklgns
 JOIN master.sys.sysservers on syslnklgns.srvid=sysservers.srvid
 WHERE LEN(syslnklgns.pwdhash) > 0)");
 
 			while (sq.fetch_row()) {
-				servs.emplace_back((string)sq[0], (string)sq[1], sq[2].val);
+				servs.emplace_back((string)sq[0], (string)sq[1], sq[2].val, (string)sq[3], (string)sq[4], (string)sq[5], (string)sq[6]);
 			}
 		}
 	}
@@ -62,6 +69,10 @@ WHERE LEN(syslnklgns.pwdhash) > 0)");
 	for (const auto& serv : servs) {
 		fmt::print("srvname: {}\n", serv.srvname);
 		fmt::print("name: {}\n", serv.name);
+		fmt::print("srvproduct: {}\n", serv.srvproduct);
+		fmt::print("providername: {}\n", serv.providername);
+		fmt::print("datasource: {}\n", serv.datasource);
+		fmt::print("providerstring: {}\n", serv.providerstring);
 		fmt::print("pwdhash: ");
 
 		for (auto b : serv.pwdhash) {
