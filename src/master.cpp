@@ -42,7 +42,7 @@ void dump_master(const string& db_server, unsigned int repo, span<std::byte> smk
 	if (smk.size() == 16)
 		throw runtime_error("3DES SMK not supported.");
 	else if (smk.size() != 32)
-		throw runtime_error("Invaldi SMK length.");
+		throw runtime_error("Invalid SMK length.");
 
 	tds::options opts(db_server, db_username, db_password);
 
