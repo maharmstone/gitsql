@@ -604,7 +604,9 @@ bool GitRepo::branch_is_head(const std::string& name) {
 	git_reference* ref;
 
 	ret = git_reference_lookup(&ref, repo, ("refs/heads/" + name).c_str());
-	if (ret)
+	if (ret == GIT_ENOTFOUND)
+		return false;
+	else if (ret)
 		throw git_exception(ret, "git_reference_lookup");
 
 	ret = git_branch_is_head(ref);
