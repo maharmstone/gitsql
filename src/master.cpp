@@ -90,9 +90,8 @@ static void dump_linked_servers(const tds::options& opts, tds::tds& tds, unsigne
 
 	// FIXME - log how undefined logins will be handled
 
-	// FIXME - don't include self
 	{
-		tds::query sq(tds, "SELECT srvid, srvname, srvproduct, providername, datasource, providerstring FROM master.sys.sysservers");
+		tds::query sq(tds, "SELECT srvid, srvname, srvproduct, providername, datasource, providerstring FROM master.sys.sysservers WHERE srvid != 0");
 
 		while (sq.fetch_row()) {
 			servs.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2], (string)sq[3], (string)sq[4], (string)sq[5]);
