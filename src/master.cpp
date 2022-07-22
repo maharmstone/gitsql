@@ -91,6 +91,7 @@ WHERE LEN(syslnklgns.pwdhash) > 0)");
 	for (const auto& serv : servs) {
 		auto j = json::object();
 
+		j["srvname"] = serv.srvname;
 		j["username"] = serv.name;
 
 		if (!serv.srvproduct.empty())
@@ -115,7 +116,16 @@ WHERE LEN(syslnklgns.pwdhash) > 0)");
 			j["password"] = tds::utf16_to_utf8(u16sv);
 		}
 
-		tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, CONVERT(VARBINARY(MAX), ?))", commit, "linked_servers/" + serv.srvname + ".json", j.dump(3) + "\n");
+		auto fn = serv.srvname;
+
+		// make NTFS-friendly
+
+		for (auto& c : fn) {
+			if (c == '<' || c == '>' || c == ':' || c == '"' || c == '/' || c == '\\' || c == '|' || c == '?' || c == '*')
+				c = '-';
+		}
+
+		tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, CONVERT(VARBINARY(MAX), ?))", commit, "linked_servers/" + fn + ".json", j.dump(3) + "\n");
 	}
 
 	trans.commit();
