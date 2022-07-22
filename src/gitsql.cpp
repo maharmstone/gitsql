@@ -1456,14 +1456,14 @@ int main(int argc, char* argv[])
 
 #ifdef _WIN32
 	auto cmd = tds::utf16_to_utf8((char16_t*)argv[1]);
-
-	if (cmd != "flush" && cmd != "object" && cmd != "dump" && cmd != "show") {
-		print_usage();
-		return 1;
-	}
 #else
 	string_view cmd = argv[1];
 #endif
+
+	if (cmd != "flush" && cmd != "object" && cmd != "dump" && cmd != "show" && cmd != "master") {
+		print_usage();
+		return 1;
+	}
 
 	try {
 #ifdef _WIN32
