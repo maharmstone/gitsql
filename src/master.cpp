@@ -1,4 +1,5 @@
 #include "gitsql.h"
+#include "aes.h"
 
 using namespace std;
 
@@ -13,10 +14,17 @@ struct linked_server {
 	vector<uint8_t> pwdhash;
 };
 
-static vector<uint8_t> aes256_cbc_decrypt(span<const uint8_t> iv, span<const uint8_t> enc) {
+static vector<uint8_t> aes256_cbc_decrypt(span<const std::byte> key, span<const uint8_t> iv, span<const uint8_t> enc) {
 	vector<uint8_t> ret;
+	AES_ctx ctx;
 
-	// FIXME
+	ret.resize(enc.size());
+	memcpy(ret.data(), enc.data(), enc.size());
+
+	AES256_init_ctx_iv(&ctx, (uint8_t*)key.data(), iv.data());
+	AES256_CBC_decrypt_buffer(&ctx, ret.data(), ret.size());
+
+	fmt::print("ret.size() = {}\n", ret.size());
 
 	return ret;
 }
@@ -62,13 +70,20 @@ WHERE LEN(syslnklgns.pwdhash) > 0)");
 		fmt::print("\n");
 
 		auto hash = span(serv.pwdhash);
-		auto plaintext = aes256_cbc_decrypt(hash.subspan(4, 16), hash.subspan(20));
+		auto plaintext = aes256_cbc_decrypt(smk, hash.subspan(4, 16), hash.subspan(20));
 
 		fmt::print("plaintext: ");
 		for (auto b : plaintext) {
 			fmt::print("{:02x} ", b);
 		}
 		fmt::print("\n");
+
+		if (plaintext.size() >= 8 && *(uint32_t*)plaintext.data() == 0xbaadf00d) {
+			auto len = *(uint16_t*)&plaintext[6];
+			auto u16sv = u16string_view((char16_t*)&plaintext[8], len / sizeof(char16_t));
+
+			fmt::print("\"{}\"\n", tds::utf16_to_utf8(u16sv));
+		}
 
 		fmt::print("\n");
 	}
