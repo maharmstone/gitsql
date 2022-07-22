@@ -36,13 +36,8 @@ static vector<uint8_t> aes256_cbc_decrypt(span<const std::byte> key, span<const 
 	return ret;
 }
 
-void dump_master(const string& db_server, unsigned int repo, span<std::byte> smk) {
+static void dump_linked_servers(const string& db_server, tds::tds& tds, unsigned int commit, span<std::byte> smk) {
 	vector<linked_server> servs;
-
-	if (smk.size() == 16)
-		throw runtime_error("3DES SMK not supported.");
-	else if (smk.size() != 32)
-		throw runtime_error("Invalid SMK length.");
 
 	tds::options opts(db_server, db_username, db_password);
 
@@ -68,28 +63,6 @@ WHERE LEN(syslnklgns.pwdhash) > 0 AND syslnklgns.lgnid = 0)");
 			}
 		}
 	}
-
-	tds::tds tds(db_server, db_username, db_password, db_app);
-
-	tds::trans trans(tds);
-
-	unsigned int commit;
-
-	{
-		tds::query sq(tds, "INSERT INTO Restricted.Git(repo, username, description, dto) OUTPUT inserted.id VALUES(?, ?, 'Update', SYSDATETIMEOFFSET())",
-					  repo, get_current_username());
-
-		if (!sq.fetch_row())
-			throw runtime_error("Error inserting entry into Restricted.Git.");
-
-		if (sq[0].is_null)
-			throw runtime_error("Returned commit ID was NULL.");
-
-		commit = (unsigned int)sq[0];
-	}
-
-	// clear existing files
-	tds.run("INSERT INTO Restricted.GitFiles(id) VALUES(?)", commit);
 
 	for (const auto& serv : servs) {
 		auto j = json::object();
@@ -130,6 +103,37 @@ WHERE LEN(syslnklgns.pwdhash) > 0 AND syslnklgns.lgnid = 0)");
 
 		tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, CONVERT(VARBINARY(MAX), ?))", commit, "linked_servers/" + fn + ".json", j.dump(3) + "\n");
 	}
+}
+
+void dump_master(const string& db_server, unsigned int repo, span<std::byte> smk) {
+	if (smk.size() == 16)
+		throw runtime_error("3DES SMK not supported.");
+	else if (smk.size() != 32)
+		throw runtime_error("Invalid SMK length.");
+
+	tds::tds tds(db_server, db_username, db_password, db_app);
+
+	tds::trans trans(tds);
+
+	unsigned int commit;
+
+	{
+		tds::query sq(tds, "INSERT INTO Restricted.Git(repo, username, description, dto) OUTPUT inserted.id VALUES(?, ?, 'Update', SYSDATETIMEOFFSET())",
+					  repo, get_current_username());
+
+		if (!sq.fetch_row())
+			throw runtime_error("Error inserting entry into Restricted.Git.");
+
+		if (sq[0].is_null)
+			throw runtime_error("Returned commit ID was NULL.");
+
+		commit = (unsigned int)sq[0];
+	}
+
+	// clear existing files
+	tds.run("INSERT INTO Restricted.GitFiles(id) VALUES(?)", commit);
+
+	dump_linked_servers(db_server, tds, commit, smk);
 
 	trans.commit();
 }
