@@ -23,6 +23,21 @@ struct linked_server {
 	string providerstring;
 };
 
+struct principal {
+	principal(string_view name, span<const uint8_t> sid, string_view type, string_view dbname,
+			  string_view lang, span<const uint8_t> pwdhash) :
+			  name(name), sid(sid.begin(), sid.end()), type(type), dbname(dbname), lang(lang),
+			  pwdhash(pwdhash.begin(), pwdhash.end()) {
+	}
+
+	string name;
+	vector<uint8_t> sid;
+	string type;
+	string dbname;
+	string lang;
+	vector<uint8_t> pwdhash;
+};
+
 static vector<uint8_t> aes256_cbc_decrypt(span<const std::byte> key, span<const uint8_t> iv, span<const uint8_t> enc) {
 	vector<uint8_t> ret;
 	AES_ctx ctx;
@@ -105,6 +120,58 @@ WHERE LEN(syslnklgns.pwdhash) > 0 AND syslnklgns.lgnid = 0)");
 	}
 }
 
+static void dump_principals(const string& db_server, tds::tds& tds, unsigned int commit, span<std::byte> smk) {
+	vector<principal> principals;
+
+	tds::options opts(db_server, db_username, db_password);
+
+	// FIXME - different instances?
+
+	opts.app_name = db_app;
+	opts.port = 1434; // FIXME - find DAC port by querying server
+
+	{
+		tds::tds dac(opts);
+
+		{
+			tds::query sq(dac, "SELECT name, sid, type, dbname, lang, pwdhash FROM master.sys.sysxlgns");
+
+			while (sq.fetch_row()) {
+				principals.emplace_back((string)sq[0], sq[1].val, (string)sq[2], (string)sq[3], (string)sq[4], sq[5].val);
+			}
+		}
+	}
+
+	for (auto& p : principals) {
+		auto j = json::object();
+
+		j["name"] = p.name;
+
+		// FIXME - sid
+
+		j["type"] = p.type;
+
+		if (!p.dbname.empty())
+			j["dbname"] = p.dbname;
+
+		if (!p.lang.empty())
+			j["lang"] = p.lang;
+
+		// FIXME - pwdhash
+
+		auto fn = p.name;
+
+		// make NTFS-friendly
+
+		for (auto& c : fn) {
+			if (c == '<' || c == '>' || c == ':' || c == '"' || c == '/' || c == '\\' || c == '|' || c == '?' || c == '*')
+				c = '-';
+		}
+
+		tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, CONVERT(VARBINARY(MAX), ?))", commit, "principals/" + fn + ".json", j.dump(3) + "\n");
+	}
+}
+
 void dump_master(const string& db_server, unsigned int repo, span<std::byte> smk) {
 	if (smk.size() == 16)
 		throw runtime_error("3DES SMK not supported.");
@@ -134,6 +201,7 @@ void dump_master(const string& db_server, unsigned int repo, span<std::byte> smk
 	tds.run("INSERT INTO Restricted.GitFiles(id) VALUES(?)", commit);
 
 	dump_linked_servers(db_server, tds, commit, smk);
+	dump_principals(db_server, tds, commit, smk);
 
 	trans.commit();
 }
