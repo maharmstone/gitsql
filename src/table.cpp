@@ -129,6 +129,7 @@ struct table_index {
 	unsigned int type;
 	bool is_unique, is_primary_key;
 	vector<index_column> columns;
+	bool needs_explicit = false;
 };
 
 struct constraint {
@@ -249,7 +250,7 @@ string table_ddl(tds::tds& tds, int64_t id) {
 	vector<constraint> constraints;
 	vector<foreign_key> foreign_keys;
 	string escaped_name, ddl;
-	bool has_included_indices = false, fulldump = false;
+	bool has_explicit_indices = false, fulldump = false;
 
 	{
 		tds::query sq(tds, R"(
@@ -322,15 +323,21 @@ ORDER BY columns.column_id
 		while (sq.fetch_row()) {
 			bool found = false;
 			auto col_id = (unsigned int)sq[4];
+			auto is_included = (unsigned int)sq[6] != 0;
 
 			if ((string)sq[0] != last_name) {
 				last_name = (string)sq[0];
 				indices.emplace_back(last_name, (unsigned int)sq[1], (unsigned int)sq[2] != 0, (unsigned int)sq[3] != 0);
 			}
 
+			if (is_included) {
+				indices.back().needs_explicit = true;
+				has_explicit_indices = true;
+			}
+
 			for (const auto& col : columns) {
 				if (col.column_id == col_id) {
-					indices.back().columns.emplace_back(col, (unsigned int)sq[5] != 0, (unsigned int)sq[6] != 0);
+					indices.back().columns.emplace_back(col, (unsigned int)sq[5] != 0, is_included);
 					found = true;
 					break;
 				}
@@ -500,44 +507,30 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 	}
 
 	for (const auto& ind : indices) {
-		bool has_included_columns = false;
+		if (!ind.needs_explicit && (!ind.is_primary_key || ind.columns.size() > 1)) {
+			bool first = true;
 
-		if (!ind.is_primary_key) {
+			ddl += ",\n";
+
+			if (ind.is_primary_key)
+				ddl += "    PRIMARY KEY "s + (ind.type == 2 ? "NONCLUSTERED " : "") + "(";
+			else
+				ddl += "    INDEX "s + brackets_escape(ind.name) + " " + (ind.is_unique ? "UNIQUE " : "") + (ind.type == 1 ? "CLUSTERED " : "") + "(";
+
 			for (const auto& col : ind.columns) {
-				if (col.is_included) {
-					has_included_columns = true;
-					break;
-				}
+				if (!first)
+					ddl += ", ";
+
+				first = false;
+
+				ddl += brackets_escape(col.col.name);
+
+				if (col.is_desc)
+					ddl += " DESC";
 			}
+
+			ddl += ")";
 		}
-
-		if (!has_included_columns) {
-			if (!ind.is_primary_key || ind.columns.size() > 1) {
-				bool first = true;
-
-				ddl += ",\n";
-
-				if (ind.is_primary_key)
-					ddl += "    PRIMARY KEY "s + (ind.type == 2 ? "NONCLUSTERED " : "") + "(";
-				else
- 					ddl += "    INDEX "s + brackets_escape(ind.name) + " " + (ind.is_unique ? "UNIQUE " : "") + (ind.type == 1 ? "CLUSTERED " : "") + "(";
-
-				for (const auto& col : ind.columns) {
-					if (!first)
-						ddl += ", ";
-
-					first = false;
-
-					ddl += brackets_escape(col.col.name);
-
-					if (col.is_desc)
-						ddl += " DESC";
-				}
-
-				ddl += ")";
-			}
-		} else
-			has_included_indices = true;
 	}
 
 	for (const auto& con : constraints) {
@@ -609,39 +602,32 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 
 	ddl += ");\n";
 
-	if (has_included_indices) {
+	if (has_explicit_indices) {
 		ddl += "\n";
 
 		for (const auto& ind : indices) {
-			if (!ind.is_primary_key) {
+			if (!ind.is_primary_key && ind.needs_explicit) {
+				bool first = true;
 				bool has_included_columns = false;
 
+				ddl += "CREATE "s + (ind.is_unique ? "UNIQUE " : "") + (ind.type == 1 ? "CLUSTERED " : "") + "INDEX " + brackets_escape(ind.name) + " ON " + escaped_name + " (";
+
 				for (const auto& col : ind.columns) {
-					if (col.is_included) {
+					if (!col.is_included) {
+						if (!first)
+							ddl += ", ";
+
+						first = false;
+
+						ddl += brackets_escape(col.col.name);
+
+						if (col.is_desc)
+							ddl += " DESC";
+					} else
 						has_included_columns = true;
-						break;
-					}
 				}
 
 				if (has_included_columns) {
-					bool first = true;
-
-					ddl += "CREATE "s + (ind.is_unique ? "UNIQUE " : "") + (ind.type == 1 ? "CLUSTERED " : "") + "INDEX " + brackets_escape(ind.name) + " ON " + escaped_name + " (";
-
-					for (const auto& col : ind.columns) {
-						if (!col.is_included) {
-							if (!first)
-								ddl += ", ";
-
-							first = false;
-
-							ddl += brackets_escape(col.col.name);
-
-							if (col.is_desc)
-								ddl += " DESC";
-						}
-					}
-
 					ddl += ") INCLUDE (";
 
 					first = true;
@@ -659,9 +645,9 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 								ddl += " DESC";
 						}
 					}
-
-					ddl += ");\n";
 				}
+
+				ddl += ");\n";
 			}
 		}
 	}
