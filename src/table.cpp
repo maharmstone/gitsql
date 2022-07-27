@@ -115,11 +115,13 @@ struct column {
 };
 
 struct index_column {
-	index_column(const column& col, bool is_desc, bool is_included) : col(col), is_desc(is_desc), is_included(is_included) { }
+	index_column(const column& col, bool is_desc, bool is_included, unsigned int partition_ordinal) :
+		col(col), is_desc(is_desc), is_included(is_included), partition_ordinal(partition_ordinal) { }
 
 	const column& col;
 	bool is_desc;
 	bool is_included;
+	unsigned int partition_ordinal;
 };
 
 struct table_index {
@@ -330,7 +332,8 @@ SELECT indexes.name,
 	index_columns.is_descending_key,
 	index_columns.is_included_column,
 	CASE WHEN data_spaces.is_default = 0 THEN data_spaces.name END,
-	indexes.index_id
+	indexes.index_id,
+	index_columns.partition_ordinal
 FROM sys.indexes
 LEFT JOIN sys.index_columns ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
 LEFT JOIN sys.data_spaces ON data_spaces.data_space_id = indexes.data_space_id
@@ -368,7 +371,7 @@ ORDER BY indexes.index_id, index_columns.index_column_id
 
 			for (const auto& col : columns) {
 				if (col.column_id == col_id) {
-					indices.back().columns.emplace_back(col, (unsigned int)sq[5] != 0, is_included);
+					indices.back().columns.emplace_back(col, (unsigned int)sq[5] != 0, is_included, (unsigned int)sq[9]);
 					found = true;
 					break;
 				}
@@ -688,8 +691,35 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 					ddl += ")";
 				}
 
-				if (ind.data_space)
+				if (ind.data_space) {
+					vector<pair<unsigned int, string>> cols;
+
 					ddl += " ON " + brackets_escape(ind.data_space.value());
+
+					for (const auto& col : ind.columns) {
+						if (col.partition_ordinal != 0)
+							cols.emplace_back(col.partition_ordinal, col.col.name);
+					}
+
+					if (!cols.empty()) {
+						ranges::sort(cols, [](const auto& p1, const auto& p2) { return p1.first < p2.first; });
+
+						ddl += "(";
+
+						bool first = true;
+
+						for (const auto& c : cols) {
+							if (!first)
+								ddl += ", ";
+
+							ddl += brackets_escape(c.second);
+
+							first = false;
+						}
+
+						ddl += ")";
+					}
+				}
 
 				ddl += ";\n";
 			}
