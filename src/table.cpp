@@ -487,7 +487,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 
 				for (const auto& ind : indices) {
 					if (ind.is_primary_key) {
-						if (ind.columns.size() == 1 && &ind.columns.front().col == &col) {
+						if (ind.columns.size() == 1 && &ind.columns.front().col == &col && !ind.needs_explicit) {
 							ddl += " PRIMARY KEY";
 
 							if (ind.type == 2)
@@ -606,11 +606,14 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 		ddl += "\n";
 
 		for (const auto& ind : indices) {
-			if (!ind.is_primary_key && ind.needs_explicit) {
+			if (ind.needs_explicit) {
 				bool first = true;
 				bool has_included_columns = false;
 
-				ddl += "CREATE "s + (ind.is_unique ? "UNIQUE " : "") + (ind.type == 1 ? "CLUSTERED " : "") + "INDEX " + brackets_escape(ind.name) + " ON " + escaped_name + " (";
+				if (ind.is_primary_key)
+					ddl += "ALTER TABLE " + escaped_name + " ADD PRIMARY KEY " + (ind.type == 2 ? "NONCLUSTEDRED " : "") + "(";
+				else
+					ddl += "CREATE "s + (ind.is_unique ? "UNIQUE " : "") + (ind.type == 1 ? "CLUSTERED " : "") + "INDEX " + brackets_escape(ind.name) + " ON " + escaped_name + " (";
 
 				for (const auto& col : ind.columns) {
 					if (!col.is_included) {
