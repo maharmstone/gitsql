@@ -418,10 +418,13 @@ ORDER BY indexes.index_id, index_columns.index_column_id
 	}
 
 	if (!primary_index) { // heap
-		if (!indices.empty() && indices.front().name.empty() && indices.front().data_space)
-			table_data_space = index_data_space(indices.front());
+		if (!indices.empty() && indices.front().type == 0) {
+			if (indices.front().data_space)
+				table_data_space = index_data_space(indices.front());
 
-		indices.clear();
+			decltype(indices) vec{indices.begin() + 1, indices.end()};
+			indices.swap(vec);
+		}
 	} else {
 		const auto& ind = primary_index.value().get();
 		if (!ind.needs_explicit && ind.data_space)
