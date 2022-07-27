@@ -123,12 +123,14 @@ struct index_column {
 };
 
 struct table_index {
-	table_index(const string& name, unsigned int type, bool is_unique, bool is_primary_key) : name(name), type(type), is_unique(is_unique), is_primary_key(is_primary_key) { }
+	table_index(const string& name, unsigned int type, bool is_unique, bool is_primary_key, optional<string> data_space) :
+		name(name), type(type), is_unique(is_unique), is_primary_key(is_primary_key), data_space(data_space) { }
 
 	string name;
 	unsigned int type;
 	bool is_unique, is_primary_key;
 	vector<index_column> columns;
+	optional<string> data_space;
 	bool needs_explicit = false;
 };
 
@@ -318,7 +320,21 @@ ORDER BY columns.column_id
 	{
 		string last_name;
 
-		tds::query sq(tds, "SELECT indexes.name, indexes.type, indexes.is_unique, indexes.is_primary_key, index_columns.column_id, index_columns.is_descending_key, index_columns.is_included_column FROM sys.indexes JOIN sys.index_columns ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id WHERE indexes.object_id = ? ORDER BY indexes.index_id, index_columns.index_column_id", id);
+		tds::query sq(tds, R"(
+SELECT indexes.name,
+	indexes.type,
+	indexes.is_unique,
+	indexes.is_primary_key,
+	index_columns.column_id,
+	index_columns.is_descending_key,
+	index_columns.is_included_column,
+	CASE WHEN data_spaces.is_default = 0 THEN data_spaces.name END
+FROM sys.indexes
+JOIN sys.index_columns ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
+LEFT JOIN sys.data_spaces ON data_spaces.data_space_id = indexes.data_space_id
+WHERE indexes.object_id = ?
+ORDER BY indexes.index_id, index_columns.index_column_id
+)", id);
 
 		while (sq.fetch_row()) {
 			bool found = false;
@@ -326,8 +342,16 @@ ORDER BY columns.column_id
 			auto is_included = (unsigned int)sq[6] != 0;
 
 			if ((string)sq[0] != last_name) {
+				auto data_space = !sq[7].is_null ? optional<string>(sq[7]) : nullopt;
+
 				last_name = (string)sq[0];
-				indices.emplace_back(last_name, (unsigned int)sq[1], (unsigned int)sq[2] != 0, (unsigned int)sq[3] != 0);
+				indices.emplace_back(last_name, (unsigned int)sq[1], (unsigned int)sq[2] != 0, (unsigned int)sq[3] != 0,
+									 data_space);
+
+				if (data_space) {
+					indices.back().needs_explicit = true;
+					has_explicit_indices = true;
+				}
 			}
 
 			if (is_included) {
@@ -630,8 +654,10 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 						has_included_columns = true;
 				}
 
+				ddl += ")";
+
 				if (has_included_columns) {
-					ddl += ") INCLUDE (";
+					ddl += " INCLUDE (";
 
 					first = true;
 
@@ -648,9 +674,14 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 								ddl += " DESC";
 						}
 					}
+
+					ddl += ")";
 				}
 
-				ddl += ");\n";
+				if (ind.data_space)
+					ddl += " ON " + brackets_escape(ind.data_space.value());
+
+				ddl += ";\n";
 			}
 		}
 	}
