@@ -125,14 +125,15 @@ struct index_column {
 };
 
 struct table_index {
-	table_index(const string& name, unsigned int type, bool is_unique, bool is_primary_key, optional<string> data_space) :
-		name(name), type(type), is_unique(is_unique), is_primary_key(is_primary_key), data_space(data_space) { }
+	table_index(const string& name, unsigned int type, bool is_unique, bool is_primary_key, optional<string> data_space, bool is_default_data_space) :
+		name(name), type(type), is_unique(is_unique), is_primary_key(is_primary_key), data_space(data_space), is_default_data_space(is_default_data_space) { }
 
 	string name;
 	unsigned int type;
 	bool is_unique, is_primary_key;
 	vector<index_column> columns;
 	optional<string> data_space;
+	bool is_default_data_space;
 	bool needs_explicit = false;
 };
 
@@ -367,9 +368,10 @@ SELECT indexes.name,
 	index_columns.column_id,
 	index_columns.is_descending_key,
 	index_columns.is_included_column,
-	CASE WHEN data_spaces.is_default = 0 THEN data_spaces.name END,
+	data_spaces.name,
 	indexes.index_id,
-	index_columns.partition_ordinal
+	index_columns.partition_ordinal,
+	data_spaces.is_default
 FROM sys.indexes
 LEFT JOIN sys.index_columns ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
 LEFT JOIN sys.data_spaces ON data_spaces.data_space_id = indexes.data_space_id
@@ -383,17 +385,13 @@ ORDER BY indexes.index_id, index_columns.index_column_id
 			auto is_included = (unsigned int)sq[6] != 0;
 
 			if (!last_name || (string)sq[0] != last_name.value()) {
-				auto data_space = !sq[7].is_null ? optional<string>(sq[7]) : nullopt;
+				auto data_space = (string)sq[7];
+				auto is_default_data_space = (unsigned int)sq[10] != 0;
 				auto is_primary_key = (unsigned int)sq[3] != 0;
 
 				last_name = (string)sq[0];
 				indices.emplace_back(last_name.value(), (unsigned int)sq[1], (unsigned int)sq[2] != 0, is_primary_key,
-									 data_space);
-
-				if (data_space && !is_primary_key) {
-					indices.back().needs_explicit = true;
-					has_explicit_indices = true;
-				}
+									 data_space, is_default_data_space);
 
 				if (is_primary_key)
 					primary_index = indices.back();
@@ -419,15 +417,50 @@ ORDER BY indexes.index_id, index_columns.index_column_id
 
 	if (!primary_index) { // heap
 		if (!indices.empty() && indices.front().type == 0) {
-			if (indices.front().data_space)
-				table_data_space = index_data_space(indices.front());
+			auto heapind = move(indices.front());
 
 			indices.pop_front();
+
+			const auto& heapds = index_data_space(heapind);
+			if (!heapind.is_default_data_space)
+				table_data_space = heapds;
+
+			for (auto& ind : indices) {
+				const auto& ds = index_data_space(ind);
+
+				if (ds == heapds)
+					ind.data_space.reset();
+				else {
+					ind.needs_explicit = true;
+					has_explicit_indices = true;
+				}
+			}
+		} else {
+			for (auto& ind : indices) {
+				if (ind.is_default_data_space)
+					ind.data_space.reset();
+			}
 		}
+
 	} else {
-		const auto& ind = primary_index.value().get();
-		if (!ind.needs_explicit && ind.data_space)
-			table_data_space = index_data_space(ind);
+		const auto& pk = primary_index.value().get();
+		const auto& pkds = index_data_space(pk);
+
+		if (!pk.needs_explicit && !pk.is_default_data_space)
+			table_data_space = pkds;
+
+		for (auto& ind : indices) {
+			if (!ind.is_primary_key) {
+				const auto& ds = index_data_space(ind);
+
+				if (ds == pkds)
+					ind.data_space.reset();
+				else {
+					ind.needs_explicit = true;
+					has_explicit_indices = true;
+				}
+			}
+		}
 	}
 
 	{
