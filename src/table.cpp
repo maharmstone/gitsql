@@ -289,7 +289,7 @@ string table_ddl(tds::tds& tds, int64_t id) {
 	vector<foreign_key> foreign_keys;
 	string escaped_name, ddl;
 	bool has_explicit_indices = false, fulldump = false;
-	optional<string> heap_data_space;
+	optional<string> table_data_space;
 
 	{
 		tds::query sq(tds, R"(
@@ -354,6 +354,8 @@ ORDER BY columns.column_id
 		}
 	}
 
+	optional<reference_wrapper<table_index>> primary_index;
+
 	{
 		optional<string> last_name;
 
@@ -382,15 +384,19 @@ ORDER BY indexes.index_id, index_columns.index_column_id
 
 			if (!last_name || (string)sq[0] != last_name.value()) {
 				auto data_space = !sq[7].is_null ? optional<string>(sq[7]) : nullopt;
+				auto is_primary_key = (unsigned int)sq[3] != 0;
 
 				last_name = (string)sq[0];
-				indices.emplace_back(last_name.value(), (unsigned int)sq[1], (unsigned int)sq[2] != 0, (unsigned int)sq[3] != 0,
+				indices.emplace_back(last_name.value(), (unsigned int)sq[1], (unsigned int)sq[2] != 0, is_primary_key,
 									 data_space);
 
-				if (data_space) {
+				if (data_space && !is_primary_key) {
 					indices.back().needs_explicit = true;
 					has_explicit_indices = true;
 				}
+
+				if (is_primary_key)
+					primary_index = indices.back();
 			}
 
 			if (is_included) {
@@ -411,11 +417,15 @@ ORDER BY indexes.index_id, index_columns.index_column_id
 		}
 	}
 
-	if (!indices.empty() && indices.front().name.empty()) { // heap
-		if (indices.front().data_space)
-			heap_data_space = index_data_space(indices.front());
+	if (!primary_index) { // heap
+		if (!indices.empty() && indices.front().name.empty() && indices.front().data_space)
+			table_data_space = index_data_space(indices.front());
 
 		indices.clear();
+	} else {
+		const auto& ind = primary_index.value().get();
+		if (!ind.needs_explicit && ind.data_space)
+			table_data_space = index_data_space(ind);
 	}
 
 	{
@@ -670,8 +680,8 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 
 	ddl += "\n)";
 
-	if (heap_data_space)
-		ddl += " ON " + heap_data_space.value();
+	if (table_data_space)
+		ddl += " ON " + table_data_space.value();
 
 	ddl += ";\n";
 
