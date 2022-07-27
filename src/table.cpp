@@ -246,6 +246,40 @@ static string dump_table(tds::tds& tds, const string& escaped_name) {
 	return s;
 }
 
+static string index_data_space(const table_index& ind) {
+	string ret;
+	vector<pair<unsigned int, string>> cols;
+
+	ret = brackets_escape(ind.data_space.value());
+
+	for (const auto& col : ind.columns) {
+		if (col.partition_ordinal != 0)
+			cols.emplace_back(col.partition_ordinal, col.col.name);
+	}
+
+	if (cols.empty())
+		return ret;
+
+	ranges::sort(cols, [](const auto& p1, const auto& p2) { return p1.first < p2.first; });
+
+	ret += "(";
+
+	bool first = true;
+
+	for (const auto& c : cols) {
+		if (!first)
+			ret += ", ";
+
+		ret += brackets_escape(c.second);
+
+		first = false;
+	}
+
+	ret += ")";
+
+	return ret;
+}
+
 string table_ddl(tds::tds& tds, int64_t id) {
 	int64_t seed_value, increment_value;
 	string table, schema, type;
@@ -321,7 +355,7 @@ ORDER BY columns.column_id
 	}
 
 	{
-		string last_name;
+		optional<string> last_name;
 
 		tds::query sq(tds, R"(
 SELECT indexes.name,
@@ -342,20 +376,15 @@ ORDER BY indexes.index_id, index_columns.index_column_id
 )", id);
 
 		while (sq.fetch_row()) {
-			if ((unsigned int)sq[8] == 0) { // heap
-				heap_data_space = !sq[7].is_null ? optional<string>(sq[7]) : nullopt;
-				continue;
-			}
-
 			bool found = false;
 			auto col_id = (unsigned int)sq[4];
 			auto is_included = (unsigned int)sq[6] != 0;
 
-			if ((string)sq[0] != last_name) {
+			if (!last_name || (string)sq[0] != last_name.value()) {
 				auto data_space = !sq[7].is_null ? optional<string>(sq[7]) : nullopt;
 
 				last_name = (string)sq[0];
-				indices.emplace_back(last_name, (unsigned int)sq[1], (unsigned int)sq[2] != 0, (unsigned int)sq[3] != 0,
+				indices.emplace_back(last_name.value(), (unsigned int)sq[1], (unsigned int)sq[2] != 0, (unsigned int)sq[3] != 0,
 									 data_space);
 
 				if (data_space) {
@@ -377,9 +406,16 @@ ORDER BY indexes.index_id, index_columns.index_column_id
 				}
 			}
 
-			if (!found)
+			if (!found && col_id != 0)
 				throw formatted_error("Could not find column no. {}.", col_id);
 		}
+	}
+
+	if (!indices.empty() && indices.front().name.empty()) { // heap
+		if (indices.front().data_space)
+			heap_data_space = index_data_space(indices.front());
+
+		indices.clear();
 	}
 
 	{
@@ -635,7 +671,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 	ddl += "\n)";
 
 	if (heap_data_space)
-		ddl += " ON " + brackets_escape(heap_data_space.value());
+		ddl += " ON " + heap_data_space.value();
 
 	ddl += ";\n";
 
@@ -691,35 +727,8 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 					ddl += ")";
 				}
 
-				if (ind.data_space) {
-					vector<pair<unsigned int, string>> cols;
-
-					ddl += " ON " + brackets_escape(ind.data_space.value());
-
-					for (const auto& col : ind.columns) {
-						if (col.partition_ordinal != 0)
-							cols.emplace_back(col.partition_ordinal, col.col.name);
-					}
-
-					if (!cols.empty()) {
-						ranges::sort(cols, [](const auto& p1, const auto& p2) { return p1.first < p2.first; });
-
-						ddl += "(";
-
-						bool first = true;
-
-						for (const auto& c : cols) {
-							if (!first)
-								ddl += ", ";
-
-							ddl += brackets_escape(c.second);
-
-							first = false;
-						}
-
-						ddl += ")";
-					}
-				}
+				if (ind.data_space)
+					ddl += " ON " + index_data_space(ind);
 
 				ddl += ";\n";
 			}
