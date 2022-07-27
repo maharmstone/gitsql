@@ -284,7 +284,7 @@ string table_ddl(tds::tds& tds, int64_t id) {
 	int64_t seed_value, increment_value;
 	string table, schema, type;
 	vector<column> columns;
-	vector<table_index> indices;
+	list<table_index> indices;
 	vector<constraint> constraints;
 	vector<foreign_key> foreign_keys;
 	string escaped_name, ddl;
@@ -422,8 +422,7 @@ ORDER BY indexes.index_id, index_columns.index_column_id
 			if (indices.front().data_space)
 				table_data_space = index_data_space(indices.front());
 
-			decltype(indices) vec{indices.begin() + 1, indices.end()};
-			indices.swap(vec);
+			indices.pop_front();
 		}
 	} else {
 		const auto& ind = primary_index.value().get();
