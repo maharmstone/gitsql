@@ -375,9 +375,11 @@ SELECT indexes.name,
 FROM sys.indexes
 LEFT JOIN sys.index_columns ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
 LEFT JOIN sys.data_spaces ON data_spaces.data_space_id = indexes.data_space_id
-WHERE indexes.object_id = ?
+WHERE indexes.object_id = ? AND indexes.data_space_id != 0
 ORDER BY indexes.index_id, index_columns.index_column_id
 )", id);
+
+		// indices with data_space_id == 0 are in-memory indices(?)
 
 		while (sq.fetch_row()) {
 			bool found = false;
