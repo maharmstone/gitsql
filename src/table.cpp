@@ -253,6 +253,7 @@ string table_ddl(tds::tds& tds, int64_t id) {
 	vector<foreign_key> foreign_keys;
 	string escaped_name, ddl;
 	bool has_explicit_indices = false, fulldump = false;
+	optional<string> heap_data_space;
 
 	{
 		tds::query sq(tds, R"(
@@ -328,15 +329,21 @@ SELECT indexes.name,
 	index_columns.column_id,
 	index_columns.is_descending_key,
 	index_columns.is_included_column,
-	CASE WHEN data_spaces.is_default = 0 THEN data_spaces.name END
+	CASE WHEN data_spaces.is_default = 0 THEN data_spaces.name END,
+	indexes.index_id
 FROM sys.indexes
-JOIN sys.index_columns ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
+LEFT JOIN sys.index_columns ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
 LEFT JOIN sys.data_spaces ON data_spaces.data_space_id = indexes.data_space_id
 WHERE indexes.object_id = ?
 ORDER BY indexes.index_id, index_columns.index_column_id
 )", id);
 
 		while (sq.fetch_row()) {
+			if ((unsigned int)sq[8] == 0) { // heap
+				heap_data_space = !sq[7].is_null ? optional<string>(sq[7]) : nullopt;
+				continue;
+			}
+
 			bool found = false;
 			auto col_id = (unsigned int)sq[4];
 			auto is_included = (unsigned int)sq[6] != 0;
@@ -622,9 +629,12 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 		}
 	}
 
-	ddl += "\n";
+	ddl += "\n)";
 
-	ddl += ");\n";
+	if (heap_data_space)
+		ddl += " ON " + brackets_escape(heap_data_space.value());
+
+	ddl += ";\n";
 
 	if (has_explicit_indices) {
 		ddl += "\n";
