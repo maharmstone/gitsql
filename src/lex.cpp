@@ -185,7 +185,7 @@ list<word> parse(string_view s) {
             w = string_view();
         }
 
-        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == 0xa0) {
             if (words.empty() || words.back().type != lex::whitespace)
                 words.emplace_back(lex::whitespace, csv);
             else
