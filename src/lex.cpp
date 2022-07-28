@@ -91,7 +91,27 @@ static size_t parse_number(string_view s) {
 }
 
 static string_view next_char(string_view s) {
-    return s.substr(0, 1); // FIXME - UTF-8
+    auto v = (uint8_t)s.front();
+
+    if (v < 0x80)
+        return s.substr(0, 1);
+    else if ((v & 0xe0) == 0xc0) {
+        if (s.size() < 2)
+            throw runtime_error("Malformed UTF-8.");
+
+        return s.substr(0, 2);
+    } else if ((v & 0xf0) == 0xe0) {
+        if (s.size() < 3)
+            throw runtime_error("Malformed UTF-8.");
+
+        return s.substr(0, 3);
+    } else if ((v & 0xf8) == 0xf0) {
+        if (s.size() < 4)
+            throw runtime_error("Malformed UTF-8.");
+
+        return s.substr(0, 3);
+    } else
+        throw runtime_error("Malformed UTF-8.");
 }
 
 static char32_t char_val(string_view s) {
