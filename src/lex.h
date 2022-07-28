@@ -25,6 +25,7 @@ enum class lex {
     pipe,
     string_literal,
     binary_literal,
+    money_literal,
     comma,
     greater_than,
     less_than,
@@ -450,6 +451,8 @@ struct fmt::formatter<enum lex> {
                 return fmt::format_to(ctx.out(), "string_literal");
             case lex::binary_literal:
                 return fmt::format_to(ctx.out(), "binary_literal");
+            case lex::money_literal:
+                return fmt::format_to(ctx.out(), "money_literal");
             case lex::comma:
                 return fmt::format_to(ctx.out(), "comma");
             case lex::greater_than:

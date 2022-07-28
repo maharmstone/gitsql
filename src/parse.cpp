@@ -142,6 +142,7 @@ static bool is_wordlike(enum lex l) {
 		case lex::pipe:
 		case lex::string_literal:
 		case lex::binary_literal:
+		case lex::money_literal:
 		case lex::comma:
 		case lex::greater_than:
 		case lex::less_than:

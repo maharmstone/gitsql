@@ -439,6 +439,57 @@ list<word> parse(string_view s) {
                 continue;
             }
 
+            // money literals
+            case '$':
+            case 0xa2:
+            case 0xa3:
+            case 0xa4:
+            case 0xa5:
+            case 0x9f2:
+            case 0x9f3:
+            case 0xe3f:
+            case 0x17db:
+            case 0x20a0:
+            case 0x20a1:
+            case 0x20a2:
+            case 0x20a3:
+            case 0x20a4:
+            case 0x20a5:
+            case 0x20a6:
+            case 0x20a7:
+            case 0x20a8:
+            case 0x20a9:
+            case 0x20aa:
+            case 0x20ab:
+            case 0x20ac:
+            case 0x20ad:
+            case 0x20ae:
+            case 0x20af:
+            case 0x20b0:
+            case 0x20b1:
+            case 0xfdfc:
+            case 0xfe69:
+            case 0xff04:
+            case 0xffe0:
+            case 0xffe1:
+            case 0xffe5:
+            case 0xffe6: {
+                if (s.size() <= csv.size())
+                    throw runtime_error("Currency symbol not followed by number.");
+
+                auto ends = parse_number(s.substr(csv.size()));
+
+                if (ends == 0)
+                    throw runtime_error("Unable to parse money literal.");
+
+                ends += csv.size();
+
+                words.emplace_back(lex::money_literal, s.substr(0, ends));
+
+                s = s.substr(ends);
+                continue;
+            }
+
             default:
                 throw runtime_error("Unhandled character '" + string(csv) + "'.");
         }
