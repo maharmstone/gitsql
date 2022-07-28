@@ -90,12 +90,21 @@ static size_t parse_number(string_view s) {
     return ends;
 }
 
+static string_view next_char(string_view s) {
+    return s.substr(0, 1); // FIXME - UTF-8
+}
+
+static char32_t char_val(string_view s) {
+    return s.front(); // FIXME - UTF-8
+}
+
 list<word> parse(string_view s) {
     list<word> words;
     string_view w;
 
     while (!s.empty()) {
-        auto c = s.front();
+        auto csv = next_char(s);
+        auto c = char_val(csv);
 
         // FIXME - @ and $
         if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' || c == '#' || (!w.empty() && c >= '0' && c <= '9')) {
@@ -122,11 +131,11 @@ list<word> parse(string_view s) {
             }
 
             if (w.empty())
-                w = s.substr(0, 1);
+                w = csv;
             else
-                w = string_view(w.data(), w.size() + 1);
+                w = string_view(w.data(), w.size() + csv.size());
 
-            s = s.substr(1);
+            s = s.substr(csv.size());
             continue;
         }
 
@@ -137,39 +146,39 @@ list<word> parse(string_view s) {
 
         if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
             if (words.empty() || words.back().type != lex::whitespace)
-                words.emplace_back(lex::whitespace, string_view(s.data(), 1));
+                words.emplace_back(lex::whitespace, csv);
             else
-                words.back().val = string_view(words.back().val.data(), words.back().val.size() + 1);
+                words.back().val = string_view(words.back().val.data(), words.back().val.size() + csv.size());
         } else if (c == ';')
-            words.emplace_back(lex::semicolon, string_view(s.data(), 1));
+            words.emplace_back(lex::semicolon, csv);
         else if (c == '=')
-            words.emplace_back(lex::equals, string_view(s.data(), 1));
+            words.emplace_back(lex::equals, csv);
         else if (c == '(')
-            words.emplace_back(lex::open_bracket, string_view(s.data(), 1));
+            words.emplace_back(lex::open_bracket, csv);
         else if (c == ')')
-            words.emplace_back(lex::close_bracket, string_view(s.data(), 1));
+            words.emplace_back(lex::close_bracket, csv);
         else if (c == ',')
-            words.emplace_back(lex::comma, string_view(s.data(), 1));
+            words.emplace_back(lex::comma, csv);
         else if (c == '>')
-            words.emplace_back(lex::greater_than, string_view(s.data(), 1));
+            words.emplace_back(lex::greater_than, csv);
         else if (c == '<')
-            words.emplace_back(lex::less_than, string_view(s.data(), 1));
+            words.emplace_back(lex::less_than, csv);
         else if (c == ':')
-            words.emplace_back(lex::colon, string_view(s.data(), 1));
+            words.emplace_back(lex::colon, csv);
         else if (c == '!')
-            words.emplace_back(lex::exclamation_point, string_view(s.data(), 1));
+            words.emplace_back(lex::exclamation_point, csv);
         else if (c == '*')
-            words.emplace_back(lex::asterisk, string_view(s.data(), 1));
+            words.emplace_back(lex::asterisk, csv);
         else if (c == '&')
-            words.emplace_back(lex::ampersand, string_view(s.data(), 1));
+            words.emplace_back(lex::ampersand, csv);
         else if (c == '%')
-            words.emplace_back(lex::percent, string_view(s.data(), 1));
+            words.emplace_back(lex::percent, csv);
         else if (c == '|')
-            words.emplace_back(lex::pipe, string_view(s.data(), 1));
+            words.emplace_back(lex::pipe, csv);
         else if (c == '{')
-            words.emplace_back(lex::open_brace, string_view(s.data(), 1));
+            words.emplace_back(lex::open_brace, csv);
         else if (c == '}')
-            words.emplace_back(lex::close_brace, string_view(s.data(), 1));
+            words.emplace_back(lex::close_brace, csv);
         else if (c == '/') {
             if (s.size() >= 2 && s[1] == '*') { // multi-line comment
                 auto end = s.find("*/", 2);
@@ -184,7 +193,7 @@ list<word> parse(string_view s) {
 
                 continue;
             } else
-                words.emplace_back(lex::slash, string_view(s.data(), 1));
+                words.emplace_back(lex::slash, csv);
         } else if (c == '-' && s.size() > 1 && s[1] == '-') { // single-line comment
             auto nl = s.find('\n'); // FIXME - should also be \r
 
@@ -197,7 +206,7 @@ list<word> parse(string_view s) {
             s = s.substr(nl + 1);
             continue;
         } else if (c == '[') {
-            size_t sb = 0;
+            size_t sb = 1;
 
             do {
                 auto sb2 = s.find(']', sb);
@@ -323,9 +332,9 @@ list<word> parse(string_view s) {
 
             continue;
         } else
-            throw runtime_error("Unhandled character '" + string(1, c) + "'.");
+            throw runtime_error("Unhandled character '" + string(csv) + "'.");
 
-        s = s.substr(1);
+        s = s.substr(csv.size());
     }
 
     if (!w.empty()) {
