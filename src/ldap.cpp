@@ -136,6 +136,11 @@ ldapobj::ldapobj() {
 	if (err != LDAP_SUCCESS)
 		throw ldap_error("ldap_set_option", err);
 
+	err = ldap_set_option(ld.get(), LDAP_OPT_REFERRALS, LDAP_OPT_OFF);
+
+	if (err != LDAP_SUCCESS)
+		throw ldap_error("ldap_set_option", err);
+
 #ifdef _WIN32
 	err = ldap_bind_s(ld.get(), nullptr, nullptr, LDAP_AUTH_NEGOTIATE);
 
