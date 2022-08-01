@@ -15,8 +15,29 @@
 #include <array>
 #include <string>
 #include <memory>
+#include <unordered_map>
 
 using namespace std;
+
+struct string_hash {
+	using hash_type = hash<string_view>;
+	using is_transparent = void;
+
+	size_t operator()(const char* str) const {
+		return hash_type{}(str);
+	}
+
+	size_t operator()(string_view str) const   {
+		return hash_type{}(str);
+	}
+
+	size_t operator()(const string& str) const {
+		return hash_type{}(str);
+	}
+
+};
+
+static unordered_map<string, pair<string, string>, string_hash, equal_to<>> ldap_cache;
 
 class ldap_error : public exception {
 public:
@@ -263,15 +284,26 @@ static string hex_byte(uint8_t v) {
 }
 
 void get_ldap_details_from_sid(PSID sid, string& name, string& email) {
+	span sidsp((const uint8_t*)sid, GetLengthSid(sid));
+
+	// FIXME - is there an easy way to have vector<uint8_t> as the map key rather than string?
+
+	if (auto f = ldap_cache.find(string_view((char*)sidsp.data(), sidsp.size())); f != ldap_cache.end()) {
+		const auto& p = *f;
+
+		name = p.second.first;
+		email = p.second.second;
+
+		return;
+	}
+
 	ldapobj l;
 	string binsid;
-	DWORD sidlen;
 
-	sidlen = GetLengthSid(sid);
-	binsid.reserve(3 * sidlen);
-	for (unsigned int i = 0; i < sidlen; i++) {
+	binsid.reserve(3 * sidsp.size());
+	for (auto b : sidsp) {
 		binsid += "\\";
-		binsid += hex_byte(((uint8_t*)sid)[i]);
+		binsid += hex_byte(b);
 	}
 
 	auto ret = l.search("(objectSid=" + binsid + ")", { "givenName", "sn", "name", "mail" });
@@ -287,11 +319,22 @@ void get_ldap_details_from_sid(PSID sid, string& name, string& email) {
 		email = ret.at("mail");
 	else
 		email = "";
+
+	ldap_cache.try_emplace(string((char*)sidsp.data(), (char*)sidsp.data() + sidsp.size()), make_pair(name, email));
 }
 
 #else
 
 void get_ldap_details_from_name(string_view username, string& name, string& email) {
+	if (auto f = ldap_cache.find(username); f != ldap_cache.end()) {
+		const auto& p = *f;
+
+		name = p.second.first;
+		email = p.second.second;
+
+		return;
+	}
+
 	ldapobj l;
 
 	auto ret = l.search("(sAMAccountName=" + string(username) + ")", { "givenName", "sn", "name", "mail" });
@@ -307,6 +350,8 @@ void get_ldap_details_from_name(string_view username, string& name, string& emai
 		email = ret.at("mail");
 	else
 		email = "";
+
+	ldap_cache.try_emplace(string(username), make_pair(name, email));
 }
 
 #endif
