@@ -87,21 +87,20 @@ static optional<string> decrypt_pwdhash(span<const uint8_t> hash, span<std::byte
 
 static void dump_linked_servers(const tds::options& opts, tds::tds& tds, unsigned int commit, span<std::byte> smk) {
 	vector<linked_server> servs;
+	vector<linked_server_logins> logins;
 
 	// FIXME - log how undefined logins will be handled
 
 	{
-		tds::query sq(tds, "SELECT srvid, srvname, srvproduct, providername, datasource, providerstring FROM master.sys.sysservers WHERE srvid != 0");
-
-		while (sq.fetch_row()) {
-			servs.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2], (string)sq[3], (string)sq[4], (string)sq[5]);
-		}
-	}
-
-	vector<linked_server_logins> logins;
-
-	{
 		tds::tds dac(opts);
+
+		{
+			tds::query sq(dac, "SELECT srvid, srvname, srvproduct, providername, datasource, providerstring FROM master.sys.sysservers WHERE srvid != 0");
+
+			while (sq.fetch_row()) {
+				servs.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2], (string)sq[3], (string)sq[4], (string)sq[5]);
+			}
+		}
 
 		{
 			tds::query sq(dac, R"(SELECT syslnklgns.srvid, syslnklgns.name, syslnklgns.pwdhash, syslnklgns.lgnid, sysxlgns.name
