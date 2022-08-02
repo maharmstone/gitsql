@@ -280,7 +280,7 @@ static void dump_principals(const tds::options& opts, tds::tds& tds, unsigned in
 	}
 }
 
-void dump_master(const string& db_server, unsigned int repo, span<std::byte> smk) {
+void dump_master(const string& db_server, string_view master_server, unsigned int repo, span<std::byte> smk) {
 	if (smk.size() == 16)
 		throw runtime_error("3DES SMK not supported.");
 	else if (smk.size() != 32)
@@ -290,6 +290,7 @@ void dump_master(const string& db_server, unsigned int repo, span<std::byte> smk
 
 	// FIXME - different instances?
 
+	opts.server = master_server;
 	opts.app_name = db_app;
 	opts.port = 1434; // FIXME - find DAC port by querying server
 
