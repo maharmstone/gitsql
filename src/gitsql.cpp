@@ -1298,6 +1298,42 @@ private:
 	unique_handle h;
 };
 
+static string object_ddl2(tds::tds& tds, string_view type, string_view orig_ddl, int64_t id, u16string_view schema,
+						  u16string_view object, bool has_perms) {
+	string ddl;
+
+	if (type == "U") // table
+		ddl = table_ddl(tds, id);
+	else if (type == "V")
+		ddl = munge_definition(orig_ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), lex::VIEW);
+	else if (type == "P")
+		ddl = munge_definition(orig_ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), lex::PROCEDURE);
+	else if (type == "FN" || type == "TF" || type == "IF")
+		ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), lex::FUNCTION);
+
+	ddl = fix_whitespace(ddl);
+
+	if (!ddl.empty() && ddl.front() == '\n') {
+		auto pos = ddl.find_first_not_of("\n");
+
+		if (pos == string::npos)
+			ddl.clear();
+		else
+			ddl = ddl.substr(pos);
+	}
+
+	while (!ddl.empty() && (ddl.back() == '\n' || ddl.back() == ' ')) {
+		ddl.pop_back();
+	}
+
+	ddl += "\n";
+
+	if (has_perms)
+		ddl += object_perms(tds, id, "", brackets_escape(tds::utf16_to_utf8(schema)) + "." + brackets_escape(tds::utf16_to_utf8(object)));
+
+	return ddl;
+}
+
 static string object_ddl(tds::tds& tds, u16string_view schema, u16string_view object) {
 	int64_t id;
 	string type, ddl;
@@ -1331,36 +1367,35 @@ WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 		ddl = (string)sq[3];
 	}
 
-	if (type == "U") // table
-		ddl = table_ddl(tds, id);
-	else if (type == "V")
-		ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), lex::VIEW);
-	else if (type == "P")
-		ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), lex::PROCEDURE);
-	else if (type == "FN" || type == "TF" || type == "IF")
-		ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), lex::FUNCTION);
+	return object_ddl2(tds, type, ddl, id, schema, object, has_perms);
+}
 
-	ddl = fix_whitespace(ddl);
+static string object_ddl_id(tds::tds& tds, int64_t id) {
+	string type, ddl;
+	u16string schema, name;
+	bool has_perms;
 
-	if (!ddl.empty() && ddl.front() == '\n') {
-		auto pos = ddl.find_first_not_of("\n");
+	{
+		tds::query sq(tds, R"(SELECT objects.name,
+	RTRIM(objects.type),
+	CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END,
+	sql_modules.definition,
+	SCHEMA_NAME(objects.schema_id)
+FROM sys.objects
+LEFT JOIN sys.sql_modules ON sql_modules.object_id = objects.object_id
+WHERE objects.object_id = ?)", id);
 
-		if (pos == string::npos)
-			ddl.clear();
-		else
-			ddl = ddl.substr(pos);
+		if (!sq.fetch_row())
+			throw formatted_error("Could not find ID object ID {}.", id);
+
+		name = (u16string)sq[0];
+		type = (string)sq[1];
+		has_perms = (unsigned int)sq[2] != 0;
+		ddl = (string)sq[3];
+		schema = (u16string)sq[4];
 	}
 
-	while (!ddl.empty() && (ddl.back() == '\n' || ddl.back() == ' ')) {
-		ddl.pop_back();
-	}
-
-	ddl += "\n";
-
-	if (has_perms)
-		ddl += object_perms(tds, id, "", brackets_escape(tds::utf16_to_utf8(schema)) + "." + brackets_escape(tds::utf16_to_utf8(object)));
-
-	return ddl;
+	return object_ddl2(tds, type, ddl, id, schema, name, has_perms);
 }
 
 static void write_object_ddl(tds::tds& tds, u16string_view schema, u16string_view object,
@@ -1625,12 +1660,6 @@ int main(int argc, char* argv[])
 				bind_token = tds::utf8_to_utf16(bind_token_u8.value());
 #endif
 
-#ifdef _WIN32
-			u16string_view object = (char16_t*)argv[2];
-#else
-			string_view u8object = argv[2];
-			auto object = tds::utf8_to_utf16(u8object);
-#endif
 			tds::tds tds(db_server, db_username, db_password, db_app);
 
 			if (bind_token.has_value()) {
@@ -1639,19 +1668,55 @@ int main(int argc, char* argv[])
 				while (r.fetch_row()) { } // wait for last packet
 			}
 
-			auto onp = tds::parse_object_name(object);
+			if (argc >= 4) {
+				int32_t id;
 
-			if (!onp.server.empty())
-				throw runtime_error("Cannot show definition of objects on remote servers.");
+#ifdef _WIN32
+				u16string_view db = (char16_t*)argv[2];
+#else
+				string_view u8db = argv[2];
+				auto db = tds::utf8_to_utf16(u8db);
+#endif
 
-			if (!onp.db.empty())
-				tds.run(tds::no_check{u"USE " + brackets_escape(onp.db)});
-			else if (!onp.name.empty() && onp.name.front() == u'#')
-				tds.run(u"USE tempdb");
+#ifdef _WIN32
+				auto id_str = tds::utf16_to_utf8(argv[3]);
+#else
+				string id_str = argv[3];
+#endif
 
-			auto ddl = object_ddl(tds, onp.schema, onp.name);
+				auto [ptr, ec] = from_chars(id_str.data(), id_str.data() + id_str.length(), id);
 
-			fmt::print("{}", ddl);
+				if (ptr != id_str.data() + id_str.length())
+					throw formatted_error("Invalid object ID \"{}\".", id_str);
+
+				if (!db.empty())
+					tds.run(tds::no_check{u"USE " + brackets_escape(db)});
+
+				auto ddl = object_ddl_id(tds, id);
+
+				fmt::print("{}", ddl);
+			} else {
+#ifdef _WIN32
+				u16string_view object = (char16_t*)argv[2];
+#else
+				string_view u8object = argv[2];
+				auto object = tds::utf8_to_utf16(u8object);
+#endif
+
+				auto onp = tds::parse_object_name(object);
+
+				if (!onp.server.empty())
+					throw runtime_error("Cannot show definition of objects on remote servers.");
+
+				if (!onp.db.empty())
+					tds.run(tds::no_check{u"USE " + brackets_escape(onp.db)});
+				else if (!onp.name.empty() && onp.name.front() == u'#')
+					tds.run(u"USE tempdb");
+
+				auto ddl = object_ddl(tds, onp.schema, onp.name);
+
+				fmt::print("{}", ddl);
+			}
 		} else if (cmd == "master") {
 			unsigned int repo;
 
