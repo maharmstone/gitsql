@@ -500,6 +500,19 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 		}
 	}
 
+	// remove suffix from name of non-global temporary table
+	if (table.size() >= 2 && table[0] == '#' && table[1] != '#') {
+		// remove hex digits
+		while (!table.empty() && ((table.back() >= '0' && table.back() <= '9') || (table.back() >= 'A' && table.back() <= 'F') || (table.back() >= 'a' && table.back() <= 'f'))) {
+			table.pop_back();
+		}
+
+		// remove underscores
+		while (!table.empty() && table.back() == '_') {
+			table.pop_back();
+		}
+	}
+
 	escaped_name = ((!table.empty() && table.front() == '#') ? "" : (brackets_escape(schema) + ".")) + brackets_escape(table);
 
 	if (type == "TT") {
