@@ -399,39 +399,57 @@ static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string&
 	}
 }
 
-git_reference* GitRepo::branch_lookup(const std::string& branch_name, git_branch_t branch_type) {
-	git_reference* ref = nullptr; // FIXME - would be better with class wrapper for this
+git_reference_ptr GitRepo::branch_lookup(const std::string& branch_name, git_branch_t branch_type) {
+	git_reference_ptr ref;
+	int ret;
 
-	auto ret = git_branch_lookup(&ref, repo.get(), branch_name.c_str(), branch_type);
+	{
+		git_reference* tmp = nullptr;
+
+		ret = git_branch_lookup(&tmp, repo.get(), branch_name.c_str(), branch_type);
+
+		ref.reset(tmp);
+	}
 
 	if (ret && ret != GIT_ENOTFOUND)
 		throw git_exception(ret, "git_branch_lookup");
 
-	return !ret ? ref : nullptr;
+	if (ret)
+		ref.reset();
+
+	return ref;
 }
 
 void GitRepo::branch_create(const string& branch_name, const git_commit* target, bool force) {
-	git_reference* ref = nullptr;
+	git_reference_ptr ref;
+	int ret;
 
-	auto ret = git_branch_create(&ref, repo.get(), branch_name.c_str(), target, force ? 1 : 0);
+	{
+		git_reference* tmp = nullptr;
+
+		ret = git_branch_create(&tmp, repo.get(), branch_name.c_str(), target, force ? 1 : 0);
+
+		ref.reset(tmp);
+	}
 
 	if (ret)
 		throw git_exception(ret, "git_branch_create");
-
-	if (ref)
-		git_reference_free(ref);
 }
 
 void GitRepo::reference_create(const string& name, const git_oid& id, bool force, const string& log_message) {
-	git_reference* ref = nullptr;
+	git_reference_ptr ref;
+	int ret;
 
-	auto ret = git_reference_create(&ref, repo.get(), name.c_str(), &id, force ? 1 : 0, log_message.c_str());
+	{
+		git_reference* tmp = nullptr;
+
+		ret = git_reference_create(&tmp, repo.get(), name.c_str(), &id, force ? 1 : 0, log_message.c_str());
+
+		ref.reset(tmp);
+	}
 
 	if (ret)
 		throw git_exception(ret, "git_reference_create");
-
-	if (ref)
-		git_reference_free(ref);
 }
 
 void update_git(GitRepo& repo, const string& user, const string& email, const string& description, list<git_file>& files,
@@ -595,23 +613,25 @@ void GitRepo::checkout_head(const git_checkout_options* opts) {
 
 bool GitRepo::branch_is_head(const std::string& name) {
 	int ret;
-	git_reference* ref;
+	git_reference_ptr ref;
 
-	ret = git_reference_lookup(&ref, repo.get(), ("refs/heads/" + name).c_str());
+	{
+		git_reference* tmp = nullptr;
+
+		ret = git_reference_lookup(&tmp, repo.get(), ("refs/heads/" + name).c_str());
+
+		ref.reset(tmp);
+	}
+
 	if (ret == GIT_ENOTFOUND)
 		return false;
 	else if (ret)
 		throw git_exception(ret, "git_reference_lookup");
 
-	ret = git_branch_is_head(ref);
+	ret = git_branch_is_head(ref.get());
 
-	if (ret < 0) {
-		auto exc = git_exception(ret, "git_branch_is_head");
-		git_reference_free(ref);
-		throw exc;
-	}
-
-	git_reference_free(ref);
+	if (ret < 0)
+		throw git_exception(ret, "git_branch_is_head");
 
 	return ret;
 }

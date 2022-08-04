@@ -83,6 +83,17 @@ public:
 
 using git_index_ptr = std::unique_ptr<git_index*, git_index_deleter>;
 
+class git_reference_deleter {
+public:
+	typedef git_reference* pointer;
+
+	void operator()(git_reference* ref) {
+		git_reference_free(ref);
+	}
+};
+
+using git_reference_ptr = std::unique_ptr<git_reference*, git_reference_deleter>;
+
 class GitSignature {
 public:
 	GitSignature(const std::string& user, const std::string& email, const std::optional<tds::datetimeoffset>& dto = std::nullopt);
@@ -121,7 +132,7 @@ public:
 	git_oid tree_create_updated(const GitTree& baseline, size_t nupdates, const git_tree_update* updates);
 	git_oid index_tree_id() const;
 	void checkout_head(const git_checkout_options* opts = nullptr);
-	git_reference* branch_lookup(const std::string& branch_name, git_branch_t branch_type);
+	git_reference_ptr branch_lookup(const std::string& branch_name, git_branch_t branch_type);
 	void branch_create(const std::string& branch_name, const git_commit* target, bool force);
 	void reference_create(const std::string& name, const git_oid& id, bool force, const std::string& log_message);
 	bool branch_is_head(const std::string& name);
