@@ -50,6 +50,17 @@ public:
 
 using git_signature_ptr = std::unique_ptr<git_signature*, git_signature_deleter>;
 
+class git_tree_deleter {
+public:
+	typedef git_tree* pointer;
+
+	void operator()(git_tree* tree) {
+		git_tree_free(tree);
+	}
+};
+
+using git_tree_ptr = std::unique_ptr<git_tree*, git_tree_deleter>;
+
 class GitSignature {
 public:
 	GitSignature(const std::string& user, const std::string& email, const std::optional<tds::datetimeoffset>& dto = std::nullopt);
@@ -58,26 +69,15 @@ public:
 };
 
 class GitTree {
-	friend class GitRepo;
-	friend class GitDiff;
-	friend class GitTreeEntry;
-	friend class GitBlob;
-
 public:
 	GitTree(const git_commit* commit);
 	GitTree(const GitRepo& repo, const git_oid& oid);
 	GitTree(const GitRepo& repo, const std::string& rev);
 	GitTree(const GitRepo& repo, const GitTreeEntry& gte);
-	~GitTree();
 	size_t entrycount() const;
 	bool entry_bypath(git_tree_entry** out, const std::string& path);
 
-private:
-	git_tree* tree;
-
-	operator git_tree*() const {
-		return tree;
-	}
+	git_tree_ptr tree;
 };
 
 class GitDiff {

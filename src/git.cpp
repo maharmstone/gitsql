@@ -54,16 +54,22 @@ GitSignature::GitSignature(const string& user, const string& email, const option
 
 GitTree::GitTree(const git_commit* commit) {
 	unsigned int ret;
+	git_tree* tmp = nullptr;
 
-	if ((ret = git_commit_tree(&tree, commit)))
+	if ((ret = git_commit_tree(&tmp, commit)))
 		throw git_exception(ret, "git_commit_tree");
+
+	tree.reset(tmp);
 }
 
 GitTree::GitTree(const GitRepo& repo, const git_oid& oid) {
 	unsigned int ret;
+	git_tree* tmp = nullptr;
 
-	if ((ret = git_tree_lookup(&tree, repo.repo.get(), &oid)))
+	if ((ret = git_tree_lookup(&tmp, repo.repo.get(), &oid)))
 		throw git_exception(ret, "git_tree_lookup");
+
+	tree.reset(tmp);
 }
 
 GitTree::GitTree(const GitRepo& repo, const GitTreeEntry& gte) {
@@ -73,12 +79,8 @@ GitTree::GitTree(const GitRepo& repo, const GitTreeEntry& gte) {
 		throw git_exception(ret, "git_tree_entry_to_object");
 }
 
-GitTree::~GitTree() {
-	git_tree_free(tree);
-}
-
 bool GitTree::entry_bypath(git_tree_entry** out, const string& path) {
-	int ret = git_tree_entry_bypath(out, tree, path.c_str());
+	int ret = git_tree_entry_bypath(out, tree.get(), path.c_str());
 
 	if (ret != 0 && ret != GIT_ENOTFOUND)
 		throw git_exception(ret, "git_tree_entry_bypath");
@@ -123,10 +125,10 @@ git_oid GitRepo::commit_create(const GitSignature& author, const GitSignature& c
 	git_oid id;
 
 	if (parent) {
-		if ((ret = git_commit_create_v(&id, repo.get(), nullptr, author.sig.get(), committer.sig.get(), nullptr, message.c_str(), tree, 1, parent)))
+		if ((ret = git_commit_create_v(&id, repo.get(), nullptr, author.sig.get(), committer.sig.get(), nullptr, message.c_str(), tree.tree.get(), 1, parent)))
 			throw git_exception(ret, "git_commit_create_v");
 	} else {
-		if ((ret = git_commit_create_v(&id, repo.get(), nullptr, author.sig.get(), committer.sig.get(), nullptr, message.c_str(), tree, 0)))
+		if ((ret = git_commit_create_v(&id, repo.get(), nullptr, author.sig.get(), committer.sig.get(), nullptr, message.c_str(), tree.tree.get(), 0)))
 			throw git_exception(ret, "git_commit_create_v");
 	}
 
@@ -301,7 +303,7 @@ git_oid GitRepo::tree_create_updated(const GitTree& baseline, size_t nupdates, c
 	unsigned int ret;
 	git_oid oid;
 
-	if ((ret = git_tree_create_updated(&oid, repo.get(), baseline, nupdates, updates)))
+	if ((ret = git_tree_create_updated(&oid, repo.get(), baseline.tree.get(), nupdates, updates)))
 		throw git_exception(ret, "git_tree_create_updated");
 
 	return oid;
@@ -310,7 +312,7 @@ git_oid GitRepo::tree_create_updated(const GitTree& baseline, size_t nupdates, c
 GitDiff::GitDiff(const GitRepo& repo, const GitTree& old_tree, const GitTree& new_tree, const git_diff_options* opts) {
 	unsigned int ret;
 
-	if ((ret = git_diff_tree_to_tree(&diff, repo.repo.get(), old_tree, new_tree, opts)))
+	if ((ret = git_diff_tree_to_tree(&diff, repo.repo.get(), old_tree.tree.get(), new_tree.tree.get(), opts)))
 		throw git_exception(ret, "git_diff_tree_to_tree");
 }
 
@@ -545,11 +547,11 @@ void GitIndex::clear() {
 }
 
 size_t GitTree::entrycount() const {
-	return git_tree_entrycount(tree);
+	return git_tree_entrycount(tree.get());
 }
 
 GitTreeEntry::GitTreeEntry(const GitTree& tree, size_t idx) {
-	gte = git_tree_entry_byindex(tree, idx);
+	gte = git_tree_entry_byindex(tree.tree.get(), idx);
 
 	if (!gte)
 		throw runtime_error("git_tree_entry_byindex returned NULL.");
@@ -573,7 +575,7 @@ GitTree::GitTree(const GitRepo& repo, const string& rev) {
 GitBlob::GitBlob(const GitTree& tree, const string& path) {
 	unsigned int ret;
 
-	if ((ret = git_object_lookup_bypath(&obj, (git_object*)(git_tree*)tree, path.c_str(), GIT_OBJECT_BLOB)))
+	if ((ret = git_object_lookup_bypath(&obj, (git_object*)tree.tree.get(), path.c_str(), GIT_OBJECT_BLOB)))
 		throw git_exception(ret, "git_object_lookup_bypath");
 }
 
