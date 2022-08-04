@@ -360,6 +360,36 @@ static void update_git_no_parent(GitRepo& repo, const GitSignature& sig, const s
 	GitTree empty_tree(repo, repo.index_tree_id());
 
 	{
+		struct gtwctx {
+			vector<git_tree_update> upd;
+			list<string> strs;
+		};
+
+		gtwctx ctx;
+
+		git_tree_walk(empty_tree.tree.get(), GIT_TREEWALK_PRE, [](const char* root, const git_tree_entry* entry, void* payload) {
+			auto& ctx = *(gtwctx*)payload;
+
+			if (strcmp(root, ""))
+				return 0;
+
+			ctx.strs.emplace_back(git_tree_entry_name(entry));
+
+			ctx.upd.emplace_back();
+			ctx.upd.back().action = GIT_TREE_UPDATE_REMOVE;
+			ctx.upd.back().path = ctx.strs.back().c_str();
+
+			return 0;
+		}, &ctx);
+
+		if (!ctx.upd.empty()) {
+			oid = repo.tree_create_updated(empty_tree, ctx.upd);
+
+			empty_tree = GitTree(repo, oid);
+		}
+	}
+
+	{
 		vector<git_tree_update> upd;
 
 		upd.reserve(files.size());
