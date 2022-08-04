@@ -39,19 +39,22 @@ public:
 
 using git_repository_ptr = std::unique_ptr<git_repository*, git_repository_deleter>;
 
-class GitSignature {
-	friend class GitRepo;
+class git_signature_deleter {
+public:
+	typedef git_signature* pointer;
 
+	void operator()(git_signature* sig) {
+		git_signature_free(sig);
+	}
+};
+
+using git_signature_ptr = std::unique_ptr<git_signature*, git_signature_deleter>;
+
+class GitSignature {
 public:
 	GitSignature(const std::string& user, const std::string& email, const std::optional<tds::datetimeoffset>& dto = std::nullopt);
-	~GitSignature();
 
-private:
-	git_signature* sig = nullptr;
-
-	operator git_signature*() const {
-		return sig;
-	}
+	git_signature_ptr sig;
 };
 
 class GitTree {
@@ -88,10 +91,6 @@ private:
 };
 
 class GitRepo {
-	friend GitTree;
-	friend GitDiff;
-	friend GitIndex;
-
 public:
 	GitRepo(const std::string& dir);
 	bool reference_name_to_id(git_oid* out, const std::string& name);

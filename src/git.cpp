@@ -36,21 +36,20 @@ static constexpr auto jan1970 = chrono::duration_cast<chrono::seconds>(chrono::t
 
 GitSignature::GitSignature(const string& user, const string& email, const optional<tds::datetimeoffset>& dto) {
 	unsigned int ret;
+	git_signature* tmp = nullptr;
 
 	if (dto.has_value()) {
 		auto tp = (chrono::time_point<chrono::system_clock>)dto.value();
 		auto secs = chrono::duration_cast<chrono::seconds>(tp.time_since_epoch()) - jan1970;
 
-		if ((ret = git_signature_new(&sig, user.c_str(), email.c_str(), secs.count(), dto.value().offset)))
+		if ((ret = git_signature_new(&tmp, user.c_str(), email.c_str(), secs.count(), dto.value().offset)))
 			throw git_exception(ret, "git_signature_new");
 	} else {
-		if ((ret = git_signature_now(&sig, user.c_str(), email.c_str())))
+		if ((ret = git_signature_now(&tmp, user.c_str(), email.c_str())))
 			throw git_exception(ret, "git_signature_now");
 	}
-}
 
-GitSignature::~GitSignature() {
-	git_signature_free(sig);
+	sig.reset(tmp);
 }
 
 GitTree::GitTree(const git_commit* commit) {
@@ -124,10 +123,10 @@ git_oid GitRepo::commit_create(const GitSignature& author, const GitSignature& c
 	git_oid id;
 
 	if (parent) {
-		if ((ret = git_commit_create_v(&id, repo.get(), nullptr, author, committer, nullptr, message.c_str(), tree, 1, parent)))
+		if ((ret = git_commit_create_v(&id, repo.get(), nullptr, author.sig.get(), committer.sig.get(), nullptr, message.c_str(), tree, 1, parent)))
 			throw git_exception(ret, "git_commit_create_v");
 	} else {
-		if ((ret = git_commit_create_v(&id, repo.get(), nullptr, author, committer, nullptr, message.c_str(), tree, 0)))
+		if ((ret = git_commit_create_v(&id, repo.get(), nullptr, author.sig.get(), committer.sig.get(), nullptr, message.c_str(), tree, 0)))
 			throw git_exception(ret, "git_commit_create_v");
 	}
 
