@@ -17,6 +17,17 @@ class GitDiff;
 class GitIndex;
 class GitTreeEntry;
 
+class git_commit_deleter {
+public:
+	typedef git_commit* pointer;
+
+	void operator()(git_commit* commit) {
+		git_commit_free(commit);
+	}
+};
+
+using git_commit_ptr = std::unique_ptr<git_commit*, git_commit_deleter>;
+
 class GitSignature {
 	friend class GitRepo;
 
@@ -74,7 +85,7 @@ public:
 	GitRepo(const std::string& dir);
 	~GitRepo();
 	bool reference_name_to_id(git_oid* out, const std::string& name);
-	void commit_lookup(git_commit** commit, const git_oid* oid);
+	git_commit_ptr commit_lookup(const git_oid* oid);
 	git_oid commit_create(const GitSignature& author, const GitSignature& committer, const std::string& message, const GitTree& tree,
 						  git_commit* parent = nullptr);
 	git_oid blob_create_from_buffer(std::string_view data);

@@ -109,11 +109,14 @@ bool GitRepo::reference_name_to_id(git_oid* out, const string& name) {
 		throw git_exception(ret, "git_reference_name_to_id");
 }
 
-void GitRepo::commit_lookup(git_commit** commit, const git_oid* oid) {
+git_commit_ptr GitRepo::commit_lookup(const git_oid* oid) {
 	unsigned int ret;
+	git_commit* tmp = nullptr;
 
-	if ((ret = git_commit_lookup(commit, repo, oid)))
+	if ((ret = git_commit_lookup(&tmp, repo, oid)))
 		throw git_exception(ret, "git_commit_lookup");
+
+	return git_commit_ptr{tmp};
 }
 
 git_oid GitRepo::commit_create(const GitSignature& author, const GitSignature& committer, const string& message, const GitTree& tree,
@@ -370,13 +373,9 @@ static void update_git_no_parent(GitRepo& repo, const GitSignature& sig, const s
 
 	auto commit_oid = repo.commit_create(sig, sig, description, tree);
 
-	git_commit* commit; // FIXME - class wrapper for this
+	auto commit = repo.commit_lookup(&commit_oid);
 
-	repo.commit_lookup(&commit, &commit_oid);
-
-	repo.branch_create(branch.empty() ? "master" : branch, commit, true);
-
-	git_commit_free(commit);
+	repo.branch_create(branch.empty() ? "master" : branch, commit.get(), true);
 }
 
 static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string& prefix,
@@ -439,7 +438,6 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 				bool clear_all, const optional<tds::datetimeoffset>& dto, const string& branch) {
 	GitSignature sig(user, email, dto);
 
-	git_commit* parent;
 	git_oid parent_id;
 
 	bool parent_found = repo.reference_name_to_id(&parent_id, branch.empty() ? "refs/heads/master" : "refs/heads/" + branch);
@@ -449,9 +447,9 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 		return;
 	}
 
-	repo.commit_lookup(&parent, &parent_id);
+	auto parent = repo.commit_lookup(&parent_id);
 
-	GitTree parent_tree(parent);
+	GitTree parent_tree(parent.get());
 	git_oid oid;
 
 	if (clear_all) {
@@ -503,10 +501,7 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 			return;
 	}
 
-	auto commit_oid = repo.commit_create(sig, sig, description, tree, parent);
-	git_commit* commit;
-
-	repo.commit_lookup(&commit, &commit_oid);
+	auto commit_oid = repo.commit_create(sig, sig, description, tree, parent.get());
 
 	repo.reference_create(branch.empty() ? "refs/heads/master" : "refs/heads/" + branch,
 						  commit_oid, true, "branch updated");
