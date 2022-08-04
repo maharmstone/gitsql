@@ -105,6 +105,17 @@ public:
 
 using git_object_ptr = std::unique_ptr<git_object*, git_object_deleter>;
 
+class git_tree_entry_deleter {
+public:
+	typedef git_tree_entry* pointer;
+
+	void operator()(git_tree_entry* gte) {
+		git_tree_entry_free(gte);
+	}
+};
+
+using git_tree_entry_ptr = std::unique_ptr<git_tree_entry*, git_tree_entry_deleter>;
+
 class GitSignature {
 public:
 	GitSignature(const std::string& user, const std::string& email, const std::optional<tds::datetimeoffset>& dto = std::nullopt);
@@ -119,7 +130,7 @@ public:
 	GitTree(const GitRepo& repo, const std::string& rev);
 	GitTree(const GitRepo& repo, const GitTreeEntry& gte);
 	size_t entrycount() const;
-	bool entry_bypath(git_tree_entry** out, const std::string& path);
+	git_tree_entry_ptr entry_bypath(const std::string& path);
 
 	git_tree_ptr tree;
 };

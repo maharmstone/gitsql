@@ -79,13 +79,21 @@ GitTree::GitTree(const GitRepo& repo, const GitTreeEntry& gte) {
 		throw git_exception(ret, "git_tree_entry_to_object");
 }
 
-bool GitTree::entry_bypath(git_tree_entry** out, const string& path) {
-	int ret = git_tree_entry_bypath(out, tree.get(), path.c_str());
+git_tree_entry_ptr GitTree::entry_bypath(const string& path) {
+	git_tree_entry_ptr gte;
+	git_tree_entry* tmp = nullptr;
+
+	int ret = git_tree_entry_bypath(&tmp, tree.get(), path.c_str());
+
+	gte.reset(tmp);
 
 	if (ret != 0 && ret != GIT_ENOTFOUND)
 		throw git_exception(ret, "git_tree_entry_bypath");
 
-	return ret == 0;
+	if (ret)
+		gte.reset();
+
+	return gte;
 }
 
 GitRepo::GitRepo(const string& dir) {
@@ -486,12 +494,10 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 
 		for (const auto& f : files) {
 			if (!f.data.has_value()) {
-				git_tree_entry* out;
+				auto gte = parent_tree.entry_bypath(f.filename);
 
-				if (!parent_tree.entry_bypath(&out, f.filename))
+				if (!gte)
 					continue;
-
-				git_tree_entry_free(out);
 
 				upd[nu].action = GIT_TREE_UPDATE_REMOVE;
 			} else {
