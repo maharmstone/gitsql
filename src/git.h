@@ -28,6 +28,17 @@ public:
 
 using git_commit_ptr = std::unique_ptr<git_commit*, git_commit_deleter>;
 
+class git_repository_deleter {
+public:
+	typedef git_repository* pointer;
+
+	void operator()(git_repository* repo) {
+		git_repository_free(repo);
+	}
+};
+
+using git_repository_ptr = std::unique_ptr<git_repository*, git_repository_deleter>;
+
 class GitSignature {
 	friend class GitRepo;
 
@@ -83,7 +94,6 @@ class GitRepo {
 
 public:
 	GitRepo(const std::string& dir);
-	~GitRepo();
 	bool reference_name_to_id(git_oid* out, const std::string& name);
 	git_commit_ptr commit_lookup(const git_oid* oid);
 	git_oid commit_create(const GitSignature& author, const GitSignature& committer, const std::string& message, const GitTree& tree,
@@ -98,12 +108,7 @@ public:
 	bool branch_is_head(const std::string& name);
 	bool is_bare();
 
-private:
-	git_repository* repo = nullptr;
-
-	operator git_repository*() const {
-		return repo;
-	}
+	git_repository_ptr repo;
 };
 
 class GitIndex {
