@@ -61,6 +61,17 @@ public:
 
 using git_tree_ptr = std::unique_ptr<git_tree*, git_tree_deleter>;
 
+class git_diff_deleter {
+public:
+	typedef git_diff* pointer;
+
+	void operator()(git_diff* diff) {
+		git_diff_free(diff);
+	}
+};
+
+using git_diff_ptr = std::unique_ptr<git_diff*, git_diff_deleter>;
+
 class GitSignature {
 public:
 	GitSignature(const std::string& user, const std::string& email, const std::optional<tds::datetimeoffset>& dto = std::nullopt);
@@ -83,11 +94,9 @@ public:
 class GitDiff {
 public:
 	GitDiff(const GitRepo& repo, const GitTree& old_tree, const GitTree& new_tree, const git_diff_options* opts = nullptr);
-	~GitDiff();
 	size_t num_deltas();
 
-private:
-	git_diff* diff;
+	git_diff_ptr diff;
 };
 
 class GitRepo {

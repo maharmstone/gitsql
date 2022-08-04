@@ -311,17 +311,16 @@ git_oid GitRepo::tree_create_updated(const GitTree& baseline, size_t nupdates, c
 
 GitDiff::GitDiff(const GitRepo& repo, const GitTree& old_tree, const GitTree& new_tree, const git_diff_options* opts) {
 	unsigned int ret;
+	git_diff* tmp = nullptr;
 
-	if ((ret = git_diff_tree_to_tree(&diff, repo.repo.get(), old_tree.tree.get(), new_tree.tree.get(), opts)))
+	if ((ret = git_diff_tree_to_tree(&tmp, repo.repo.get(), old_tree.tree.get(), new_tree.tree.get(), opts)))
 		throw git_exception(ret, "git_diff_tree_to_tree");
-}
 
-GitDiff::~GitDiff() {
-	git_diff_free(diff);
+	diff.reset(tmp);
 }
 
 size_t GitDiff::num_deltas() {
-	return git_diff_num_deltas(diff);
+	return git_diff_num_deltas(diff.get());
 }
 
 git_oid GitRepo::index_tree_id() const {
