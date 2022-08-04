@@ -72,6 +72,17 @@ public:
 
 using git_diff_ptr = std::unique_ptr<git_diff*, git_diff_deleter>;
 
+class git_index_deleter {
+public:
+	typedef git_index* pointer;
+
+	void operator()(git_index* index) {
+		git_index_free(index);
+	}
+};
+
+using git_index_ptr = std::unique_ptr<git_index*, git_index_deleter>;
+
 class GitSignature {
 public:
 	GitSignature(const std::string& user, const std::string& email, const std::optional<tds::datetimeoffset>& dto = std::nullopt);
@@ -122,14 +133,12 @@ public:
 class GitIndex {
 public:
 	GitIndex(const GitRepo& repo);
-	~GitIndex();
 	void write_tree(git_oid* oid);
 	void add_bypath(const std::string& fn);
 	void remove_bypath(const std::string& fn);
 	void clear();
 
-private:
-	git_index* index = nullptr;
+	git_index_ptr index;
 };
 
 class GitTreeEntry {

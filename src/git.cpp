@@ -508,40 +508,39 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 
 GitIndex::GitIndex(const GitRepo& repo) {
 	unsigned int ret;
+	git_index* tmp = nullptr;
 
-	if ((ret = git_repository_index(&index, repo.repo.get())))
+	if ((ret = git_repository_index(&tmp, repo.repo.get())))
 		throw git_exception(ret, "git_repository_index");
-}
 
-GitIndex::~GitIndex() {
-	git_index_free(index);
+	index.reset(tmp);
 }
 
 void GitIndex::write_tree(git_oid* oid) {
 	unsigned int ret;
 
-	if ((ret = git_index_write_tree(oid, index)))
+	if ((ret = git_index_write_tree(oid, index.get())))
 		throw git_exception(ret, "git_index_write_tree");
 }
 
 void GitIndex::add_bypath(const string& fn) {
 	unsigned int ret;
 
-	if ((ret = git_index_add_bypath(index, fn.c_str())))
+	if ((ret = git_index_add_bypath(index.get(), fn.c_str())))
 		throw git_exception(ret, "git_index_add_bypath");
 }
 
 void GitIndex::remove_bypath(const string& fn) {
 	unsigned int ret;
 
-	if ((ret = git_index_remove_bypath(index, fn.c_str())))
+	if ((ret = git_index_remove_bypath(index.get(), fn.c_str())))
 		throw git_exception(ret, "git_index_remove_bypath");
 }
 
 void GitIndex::clear() {
 	unsigned int ret;
 
-	if ((ret = git_index_clear(index)))
+	if ((ret = git_index_clear(index.get())))
 		throw git_exception(ret, "git_index_clear");
 }
 
