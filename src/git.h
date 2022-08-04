@@ -94,6 +94,17 @@ public:
 
 using git_reference_ptr = std::unique_ptr<git_reference*, git_reference_deleter>;
 
+class git_object_deleter {
+public:
+	typedef git_object* pointer;
+
+	void operator()(git_object* obj) {
+		git_object_free(obj);
+	}
+};
+
+using git_object_ptr = std::unique_ptr<git_object*, git_object_deleter>;
+
 class GitSignature {
 public:
 	GitSignature(const std::string& user, const std::string& email, const std::optional<tds::datetimeoffset>& dto = std::nullopt);
@@ -171,11 +182,9 @@ private:
 class GitBlob {
 public:
 	GitBlob(const GitTree& tree, const std::string& path);
-	~GitBlob();
 	operator std::string() const;
 
-private:
-	git_object* obj;
+	git_object_ptr obj;
 };
 
 struct git_file {

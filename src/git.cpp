@@ -591,17 +591,16 @@ GitTree::GitTree(const GitRepo& repo, const string& rev) {
 
 GitBlob::GitBlob(const GitTree& tree, const string& path) {
 	unsigned int ret;
+	git_object* tmp = nullptr;
 
-	if ((ret = git_object_lookup_bypath(&obj, (git_object*)tree.tree.get(), path.c_str(), GIT_OBJECT_BLOB)))
+	if ((ret = git_object_lookup_bypath(&tmp, (git_object*)tree.tree.get(), path.c_str(), GIT_OBJECT_BLOB)))
 		throw git_exception(ret, "git_object_lookup_bypath");
-}
 
-GitBlob::~GitBlob() {
-	git_object_free(obj);
+	obj.reset(tmp);
 }
 
 GitBlob::operator string() const {
-	return string((char*)git_blob_rawcontent((git_blob*)obj), git_blob_rawsize((git_blob*)obj));
+	return string((char*)git_blob_rawcontent((git_blob*)obj.get()), git_blob_rawsize((git_blob*)obj.get()));
 }
 
 void GitRepo::checkout_head(const git_checkout_options* opts) {
