@@ -310,11 +310,11 @@ git_oid GitRepo::blob_create_from_buffer(string_view data) {
 	return blob;
 }
 
-git_oid GitRepo::tree_create_updated(const GitTree& baseline, size_t nupdates, const git_tree_update* updates) {
+git_oid GitRepo::tree_create_updated(const GitTree& baseline, span<const git_tree_update> updates) {
 	unsigned int ret;
 	git_oid oid;
 
-	if ((ret = git_tree_create_updated(&oid, repo.get(), baseline.tree.get(), nupdates, updates)))
+	if ((ret = git_tree_create_updated(&oid, repo.get(), baseline.tree.get(), updates.size(), updates.data())))
 		throw git_exception(ret, "git_tree_create_updated");
 
 	return oid;
@@ -360,24 +360,28 @@ static void update_git_no_parent(GitRepo& repo, const GitSignature& sig, const s
 	GitTree empty_tree(repo, repo.index_tree_id());
 
 	{
-		vector<git_tree_update> upd(files.size());
-		unsigned int nu = 0;
+		vector<git_tree_update> upd;
+
+		upd.reserve(files.size());
 
 		for (const auto& f : files) {
+			upd.emplace_back();
+
+			auto& u = upd.back();
+
 			if (f.data.has_value()) {
-				upd[nu].action = GIT_TREE_UPDATE_UPSERT;
-				upd[nu].id = repo.blob_create_from_buffer(f.data.value());
+				u.action = GIT_TREE_UPDATE_UPSERT;
+				u.id = repo.blob_create_from_buffer(f.data.value());
 			}
 
-			upd[nu].filemode = GIT_FILEMODE_BLOB;
-			upd[nu].path = f.filename.c_str();
-			nu++;
+			u.filemode = GIT_FILEMODE_BLOB;
+			u.path = f.filename.c_str();
 		}
 
-		if (nu == 0)
+		if (upd.empty())
 			return;
 
-		oid = repo.tree_create_updated(empty_tree, nu, upd.data());
+		oid = repo.tree_create_updated(empty_tree, upd);
 	}
 
 	GitTree tree(repo, oid);
@@ -492,31 +496,35 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 	}
 
 	{
-		vector<git_tree_update> upd(files.size());
-		unsigned int nu = 0;
+		vector<git_tree_update> upd;
+
+		upd.reserve(files.size());
 
 		for (const auto& f : files) {
+			upd.emplace_back();
+
+			auto& u = upd.back();
+
 			if (!f.data.has_value()) {
 				auto gte = parent_tree.entry_bypath(f.filename);
 
 				if (!gte)
 					continue;
 
-				upd[nu].action = GIT_TREE_UPDATE_REMOVE;
+				u.action = GIT_TREE_UPDATE_REMOVE;
 			} else {
-				upd[nu].action = GIT_TREE_UPDATE_UPSERT;
-				upd[nu].id = repo.blob_create_from_buffer(f.data.value());
+				u.action = GIT_TREE_UPDATE_UPSERT;
+				u.id = repo.blob_create_from_buffer(f.data.value());
 			}
 
-			upd[nu].filemode = GIT_FILEMODE_BLOB;
-			upd[nu].path = f.filename.c_str();
-			nu++;
+			u.filemode = GIT_FILEMODE_BLOB;
+			u.path = f.filename.c_str();
 		}
 
-		if (nu == 0)
+		if (upd.empty())
 			return;
 
-		oid = repo.tree_create_updated(parent_tree, nu, upd.data());
+		oid = repo.tree_create_updated(parent_tree, upd);
 	}
 
 	GitTree tree(repo, oid);

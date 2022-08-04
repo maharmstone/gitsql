@@ -151,7 +151,7 @@ public:
 	git_oid commit_create(const GitSignature& author, const GitSignature& committer, const std::string& message, const GitTree& tree,
 						  git_commit* parent = nullptr);
 	git_oid blob_create_from_buffer(std::string_view data);
-	git_oid tree_create_updated(const GitTree& baseline, size_t nupdates, const git_tree_update* updates);
+	git_oid tree_create_updated(const GitTree& baseline, std::span<const git_tree_update> updates);
 	git_oid index_tree_id() const;
 	void checkout_head(const git_checkout_options* opts = nullptr);
 	git_reference_ptr branch_lookup(const std::string& branch_name, git_branch_t branch_type);
