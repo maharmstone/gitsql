@@ -69,9 +69,29 @@ string munge_definition(string_view sql, string_view schema, string_view name,
 	else if (type == lex::FUNCTION)
 		sql2.append("CREATE OR ALTER FUNCTION ");
 
-	sql2.append(brackets_escape(schema));
-	sql2.append(".");
-	sql2.append(brackets_escape(name));
+	if (type == lex::PROCEDURE && !name.empty() && name.front() == '#') { // temporary stored procedure
+		auto name2 = name;
+
+		// remove suffix from name of non-global temporary procedure
+		if (name2.size() >= 2 && name2[1] != '#') {
+			// remove hex digits
+			while (!name2.empty() && ((name2.back() >= '0' && name2.back() <= '9') || (name2.back() >= 'A' && name2.back() <= 'F') || (name2.back() >= 'a' && name2.back() <= 'f'))) {
+				name2.remove_suffix(1);
+			}
+
+			// remove underscores
+			while (!name2.empty() && name2.back() == '_') {
+				name2.remove_suffix(1);
+			}
+		}
+
+		sql2.append(brackets_escape(name2));
+	} else {
+		sql2.append(brackets_escape(schema));
+		sql2.append(".");
+		sql2.append(brackets_escape(name));
+	}
+
 	sql2.append(sv);
 
 	return sql2;
