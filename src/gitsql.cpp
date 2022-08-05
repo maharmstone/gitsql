@@ -1500,6 +1500,7 @@ static void print_usage() {
     gitsql object <schema> <object> <commit> <filename> [database]
     gitsql dump <repo-id>
     gitsql show <object>
+    gitsql show <database> <object id>
 )");
 }
 
