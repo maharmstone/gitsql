@@ -538,8 +538,10 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 			if (!f.data.has_value()) {
 				auto gte = parent_tree.entry_bypath(f.filename);
 
-				if (!gte)
+				if (!gte) {
+					upd.pop_back();
 					continue;
+				}
 
 				u.action = GIT_TREE_UPDATE_REMOVE;
 			} else {
