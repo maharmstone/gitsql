@@ -1245,7 +1245,11 @@ ORDER BY Git.id
 
 			opts.checkout_strategy = GIT_CHECKOUT_FORCE;
 
-			repo.checkout_head(&opts);
+			try {
+				repo.checkout_head(&opts);
+			} catch (const exception& e) {
+				fmt::print(stderr, "{}\n", e.what());
+			}
 		}
 	}
 }
