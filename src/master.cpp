@@ -279,6 +279,25 @@ static void dump_principals(const tds::options& opts, tds::tds& tds, unsigned in
 	}
 }
 
+static void dump_extended_stored_procedures(tds::tds& tds, unsigned int commit) {
+	vector<pair<string, string>> xps;
+
+	{
+		tds::query sq(tds, "SELECT name, dll_name FROM master.sys.extended_procedures");
+
+		while (sq.fetch_row()) {
+			xps.emplace_back((string)sq[0], (string)sq[1]);
+		}
+	}
+
+	for (const auto& [name, dll_name] : xps) {
+		// FIXME - escape any single quotes in generated SQL
+		string sql = "EXEC sp_addextendedproc '" + name + "', '" + dll_name + "';\n";
+
+		tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, CONVERT(VARBINARY(MAX), ?))", commit, "extended_stored_procedures/" + name + ".sql", sql);
+	}
+}
+
 void dump_master(const string& db_server, string_view master_server, unsigned int repo, span<std::byte> smk) {
 	if (smk.size() == 16)
 		throw runtime_error("3DES SMK not supported.");
@@ -317,6 +336,7 @@ void dump_master(const string& db_server, string_view master_server, unsigned in
 
 	dump_linked_servers(opts, tds, commit, smk);
 	dump_principals(opts, tds, commit);
+	dump_extended_stored_procedures(tds, commit);
 
 	trans.commit();
 }
