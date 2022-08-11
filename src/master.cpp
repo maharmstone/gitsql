@@ -279,11 +279,13 @@ static void dump_principals(const tds::options& opts, tds::tds& tds, unsigned in
 	}
 }
 
-static void dump_extended_stored_procedures(tds::tds& tds, unsigned int commit) {
+static void dump_extended_stored_procedures(const tds::options& opts, tds::tds& tds, unsigned int commit) {
 	vector<pair<string, string>> xps;
 
 	{
-		tds::query sq(tds, "SELECT name, dll_name FROM master.sys.extended_procedures");
+		tds::tds dac(opts); // we don't actually need DAC for this
+
+		tds::query sq(dac, "SELECT name, dll_name FROM master.sys.extended_procedures");
 
 		while (sq.fetch_row()) {
 			xps.emplace_back((string)sq[0], (string)sq[1]);
@@ -336,7 +338,7 @@ void dump_master(const string& db_server, string_view master_server, unsigned in
 
 	dump_linked_servers(opts, tds, commit, smk);
 	dump_principals(opts, tds, commit);
-	dump_extended_stored_procedures(tds, commit);
+	dump_extended_stored_procedures(opts, tds, commit);
 
 	trans.commit();
 }
