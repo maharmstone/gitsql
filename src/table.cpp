@@ -281,6 +281,23 @@ static string index_data_space(const table_index& ind) {
 	return ret;
 }
 
+string type_to_string(string_view name, int max_length, int precision, int scale) {
+	string ret{brackets_escape(name)};
+
+	if (name == "CHAR" || name == "VARCHAR" || name == "BINARY" || name == "VARBINARY")
+		ret += "(" + (max_length == -1 ? "MAX" : to_string(max_length)) + ")";
+	else if (name == "NCHAR" || name == "NVARCHAR")
+		ret += "(" + (max_length == -1 ? "MAX" : to_string(max_length / 2)) + ")";
+	else if (name == "DECIMAL" || name == "NUMERIC")
+		ret += "(" + to_string(precision) +"," + to_string(scale) + ")";
+	else if ((name == "TIME" || name == "DATETIME2") && scale != 7)
+		ret += "(" + to_string(scale) + ")";
+	else if (name == "DATETIMEOFFSET")
+		ret += "(" + to_string(scale) + ")"; // FIXME - what's the default for this?
+
+	return ret;
+}
+
 string table_ddl(tds::tds& tds, int64_t id) {
 	int64_t seed_value, increment_value;
 	string table, schema, type;
@@ -535,18 +552,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 			ddl += "    " + brackets_escape(col.name);
 
 			if (!col.is_computed) {
-				ddl += " " + brackets_escape(col.type);
-
-				if (col.type == "CHAR" || col.type == "VARCHAR" || col.type == "BINARY" || col.type == "VARBINARY")
-					ddl += "(" + (col.max_length == -1 ? "MAX" : to_string(col.max_length)) + ")";
-				else if (col.type == "NCHAR" || col.type == "NVARCHAR")
-					ddl += "(" + (col.max_length == -1 ? "MAX" : to_string(col.max_length / 2)) + ")";
-				else if (col.type == "DECIMAL" || col.type == "NUMERIC")
-					ddl += "(" + to_string(col.precision) +"," + to_string(col.scale) + ")";
-				else if ((col.type == "TIME" || col.type == "DATETIME2") && col.scale != 7)
-					ddl += "(" + to_string(col.scale) + ")";
-				else if (col.type == "DATETIMEOFFSET")
-					ddl += "(" + to_string(col.scale) + ")"; // FIXME - what's the default for this?
+				ddl += " " + type_to_string(col.type, col.max_length, col.precision, col.scale);
 
 				if (col.def.has_value())
 					ddl += " DEFAULT" + col.def.value();

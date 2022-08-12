@@ -885,10 +885,19 @@ static void get_current_user_details(string& name, string& email) {
 }
 
 static void dump_partition_functions(tds::tds& tds, const string& dbs, list<git_file>& files) {
+	struct param {
+		string name;
+		int max_length;
+		int precision;
+		int scale;
+		string collation_name;
+	};
+
 	struct partfunc {
 		int32_t id;
 		string name;
 		bool boundary_value_on_right;
+		vector<param> params;
 	};
 
 	vector<partfunc> funcs;
@@ -913,7 +922,7 @@ ORDER BY partition_functions.function_id, partition_parameters.parameter_id)"});
 			if (funcs.empty() || funcs.back().id != function_id)
 				funcs.emplace_back(function_id, (string)sq[1], (unsigned int)sq[2] != 0);
 
-			// FIXME - parameters
+			funcs.back().params.emplace_back((string)sq[3], (int)sq[4], (int)sq[5], (int)sq[6], (string)sq[7]);
 		}
 	}
 
@@ -924,7 +933,16 @@ ORDER BY partition_functions.function_id, partition_parameters.parameter_id)"});
 		sql += brackets_escape(f.name);
 		sql += "(";
 
-		sql += "?"; // FIXME - parameters
+		bool first = true;
+		for (const auto& p : f.params) {
+			if (!first)
+				sql += ", ";
+
+			sql += type_to_string(p.name, p.max_length, p.precision, p.scale);
+			// FIXME - collation
+
+			first = false;
+		}
 
 		sql += ") AS RANGE ";
 		sql += f.boundary_value_on_right ? "RIGHT" : "LEFT";

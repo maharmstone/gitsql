@@ -94,6 +94,7 @@ std::string get_current_username();
 std::string table_ddl(tds::tds& tds, int64_t id);
 std::string brackets_escape(std::string_view s);
 std::u16string brackets_escape(std::u16string_view s);
+std::string type_to_string(std::string_view name, int max_length, int precision, int scale);
 
 // ldap.cpp
 #ifdef _WIN32
