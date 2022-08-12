@@ -884,7 +884,7 @@ static void get_current_user_details(string& name, string& email) {
 #endif
 }
 
-static void dump_partition_functions(tds::tds& tds, const string& dbs, list<git_file>& files) {
+static void dump_partition_functions(tds::tds& tds, list<git_file>& files) {
 	struct param {
 		string name;
 		int max_length;
@@ -903,18 +903,18 @@ static void dump_partition_functions(tds::tds& tds, const string& dbs, list<git_
 	vector<partfunc> funcs;
 
 	{
-		tds::query sq(tds, tds::no_check{R"(SELECT partition_functions.function_id,
+		tds::query sq(tds, R"(SELECT partition_functions.function_id,
 	partition_functions.name,
 	partition_functions.boundary_value_on_right,
 	UPPER(types.name),
 	partition_parameters.max_length,
 	partition_parameters.precision,
 	partition_parameters.scale,
-	partition_parameters.collation_name
-FROM )" + dbs + R"(sys.partition_functions
-JOIN )" + dbs + R"(sys.partition_parameters ON partition_parameters.function_id = partition_functions.function_id
-JOIN )" + dbs + R"(sys.types ON types.user_type_id = partition_parameters.user_type_id
-ORDER BY partition_functions.function_id, partition_parameters.parameter_id)"});
+	CASE WHEN partition_parameters.collation_name != CONVERT(VARCHAR(MAX),DATABASEPROPERTYEX(DB_NAME(), 'Collation')) THEN partition_parameters.collation_name END
+FROM sys.partition_functions
+JOIN sys.partition_parameters ON partition_parameters.function_id = partition_functions.function_id
+JOIN sys.types ON types.user_type_id = partition_parameters.user_type_id
+ORDER BY partition_functions.function_id, partition_parameters.parameter_id)");
 
 		while (sq.fetch_row()) {
 			auto function_id = (int32_t)sq[0];
@@ -939,7 +939,9 @@ ORDER BY partition_functions.function_id, partition_parameters.parameter_id)"});
 				sql += ", ";
 
 			sql += type_to_string(p.name, p.max_length, p.precision, p.scale);
-			// FIXME - collation
+
+			if ((p.name == "VARCHAR" || p.name == "CHAR" || p.name == "NVARCHAR" || p.name == "NCHAR") && !p.collation_name.empty())
+				sql += " COLLATE " + p.collation_name;
 
 			first = false;
 		}
@@ -1098,7 +1100,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)"});
 		files.emplace_back(filename, obj.def);
 	}
 
-	dump_partition_functions(tds, dbs, files);
+	dump_partition_functions(tds, files);
 
 	string name, email;
 
