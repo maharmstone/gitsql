@@ -926,6 +926,7 @@ string value_to_literal(const tds::value& v) {
 		case tds::sql_type::VARCHAR:
 		case tds::sql_type::CHAR:
 		case tds::sql_type::XML:
+		case tds::sql_type::UNIQUEIDENTIFIER:
 			return quote_string((string)v);
 
 		case tds::sql_type::NTEXT:
@@ -969,7 +970,6 @@ string value_to_literal(const tds::value& v) {
 		case tds::sql_type::NUMERIC:
 			return (string)v;
 
-// 		UNIQUEIDENTIFIER = 0x24,
 // 		DATE = 0x28,
 // 		TIME = 0x29,
 // 		DATETIME2 = 0x2A,
