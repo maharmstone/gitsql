@@ -884,6 +884,60 @@ static void get_current_user_details(string& name, string& email) {
 #endif
 }
 
+static void dump_partition_functions(tds::tds& tds, const string& dbs, list<git_file>& files) {
+	struct partfunc {
+		int32_t id;
+		string name;
+		bool boundary_value_on_right;
+	};
+
+	vector<partfunc> funcs;
+
+	{
+		tds::query sq(tds, tds::no_check{R"(SELECT partition_functions.function_id,
+	partition_functions.name,
+	partition_functions.boundary_value_on_right,
+	UPPER(types.name),
+	partition_parameters.max_length,
+	partition_parameters.precision,
+	partition_parameters.scale,
+	partition_parameters.collation_name
+FROM )" + dbs + R"(sys.partition_functions
+JOIN )" + dbs + R"(sys.partition_parameters ON partition_parameters.function_id = partition_functions.function_id
+JOIN )" + dbs + R"(sys.types ON types.user_type_id = partition_parameters.user_type_id
+ORDER BY partition_functions.function_id, partition_parameters.parameter_id)"});
+
+		while (sq.fetch_row()) {
+			auto function_id = (int32_t)sq[0];
+
+			if (funcs.empty() || funcs.back().id != function_id)
+				funcs.emplace_back(function_id, (string)sq[1], (unsigned int)sq[2] != 0);
+
+			// FIXME - parameters
+		}
+	}
+
+	for (const auto& f : funcs) {
+		string sql;
+
+		sql = "CREATE PARTITION FUNCTION ";
+		sql += brackets_escape(f.name);
+		sql += "(";
+
+		sql += "?"; // FIXME - parameters
+
+		sql += ") AS RANGE ";
+		sql += f.boundary_value_on_right ? "RIGHT" : "LEFT";
+		sql += " FOR VALUES (";
+
+		sql += "?"; // FIXME - values
+
+		sql += ");\n";
+
+		files.emplace_back("partition_functions/" + f.name + ".sql", sql);
+	}
+}
+
 static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db, const string& branch) {
 	string dbs;
 	list<git_file> files;
@@ -1025,6 +1079,8 @@ WHERE is_user_defined = 1 AND is_table_type = 0)"});
 
 		files.emplace_back(filename, obj.def);
 	}
+
+	dump_partition_functions(tds, dbs, files);
 
 	string name, email;
 
