@@ -176,19 +176,12 @@ static void replace_all(string& source, string_view from, string_view to) {
 	source.swap(new_string);
 }
 
-static string quote_escape(string s) {
-	replace_all(s, "'", "''");
-
-	return s;
-}
-
 static string dump_table(tds::tds& tds, const string& escaped_name) {
 	string cols, s;
 
 	tds::query sq(tds, tds::no_check{"SELECT * FROM " + escaped_name});
 
 	while (sq.fetch_row()) {
-		string vals;
 		auto column_count = sq.num_columns();
 
 		if (cols.empty()) {
@@ -205,41 +198,11 @@ static string dump_table(tds::tds& tds, const string& escaped_name) {
 		s += "INSERT INTO " + escaped_name + "(" + cols + ") VALUES(";
 
 		for (uint16_t i = 0; i < column_count; i++) {
-			const auto& col = sq[i];
+			if (i != 0)
+				s += ", ";
 
-			if (vals != "")
-				vals += ", ";
-
-			if (col.is_null)
-				vals += "NULL";
-			else {
-				switch (col.type) {
-					case tds::sql_type::INTN:
-					case tds::sql_type::TINYINT:
-					case tds::sql_type::SMALLINT:
-					case tds::sql_type::INT:
-					case tds::sql_type::BIGINT:
-					case tds::sql_type::BITN:
-					case tds::sql_type::BIT:
-						vals += to_string((int64_t)col);
-						break;
-
-					case tds::sql_type::FLOAT:
-					case tds::sql_type::REAL:
-					case tds::sql_type::FLTN:
-						vals += to_string((double)col);
-						break;
-
-					// FIXME - VARBINARY
-
-					default:
-						vals += "'" + quote_escape(string(col)) + "'";
-						break;
-				}
-			}
+			s += value_to_literal(sq[i]);
 		}
-
-		s += vals;
 
 		s += ");\n";
 	}

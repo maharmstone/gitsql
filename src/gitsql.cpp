@@ -903,7 +903,7 @@ static string quote_string(string_view s) {
 	return ret;
 }
 
-static string value_to_literal(const tds::value& v) {
+string value_to_literal(const tds::value& v) {
 	if (v.is_null)
 		return "NULL";
 
