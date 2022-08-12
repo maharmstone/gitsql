@@ -992,7 +992,31 @@ string value_to_literal(const tds::value& v) {
 																	  hms.hours().count(), hms.minutes().count(), hms.seconds().count());
 		}
 
-// 		DATETIMEOFFSET = 0x2B,
+		case tds::sql_type::DATETIMEOFFSET: {
+			auto dto = (tds::datetimeoffset)v;
+
+			auto d = dto.d;
+			auto t = dto.t;
+
+			t += chrono::minutes{dto.offset};
+
+			if (t < tds::time_t::zero()) {
+				d = chrono::year_month_day{(chrono::sys_days)d - chrono::days{1}};
+				t += chrono::days{1};
+			} else if (t >= chrono::days{1}) {
+				d = chrono::year_month_day{(chrono::sys_days)d + chrono::days{1}};
+				t -= chrono::days{1};
+			}
+
+			chrono::hh_mm_ss hms(t);
+
+			// FIXME - decimal seconds (make sure correct number of DP)
+
+			return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:02}{:+03}:{:02}'",
+							   (int)dto.d.year(), (unsigned int)dto.d.month(), (unsigned int)dto.d.day(),
+								hms.hours().count(), hms.minutes().count(), hms.seconds().count(),
+							   dto.offset / 60, abs(dto.offset) % 60);
+		}
 
 		default:
 			throw formatted_error("Cannot convert {} to literal.", type);
