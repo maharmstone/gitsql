@@ -885,19 +885,15 @@ static void get_current_user_details(string& name, string& email) {
 }
 
 static void dump_partition_functions(tds::tds& tds, list<git_file>& files) {
-	struct param {
-		string name;
-		int max_length;
-		int precision;
-		int scale;
-		string collation_name;
-	};
-
 	struct partfunc {
 		int32_t id;
 		string name;
 		bool boundary_value_on_right;
-		vector<param> params;
+		string type;
+		int max_length;
+		int precision;
+		int scale;
+		string collation_name;
 	};
 
 	vector<partfunc> funcs;
@@ -912,17 +908,16 @@ static void dump_partition_functions(tds::tds& tds, list<git_file>& files) {
 	partition_parameters.scale,
 	CASE WHEN partition_parameters.collation_name != CONVERT(VARCHAR(MAX),DATABASEPROPERTYEX(DB_NAME(), 'Collation')) THEN partition_parameters.collation_name END
 FROM sys.partition_functions
-JOIN sys.partition_parameters ON partition_parameters.function_id = partition_functions.function_id
-JOIN sys.types ON types.user_type_id = partition_parameters.user_type_id
-ORDER BY partition_functions.function_id, partition_parameters.parameter_id)");
+JOIN sys.partition_parameters ON partition_parameters.function_id = partition_functions.function_id AND partition_parameters.parameter_id = 1
+JOIN sys.types ON types.user_type_id = partition_parameters.user_type_id)");
 
 		while (sq.fetch_row()) {
 			auto function_id = (int32_t)sq[0];
 
-			if (funcs.empty() || funcs.back().id != function_id)
-				funcs.emplace_back(function_id, (string)sq[1], (unsigned int)sq[2] != 0);
-
-			funcs.back().params.emplace_back((string)sq[3], (int)sq[4], (int)sq[5], (int)sq[6], (string)sq[7]);
+			if (funcs.empty() || funcs.back().id != function_id) {
+				funcs.emplace_back(function_id, (string)sq[1], (unsigned int)sq[2] != 0, (string)sq[3], (int)sq[4],
+								   (int)sq[5], (int)sq[6], (string)sq[7]);
+			}
 		}
 	}
 
@@ -933,18 +928,10 @@ ORDER BY partition_functions.function_id, partition_parameters.parameter_id)");
 		sql += brackets_escape(f.name);
 		sql += "(";
 
-		bool first = true;
-		for (const auto& p : f.params) {
-			if (!first)
-				sql += ", ";
+		sql += type_to_string(f.type, f.max_length, f.precision, f.scale);
 
-			sql += type_to_string(p.name, p.max_length, p.precision, p.scale);
-
-			if ((p.name == "VARCHAR" || p.name == "CHAR" || p.name == "NVARCHAR" || p.name == "NCHAR") && !p.collation_name.empty())
-				sql += " COLLATE " + p.collation_name;
-
-			first = false;
-		}
+		if ((f.type == "VARCHAR" || f.type == "CHAR" || f.type == "NVARCHAR" || f.type == "NCHAR") && !f.collation_name.empty())
+			sql += " COLLATE " + f.collation_name;
 
 		sql += ") AS RANGE ";
 		sql += f.boundary_value_on_right ? "RIGHT" : "LEFT";
