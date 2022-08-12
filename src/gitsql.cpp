@@ -884,6 +884,82 @@ static void get_current_user_details(string& name, string& email) {
 #endif
 }
 
+static string quote_string(string_view s) {
+	string ret;
+
+	ret.reserve(s.size() + 2);
+
+	ret += "'";
+
+	for (auto c : s) {
+		if (c == '\'')
+			ret += "''";
+		else
+			ret += c;
+	}
+
+	ret += "'";
+
+	return ret;
+}
+
+static string value_to_literal(const tds::value& v) {
+	if (v.is_null)
+		return "NULL";
+
+	auto type = v.type;
+
+	if (type == tds::sql_type::SQL_VARIANT)
+		type = (tds::sql_type)v.val[0];
+
+	switch (type) {
+		case tds::sql_type::INTN:
+		case tds::sql_type::TINYINT:
+		case tds::sql_type::SMALLINT:
+		case tds::sql_type::INT:
+		case tds::sql_type::BIGINT:
+		case tds::sql_type::BIT:
+		case tds::sql_type::BITN:
+			return to_string((int64_t)v);
+
+		case tds::sql_type::TEXT:
+		case tds::sql_type::VARCHAR:
+		case tds::sql_type::CHAR:
+			return quote_string((string)v);
+
+		case tds::sql_type::NTEXT:
+		case tds::sql_type::NVARCHAR:
+		case tds::sql_type::NCHAR:
+			return "N" + quote_string((string)v);
+
+// 		IMAGE = 0x22,
+// 		VARBINARY = 0xA5,
+// 		BINARY = 0xAD,
+// 		UDT = 0xF0,
+// 		UNIQUEIDENTIFIER = 0x24,
+// 		DATE = 0x28,
+// 		TIME = 0x29,
+// 		DATETIME2 = 0x2A,
+// 		DATETIMEOFFSET = 0x2B,
+// 		DATETIM4 = 0x3A,
+// 		REAL = 0x3B,
+// 		MONEY = 0x3C,
+// 		DATETIME = 0x3D,
+// 		FLOAT = 0x3E,
+// 		DECIMAL = 0x6A,
+// 		NUMERIC = 0x6C,
+// 		FLTN = 0x6D,
+// 		MONEYN = 0x6E,
+// 		DATETIMN = 0x6F,
+// 		SMALLMONEY = 0x7A,
+
+		default:
+			throw formatted_error("Cannot convert {} to literal.", type);
+	}
+
+	return "?";
+}
+
 static void dump_partition_functions(tds::tds& tds, list<git_file>& files) {
 	struct partfunc {
 		int32_t id;
@@ -894,6 +970,7 @@ static void dump_partition_functions(tds::tds& tds, list<git_file>& files) {
 		int precision;
 		int scale;
 		string collation_name;
+		vector<tds::value> values;
 	};
 
 	vector<partfunc> funcs;
@@ -906,10 +983,13 @@ static void dump_partition_functions(tds::tds& tds, list<git_file>& files) {
 	partition_parameters.max_length,
 	partition_parameters.precision,
 	partition_parameters.scale,
-	CASE WHEN partition_parameters.collation_name != CONVERT(VARCHAR(MAX),DATABASEPROPERTYEX(DB_NAME(), 'Collation')) THEN partition_parameters.collation_name END
+	CASE WHEN partition_parameters.collation_name != CONVERT(VARCHAR(MAX),DATABASEPROPERTYEX(DB_NAME(), 'Collation')) THEN partition_parameters.collation_name END,
+	partition_range_values.value
 FROM sys.partition_functions
 JOIN sys.partition_parameters ON partition_parameters.function_id = partition_functions.function_id AND partition_parameters.parameter_id = 1
-JOIN sys.types ON types.user_type_id = partition_parameters.user_type_id)");
+JOIN sys.types ON types.user_type_id = partition_parameters.user_type_id
+LEFT JOIN sys.partition_range_values ON partition_range_values.function_id = partition_functions.function_id AND partition_range_values.parameter_id = 1
+ORDER BY partition_functions.function_id, partition_range_values.boundary_id)");
 
 		while (sq.fetch_row()) {
 			auto function_id = (int32_t)sq[0];
@@ -918,6 +998,9 @@ JOIN sys.types ON types.user_type_id = partition_parameters.user_type_id)");
 				funcs.emplace_back(function_id, (string)sq[1], (unsigned int)sq[2] != 0, (string)sq[3], (int)sq[4],
 								   (int)sq[5], (int)sq[6], (string)sq[7]);
 			}
+
+			if (!sq[8].is_null)
+				funcs.back().values.emplace_back(sq[8]);
 		}
 	}
 
@@ -937,7 +1020,15 @@ JOIN sys.types ON types.user_type_id = partition_parameters.user_type_id)");
 		sql += f.boundary_value_on_right ? "RIGHT" : "LEFT";
 		sql += " FOR VALUES (";
 
-		sql += "?"; // FIXME - values
+		bool first = true;
+
+		for (const auto& v : f.values) {
+			if (!first)
+				sql += ", ";
+
+			sql += value_to_literal(v);
+			first = false;
+		}
 
 		sql += ");\n";
 
