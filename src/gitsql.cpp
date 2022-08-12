@@ -979,11 +979,20 @@ string value_to_literal(const tds::value& v) {
 		case tds::sql_type::TIME:
 			return "'" + (string)v + "'";
 
-// 		DATETIME2 = 0x2A,
+		case tds::sql_type::DATETIME2:
+		case tds::sql_type::DATETIM4:
+		case tds::sql_type::DATETIME:
+		case tds::sql_type::DATETIMN: {
+			auto dt = (tds::datetime)v;
+			chrono::hh_mm_ss hms(dt.t);
+
+			// FIXME - decimal seconds (make sure correct number of DP)
+
+			return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:02}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
+																	  hms.hours().count(), hms.minutes().count(), hms.seconds().count());
+		}
+
 // 		DATETIMEOFFSET = 0x2B,
-// 		DATETIM4 = 0x3A,
-// 		DATETIME = 0x3D,
-// 		DATETIMN = 0x6F,
 
 		default:
 			throw formatted_error("Cannot convert {} to literal.", type);
