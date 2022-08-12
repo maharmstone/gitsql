@@ -956,22 +956,27 @@ string value_to_literal(const tds::value& v) {
 			return ret;
 		}
 
+		case tds::sql_type::FLOAT:
+		case tds::sql_type::REAL:
+		case tds::sql_type::FLTN:
+			// FIXME - sensible number of decimal places?
+			return to_string((double)v);
+
+		case tds::sql_type::MONEY:
+		case tds::sql_type::SMALLMONEY:
+		case tds::sql_type::MONEYN:
+		case tds::sql_type::DECIMAL:
+		case tds::sql_type::NUMERIC:
+			return (string)v;
+
 // 		UNIQUEIDENTIFIER = 0x24,
 // 		DATE = 0x28,
 // 		TIME = 0x29,
 // 		DATETIME2 = 0x2A,
 // 		DATETIMEOFFSET = 0x2B,
 // 		DATETIM4 = 0x3A,
-// 		REAL = 0x3B,
-// 		MONEY = 0x3C,
 // 		DATETIME = 0x3D,
-// 		FLOAT = 0x3E,
-// 		DECIMAL = 0x6A,
-// 		NUMERIC = 0x6C,
-// 		FLTN = 0x6D,
-// 		MONEYN = 0x6E,
 // 		DATETIMN = 0x6F,
-// 		SMALLMONEY = 0x7A,
 
 		default:
 			throw formatted_error("Cannot convert {} to literal.", type);
