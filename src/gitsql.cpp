@@ -925,6 +925,7 @@ string value_to_literal(const tds::value& v) {
 		case tds::sql_type::TEXT:
 		case tds::sql_type::VARCHAR:
 		case tds::sql_type::CHAR:
+		case tds::sql_type::XML:
 			return quote_string((string)v);
 
 		case tds::sql_type::NTEXT:
