@@ -2,12 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(gitsql)
 
-if(MSVC AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.21)
-    set(CMAKE_CXX_STANDARD 23) # /std:c++latest
-else()
-    set(CMAKE_CXX_STANDARD 20)
-endif()
-
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
