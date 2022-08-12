@@ -932,10 +932,29 @@ static string value_to_literal(const tds::value& v) {
 		case tds::sql_type::NCHAR:
 			return "N" + quote_string((string)v);
 
-// 		IMAGE = 0x22,
-// 		VARBINARY = 0xA5,
-// 		BINARY = 0xAD,
-// 		UDT = 0xF0,
+		case tds::sql_type::IMAGE:
+		case tds::sql_type::VARBINARY:
+		case tds::sql_type::BINARY:
+		case tds::sql_type::UDT: {
+			string ret = "0x";
+
+			span d = v.val;
+
+			if (v.type == tds::sql_type::SQL_VARIANT) {
+				d = d.subspan(1);
+
+				auto propbytes = d[0];
+
+				d = d.subspan(1 + propbytes);
+			}
+
+			for (auto b : d) {
+				ret += fmt::format("{:02x}", b);
+			}
+
+			return ret;
+		}
+
 // 		UNIQUEIDENTIFIER = 0x24,
 // 		DATE = 0x28,
 // 		TIME = 0x29,
@@ -956,8 +975,6 @@ static string value_to_literal(const tds::value& v) {
 		default:
 			throw formatted_error("Cannot convert {} to literal.", type);
 	}
-
-	return "?";
 }
 
 static void dump_partition_functions(tds::tds& tds, list<git_file>& files) {
