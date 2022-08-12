@@ -976,7 +976,9 @@ string value_to_literal(const tds::value& v) {
 			return fmt::format("'{:04}{:02}{:02}'", (int)ymd.year(), (unsigned int)ymd.month(), (unsigned int)ymd.day());
 		}
 
-// 		TIME = 0x29,
+		case tds::sql_type::TIME:
+			return "'" + (string)v + "'";
+
 // 		DATETIME2 = 0x2A,
 // 		DATETIMEOFFSET = 0x2B,
 // 		DATETIM4 = 0x3A,
