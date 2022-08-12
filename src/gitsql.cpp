@@ -971,21 +971,21 @@ static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const stri
 	vector<sql_obj> objs;
 
 	{
-		tds::query sq(tds, tds::no_check{R"(SELECT schemas.name,
+		tds::query sq(tds, R"(SELECT schemas.name,
 COALESCE(table_types.name, objects.name),
 sql_modules.definition,
 RTRIM(objects.type),
 objects.object_id,
-CASE WHEN EXISTS (SELECT * FROM )" + dbs + R"(sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END,
+CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END,
 sql_modules.uses_quoted_identifier
-FROM )" + dbs + R"(sys.objects
-LEFT JOIN )" + dbs + R"(sys.sql_modules ON sql_modules.object_id = objects.object_id
-LEFT JOIN )" + dbs + R"(sys.table_types ON objects.type = 'TT' AND table_types.type_table_object_id = objects.object_id
-JOIN )" + dbs + R"(sys.schemas ON schemas.schema_id = COALESCE(table_types.schema_id, objects.schema_id)
-LEFT JOIN )" + dbs + R"(sys.extended_properties ON extended_properties.major_id = objects.object_id AND extended_properties.minor_id = 0 AND extended_properties.name = 'microsoft_database_tools_support'
+FROM sys.objects
+LEFT JOIN sys.sql_modules ON sql_modules.object_id = objects.object_id
+LEFT JOIN sys.table_types ON objects.type = 'TT' AND table_types.type_table_object_id = objects.object_id
+JOIN sys.schemas ON schemas.schema_id = COALESCE(table_types.schema_id, objects.schema_id)
+LEFT JOIN sys.extended_properties ON extended_properties.major_id = objects.object_id AND extended_properties.minor_id = 0 AND extended_properties.name = 'microsoft_database_tools_support'
 WHERE objects.type IN ('V','P','FN','TF','IF','U','TT') AND
 	(extended_properties.value IS NULL OR extended_properties.value != 1)
-ORDER BY schemas.name, objects.name)"});
+ORDER BY schemas.name, objects.name)");
 
 		while (sq.fetch_row()) {
 			objs.emplace_back((string)sq[0], (string)sq[1], (string)sq[2], (string)sq[3], (int64_t)sq[4],
@@ -994,7 +994,7 @@ ORDER BY schemas.name, objects.name)"});
 	}
 
 	{
-		tds::query sq(tds, tds::no_check{"SELECT triggers.name, sql_modules.definition FROM " + dbs + "sys.triggers LEFT JOIN " + dbs + "sys.sql_modules ON sql_modules.object_id=triggers.object_id WHERE triggers.parent_class_desc = 'DATABASE'"});
+		tds::query sq(tds, "SELECT triggers.name, sql_modules.definition FROM sys.triggers LEFT JOIN sys.sql_modules ON sql_modules.object_id=triggers.object_id WHERE triggers.parent_class_desc = 'DATABASE'");
 
 		while (sq.fetch_row()) {
 			objs.emplace_back("db_triggers", (string)sq[0], (string)sq[1]);
@@ -1005,7 +1005,7 @@ ORDER BY schemas.name, objects.name)"});
 		vector<string> schemas;
 
 		{
-			tds::query sq(tds, tds::no_check{"SELECT name FROM " + dbs + "sys.schemas WHERE name != 'sys' AND name != 'INFORMATION_SCHEMA'"});
+			tds::query sq(tds, "SELECT name FROM sys.schemas WHERE name != 'sys' AND name != 'INFORMATION_SCHEMA'");
 
 			while (sq.fetch_row()) {
 				schemas.emplace_back(sq[0]);
@@ -1021,7 +1021,7 @@ ORDER BY schemas.name, objects.name)"});
 		vector<pair<string, int64_t>> roles;
 
 		{
-			tds::query sq(tds, tds::no_check{"SELECT name, principal_id FROM " + dbs + "sys.database_principals WHERE type = 'R'"});
+			tds::query sq(tds, "SELECT name, principal_id FROM sys.database_principals WHERE type = 'R'");
 
 			while (sq.fetch_row()) {
 				roles.emplace_back(sq[0], (int64_t)sq[1]);
@@ -1034,15 +1034,15 @@ ORDER BY schemas.name, objects.name)"});
 	}
 
 	{
-		tds::query sq(tds, tds::no_check{R"(SELECT name,
+		tds::query sq(tds, R"(SELECT name,
 system_type_id,
 SCHEMA_NAME(schema_id),
 max_length,
 precision,
 scale,
 is_nullable
-FROM )" + dbs + R"(sys.types
-WHERE is_user_defined = 1 AND is_table_type = 0)"});
+FROM sys.types
+WHERE is_user_defined = 1 AND is_table_type = 0)");
 
 		while (sq.fetch_row()) {
 			objs.emplace_back((string)sq[2], (string)sq[0], get_type_definition((string)sq[0], (string)sq[2], (int32_t)sq[1], (int16_t)sq[3], (uint8_t)sq[4], (uint8_t)sq[5], (unsigned int)sq[6] != 0), "T");
