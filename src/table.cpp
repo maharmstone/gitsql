@@ -255,8 +255,8 @@ string type_to_string(string_view name, int max_length, int precision, int scale
 		ret += "(" + to_string(precision) +"," + to_string(scale) + ")";
 	else if ((name == "TIME" || name == "DATETIME2") && scale != 7)
 		ret += "(" + to_string(scale) + ")";
-	else if (name == "DATETIMEOFFSET")
-		ret += "(" + to_string(scale) + ")"; // FIXME - what's the default for this?
+	else if (name == "DATETIMEOFFSET" && scale != 7)
+		ret += "(" + to_string(scale) + ")";
 
 	return ret;
 }
