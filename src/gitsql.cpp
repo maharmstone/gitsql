@@ -994,8 +994,10 @@ string value_to_literal(const tds::value& v) {
 		case tds::sql_type::DATETIME: {
 			auto dt = (tds::datetime)v;
 			chrono::hh_mm_ss hms(dt.t);
+			constexpr decltype(dt.t)::period ratio;
+			constexpr double ratio2 = (double)ratio.num / (double)ratio.den;
 
-			double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() / 10000000.0);
+			double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() * ratio2);
 
 			return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:05.3f}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
 																	  hms.hours().count(), hms.minutes().count(), s);
@@ -1011,7 +1013,9 @@ string value_to_literal(const tds::value& v) {
 																		hms.hours().count(), hms.minutes().count());
 
 				case 8: {
-					double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() / 10000000.0);
+					constexpr decltype(dt.t)::period ratio;
+					constexpr double ratio2 = (double)ratio.num / (double)ratio.den;
+					double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() * ratio2);
 
 					return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:05.3f}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
 																			hms.hours().count(), hms.minutes().count(), s);
@@ -1038,7 +1042,9 @@ string value_to_literal(const tds::value& v) {
 				return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:02}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
 								hms.hours().count(), hms.minutes().count(), hms.seconds().count());
 			} else {
-				double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() / 10000000.0);
+				constexpr decltype(dt.t)::period ratio;
+				constexpr double ratio2 = (double)ratio.num / (double)ratio.den;
+				double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() * ratio2);
 
 				return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:0{}.{}f}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
 								   hms.hours().count(), hms.minutes().count(), s, max_length + 3, max_length);
@@ -1069,7 +1075,9 @@ string value_to_literal(const tds::value& v) {
 									hms.hours().count(), hms.minutes().count(), hms.seconds().count(),
 									dto.offset / 60, abs(dto.offset) % 60);
 			} else {
-				double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() / 10000000.0);
+				constexpr decltype(t)::period ratio;
+				constexpr double ratio2 = (double)ratio.num / (double)ratio.den;
+				double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() * ratio2);
 
 				return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:0{}.{}f}{:+03}:{:02}'",
 								   (int)dto.d.year(), (unsigned int)dto.d.month(), (unsigned int)dto.d.day(),
