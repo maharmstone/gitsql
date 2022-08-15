@@ -179,7 +179,7 @@ public:
 };
 
 struct git_file {
-	git_file(const std::string& filename, const tds::value& data) : filename(filename) {
+	git_file(std::string_view filename, const tds::value& data) : filename(filename) {
 		if (!data.is_null) {
 			this->data = "";
 			this->data.value().resize(data.val.size());
@@ -189,6 +189,12 @@ struct git_file {
 
 	std::string filename;
 	std::optional<std::string> data;
+};
+
+struct git_update {
+	void add_file(std::string_view filename, std::string_view data);
+
+	std::list<git_file> files;
 };
 
 #ifdef _WIN32

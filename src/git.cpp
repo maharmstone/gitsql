@@ -672,3 +672,7 @@ bool GitRepo::branch_is_head(const std::string& name) {
 bool GitRepo::is_bare() {
 	return git_repository_is_bare(repo.get());
 }
+
+void git_update::add_file(string_view filename, string_view data) {
+	files.emplace_back(filename, data);
+}

@@ -884,7 +884,7 @@ static void get_current_user_details(string& name, string& email) {
 #endif
 }
 
-static void dump_partition_functions(tds::tds& tds, list<git_file>& files) {
+static void dump_partition_functions(tds::tds& tds, git_update& gu) {
 	struct partfunc {
 		int32_t id;
 		string name;
@@ -956,11 +956,11 @@ ORDER BY partition_functions.function_id, partition_range_values.boundary_id)");
 
 		sql += ");\n";
 
-		files.emplace_back("partition_functions/" + f.name + ".sql", sql);
+		gu.add_file("partition_functions/" + f.name + ".sql", sql);
 	}
 }
 
-static void dump_partition_schemes(tds::tds& tds, list<git_file>& files) {
+static void dump_partition_schemes(tds::tds& tds, git_update& gu) {
 	struct partscheme {
 		int32_t id;
 		string scheme_name;
@@ -1024,7 +1024,7 @@ ORDER BY partition_schemes.data_space_id, destination_data_spaces.destination_id
 
 		sql += ");\n";
 
-		files.emplace_back("partition_schemes/" + s.scheme_name + ".sql", sql);
+		gu.add_file("partition_schemes/" + s.scheme_name + ".sql", sql);
 	}
 }
 
@@ -1043,7 +1043,7 @@ static string pages_to_data_size(int32_t pages) {
 	return to_string(pages * 8) + " KB";
 }
 
-static void dump_filegroups(tds::tds& tds, list<git_file>& files) {
+static void dump_filegroups(tds::tds& tds, git_update& gu) {
 	struct fg_file {
 		string name;
 		string physical_name;
@@ -1118,11 +1118,11 @@ ORDER BY filegroups.data_space_id, database_files.file_id)");
 
 		sql += "\nTO FILEGROUP " + brackets_escape(f.name) + ";\n";
 
-		files.emplace_back("filegroups/" + f.name + ".sql", sql);
+		gu.add_file("filegroups/" + f.name + ".sql", sql);
 	}
 }
 
-static void dump_log_files(tds::tds& tds, list<git_file>& files) {
+static void dump_log_files(tds::tds& tds, git_update& gu) {
 	struct fg_file {
 		string name;
 		string physical_name;
@@ -1167,13 +1167,12 @@ WHERE data_space_id = 0)");
 
 		sql += ");\n";
 
-		files.emplace_back("log_files/" + l.name + ".sql", sql);
+		gu.add_file("log_files/" + l.name + ".sql", sql);
 	}
 }
 
 static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db, const string& branch) {
 	string dbs;
-	list<git_file> files;
 
 	git_libgit2_init();
 	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
@@ -1246,6 +1245,8 @@ ORDER BY schemas.name, objects.name)");
 		}
 	}
 
+	git_update gu;
+
 	{
 		tds::query sq(tds, R"(SELECT name,
 system_type_id,
@@ -1310,13 +1311,13 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 
 		filename += sanitize_fn(obj.name) + ".sql";
 
-		files.emplace_back(filename, obj.def);
+		gu.add_file(filename, obj.def);
 	}
 
-	dump_partition_functions(tds, files);
-	dump_partition_schemes(tds, files);
-	dump_filegroups(tds, files);
-	dump_log_files(tds, files);
+	dump_partition_functions(tds, gu);
+	dump_partition_schemes(tds, gu);
+	dump_filegroups(tds, gu);
+	dump_log_files(tds, gu);
 
 	string name, email;
 
@@ -1324,7 +1325,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 
 	GitRepo repo(repo_dir.string());
 
-	update_git(repo, name, email, "Update", files, true, nullopt, branch);
+	update_git(repo, name, email, "Update", gu.files, true, nullopt, branch);
 
 	if (!repo.is_bare() && repo.branch_is_head(branch)) {
 		git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
