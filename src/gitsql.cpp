@@ -465,7 +465,7 @@ struct sql_perms {
 	vector<string> perms;
 };
 
-static string grant_string(const vector<sql_perms>& perms, const string& obj) {
+static string grant_string(const vector<sql_perms>& perms, string_view obj) {
 	string ret;
 
 	for (const auto& p : perms) {
@@ -481,7 +481,7 @@ static string grant_string(const vector<sql_perms>& perms, const string& obj) {
 			first = false;
 		}
 
-		ret += " ON " + obj;
+		ret += " ON " + string(obj);
 		ret += " TO ";
 		ret += brackets_escape(p.user);
 		ret += ";\n";
@@ -701,20 +701,20 @@ static string get_type_definition(string_view name, string_view schema, int32_t 
 	return ret;
 }
 
-static string object_perms(tds::tds& tds, int64_t id, const string& dbs, const string& name) {
+static string object_perms(tds::tds& tds, int64_t id, string_view name) {
 	vector<sql_perms> perms;
 
 	{
-		tds::query sq(tds, tds::no_check{R"(SELECT database_permissions.state_desc,
+		tds::query sq(tds, R"(SELECT database_permissions.state_desc,
 database_permissions.permission_name,
 USER_NAME(database_permissions.grantee_principal_id)
-FROM )" + dbs + R"(sys.database_permissions
-JOIN )" + dbs + R"(sys.database_principals ON database_principals.principal_id = database_permissions.grantee_principal_id
+FROM sys.database_permissions
+JOIN sys.database_principals ON database_principals.principal_id = database_permissions.grantee_principal_id
 WHERE database_permissions.class_desc = 'OBJECT_OR_COLUMN' AND
 	database_permissions.major_id = ?
 ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 	database_permissions.state_desc,
-	database_permissions.permission_name)"}, id);
+	database_permissions.permission_name)", id);
 
 		while (sq.fetch_row()) {
 			bool found = false;
@@ -1171,14 +1171,9 @@ WHERE data_space_id = 0)");
 	}
 }
 
-static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db, const string& branch) {
-	string dbs;
-
+static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& branch) {
 	git_libgit2_init();
 	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
-
-	if (!db.empty())
-		dbs = db + ".";
 
 	vector<sql_obj> objs;
 
@@ -1308,7 +1303,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 		obj.def += "\n";
 
 		if (obj.has_perms)
-			obj.def += object_perms(tds, obj.id, dbs, brackets_escape(obj.schema) + "." + brackets_escape(obj.name));
+			obj.def += object_perms(tds, obj.id, brackets_escape(obj.schema) + "." + brackets_escape(obj.name));
 
 		if (obj.type == "P" && !obj.quoted_identifier)
 			obj.def = "SET QUOTED_IDENTIFIER OFF;\nGO\n\n" + obj.def;
@@ -1642,7 +1637,7 @@ static string object_ddl2(tds::tds& tds, string_view type, string_view orig_ddl,
 	ddl += "\n";
 
 	if (has_perms)
-		ddl += object_perms(tds, id, "", brackets_escape(tds::utf16_to_utf8(schema)) + "." + brackets_escape(tds::utf16_to_utf8(object)));
+		ddl += object_perms(tds, id, brackets_escape(tds::utf16_to_utf8(schema)) + "." + brackets_escape(tds::utf16_to_utf8(object)));
 
 	return ddl;
 }
@@ -1758,7 +1753,7 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 		if (db != old_db)
 			tds.run(tds::no_check{"USE " + brackets_escape(db)});
 
-		dump_sql(tds, repo_dir, db, branch.empty() ? "master" : branch);
+		dump_sql(tds, repo_dir, branch.empty() ? "master" : branch);
 
 		if (db != old_db)
 			tds.run(tds::no_check{"USE " + brackets_escape(old_db)});
@@ -1766,7 +1761,7 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 		tds::tds tds2(server, db_username, db_password, db_app);
 
 		tds2.run(tds::no_check{"USE " + brackets_escape(db)});
-		dump_sql(tds2, repo_dir, db, branch.empty() ? "master" : branch);
+		dump_sql(tds2, repo_dir, branch.empty() ? "master" : branch);
 	}
 }
 
