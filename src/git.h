@@ -308,8 +308,5 @@ struct fmt::formatter<git_oid> {
 };
 
 void update_git(GitRepo& repo, const std::string& user, const std::string& email, const std::string& description,
-				std::list<git_file>& files, bool clear_all = false, const std::optional<tds::datetimeoffset>& dto = std::nullopt,
-				const std::string& branch = "");
-void update_git(GitRepo& repo, const std::string& user, const std::string& email, const std::string& description,
 				std::list<git_file2>& files, bool clear_all = false, const std::optional<tds::datetimeoffset>& dto = std::nullopt,
 				const std::string& branch = "");

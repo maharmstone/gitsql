@@ -1442,6 +1442,8 @@ static void flush_git(const string& db_server) {
 
 			tds::tds tds(db_server, db_username, db_password, db_app);
 
+			// FIXME - get this working with git_update thread?
+
 			{
 				tds::trans trans(tds);
 				tds::query sq(tds, R"(
@@ -1521,8 +1523,18 @@ ORDER BY Git.id
 				} while (true);
 			}
 
-			if (files.size() > 0 || clear_all)
-				update_git(repo, name, email, description, files, clear_all, dto, r.branch);
+			if (files.size() > 0 || clear_all) {
+				list<git_file2> files2;
+
+				for (const auto& f : files) {
+					if (f.data.has_value())
+						files2.emplace_back(f.filename, repo.blob_create_from_buffer(f.data.value()));
+					else
+						files2.emplace_back(f.filename, nullopt);
+				}
+
+				update_git(repo, name, email, description, files2, clear_all, dto, r.branch);
+			}
 
 			if (!delete_commits.empty()) {
 				tds::trans trans(tds);

@@ -556,20 +556,6 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 						  commit_oid, true, "branch updated");
 }
 
-void update_git(GitRepo& repo, const string& user, const string& email, const string& description, list<git_file>& files,
-				bool clear_all, const optional<tds::datetimeoffset>& dto, const string& branch) {
-	list<git_file2> files2;
-
-	for (const auto& f : files) {
-		if (f.data.has_value())
-			files2.emplace_back(f.filename, repo.blob_create_from_buffer(f.data.value()));
-		else
-			files2.emplace_back(f.filename, nullopt);
-	}
-
-	update_git(repo, user, email, description, files2, clear_all, dto, branch);
-}
-
 GitIndex::GitIndex(const GitRepo& repo) {
 	unsigned int ret;
 	git_index* tmp = nullptr;
