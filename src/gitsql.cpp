@@ -1135,16 +1135,30 @@ ORDER BY partition_schemes.data_space_id, destination_data_spaces.destination_id
 		sql += brackets_escape(s.scheme_name);
 		sql += " AS PARTITION ";
 		sql += brackets_escape(s.func_name);
-		sql += " TO (";
 
-		bool first = true;
-		for (const auto& d : s.dests) {
-			if (!first)
-				sql += ", ";
+		bool all = false;
+		if (!s.dests.empty()) {
+			const auto& d = s.dests.front();
 
-			sql += brackets_escape(d);
+			all = ranges::all_of(s.dests, [&d](const auto& d2) {
+				return d2 == d;
+			});
+		}
 
-			first = false;
+		if (all)
+			sql += " ALL TO (" + brackets_escape(s.dests.front());
+		else {
+			sql += " TO (";
+
+			bool first = true;
+			for (const auto& d : s.dests) {
+				if (!first)
+					sql += ", ";
+
+				sql += brackets_escape(d);
+
+				first = false;
+			}
 		}
 
 		sql += ");\n";
