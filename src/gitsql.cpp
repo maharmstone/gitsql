@@ -1325,7 +1325,18 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 
 	GitRepo repo(repo_dir.string());
 
-	update_git(repo, name, email, "Update", gu.files, true, nullopt, branch);
+	while (!gu.files.empty()) {
+		auto f = move(gu.files.front());
+
+		gu.files.pop_front();
+
+		if (f.data.has_value())
+			gu.files2.emplace_back(f.filename, repo.blob_create_from_buffer(f.data.value()));
+		else
+			gu.files2.emplace_back(f.filename, nullopt);
+	}
+
+	update_git(repo, name, email, "Update", gu.files2, true, nullopt, branch);
 
 	if (!repo.is_bare() && repo.branch_is_head(branch)) {
 		git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;

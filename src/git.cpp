@@ -340,7 +340,7 @@ git_oid GitRepo::index_tree_id() const {
 	return tree_id;
 }
 
-static void update_git_no_parent(GitRepo& repo, const GitSignature& sig, const string& description, const list<git_file>& files, const string& branch) {
+static void update_git_no_parent(GitRepo& repo, const GitSignature& sig, const string& description, const list<git_file2>& files, const string& branch) {
 	git_oid oid;
 
 	GitTree empty_tree(repo, repo.index_tree_id());
@@ -385,9 +385,9 @@ static void update_git_no_parent(GitRepo& repo, const GitSignature& sig, const s
 
 			auto& u = upd.back();
 
-			if (f.data.has_value()) {
+			if (f.oid.has_value()) {
 				u.action = GIT_TREE_UPDATE_UPSERT;
-				u.id = repo.blob_create_from_buffer(f.data.value());
+				u.id = f.oid.value();
 			}
 
 			u.filemode = GIT_FILEMODE_BLOB;
@@ -410,7 +410,7 @@ static void update_git_no_parent(GitRepo& repo, const GitSignature& sig, const s
 }
 
 static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string& prefix,
-						 list<git_file>& files, unordered_set<string>& filenames) {
+						 list<git_file2>& files, unordered_set<string>& filenames) {
 	auto c = tree.entrycount();
 
 	for (size_t i = 0; i < c; i++) {
@@ -423,7 +423,7 @@ static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string&
 			do_clear_all(repo, subtree, name + "/", files, filenames);
 		} else {
 			if (!filenames.contains(name)) {
-				files.emplace_back(name, nullptr);
+				files.emplace_back(name, nullopt);
 				filenames.emplace(name);
 			}
 		}
@@ -483,7 +483,7 @@ void GitRepo::reference_create(const string& name, const git_oid& id, bool force
 		throw git_exception(ret, "git_reference_create");
 }
 
-void update_git(GitRepo& repo, const string& user, const string& email, const string& description, list<git_file>& files,
+void update_git(GitRepo& repo, const string& user, const string& email, const string& description, list<git_file2>& files,
 				bool clear_all, const optional<tds::datetimeoffset>& dto, const string& branch) {
 	GitSignature sig(user, email, dto);
 
@@ -521,7 +521,7 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 
 			auto& u = upd.back();
 
-			if (!f.data.has_value()) {
+			if (!f.oid.has_value()) {
 				auto gte = parent_tree.entry_bypath(f.filename);
 
 				if (!gte) {
@@ -532,7 +532,7 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 				u.action = GIT_TREE_UPDATE_REMOVE;
 			} else {
 				u.action = GIT_TREE_UPDATE_UPSERT;
-				u.id = repo.blob_create_from_buffer(f.data.value());
+				u.id = f.oid.value();
 			}
 
 			u.filemode = GIT_FILEMODE_BLOB;
@@ -554,6 +554,20 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 
 	repo.reference_create(branch.empty() ? "refs/heads/master" : "refs/heads/" + branch,
 						  commit_oid, true, "branch updated");
+}
+
+void update_git(GitRepo& repo, const string& user, const string& email, const string& description, list<git_file>& files,
+				bool clear_all, const optional<tds::datetimeoffset>& dto, const string& branch) {
+	list<git_file2> files2;
+
+	for (const auto& f : files) {
+		if (f.data.has_value())
+			files2.emplace_back(f.filename, repo.blob_create_from_buffer(f.data.value()));
+		else
+			files2.emplace_back(f.filename, nullopt);
+	}
+
+	update_git(repo, user, email, description, files2, clear_all, dto, branch);
 }
 
 GitIndex::GitIndex(const GitRepo& repo) {
