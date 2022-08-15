@@ -1099,6 +1099,41 @@ ORDER BY partition_functions.function_id, partition_range_values.boundary_id)");
 	}
 }
 
+static void dump_partition_schemes(tds::tds& tds, list<git_file>& files) {
+	struct partscheme {
+		string scheme_name;
+		string func_name;
+	};
+
+	vector<partscheme> schemes;
+
+	{
+		tds::query sq(tds, R"(SELECT partition_schemes.name, partition_functions.name
+	FROM sys.partition_schemes
+	JOIN sys.partition_functions ON partition_functions.function_id = partition_schemes.function_id)");
+
+		while (sq.fetch_row()) {
+			schemes.emplace_back((string)sq[0], (string)sq[1]);
+		}
+	}
+
+	for (const auto& s : schemes) {
+		string sql;
+
+		sql = "CREATE PARTITION SCHEME ";
+		sql += brackets_escape(s.scheme_name);
+		sql += " AS PARTITION ";
+		sql += brackets_escape(s.func_name);
+		sql += " TO (";
+
+		sql += "?"; // FIXME
+
+		sql += ");\n";
+
+		files.emplace_back("partition_schemes/" + s.scheme_name + ".sql", sql);
+	}
+}
+
 static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db, const string& branch) {
 	string dbs;
 	list<git_file> files;
@@ -1242,6 +1277,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 	}
 
 	dump_partition_functions(tds, files);
+	dump_partition_schemes(tds, files);
 
 	string name, email;
 
