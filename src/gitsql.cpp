@@ -907,10 +907,32 @@ string value_to_literal(const tds::value& v) {
 	if (v.is_null)
 		return "NULL";
 
+	unsigned int max_length = v.max_length;
 	auto type = v.type;
+	span d = v.val;
 
-	if (type == tds::sql_type::SQL_VARIANT)
-		type = (tds::sql_type)v.val[0];
+	if (type == tds::sql_type::SQL_VARIANT) {
+		type = (tds::sql_type)d[0];
+
+		d = d.subspan(1);
+
+		auto propbytes = d[0];
+
+		d = d.subspan(1);
+
+		switch (type) {
+			case tds::sql_type::TIME:
+			case tds::sql_type::DATETIME2:
+			case tds::sql_type::DATETIMEOFFSET:
+				max_length = d[0];
+				break;
+
+			default:
+				break;
+		}
+
+		d = d.subspan(propbytes);
+	}
 
 	switch (type) {
 		case tds::sql_type::INTN:
@@ -939,16 +961,6 @@ string value_to_literal(const tds::value& v) {
 		case tds::sql_type::BINARY:
 		case tds::sql_type::UDT: {
 			string ret = "0x";
-
-			span d = v.val;
-
-			if (v.type == tds::sql_type::SQL_VARIANT) {
-				d = d.subspan(1);
-
-				auto propbytes = d[0];
-
-				d = d.subspan(1 + propbytes);
-			}
 
 			for (auto b : d) {
 				ret += fmt::format("{:02x}", b);
@@ -979,7 +991,6 @@ string value_to_literal(const tds::value& v) {
 		case tds::sql_type::TIME:
 			return "'" + (string)v + "'";
 
-		case tds::sql_type::DATETIME2:
 		case tds::sql_type::DATETIM4:
 		case tds::sql_type::DATETIME:
 		case tds::sql_type::DATETIMN: {
@@ -990,6 +1001,21 @@ string value_to_literal(const tds::value& v) {
 
 			return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:02}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
 																	  hms.hours().count(), hms.minutes().count(), hms.seconds().count());
+		}
+
+		case tds::sql_type::DATETIME2: {
+			auto dt = (tds::datetime)v;
+			chrono::hh_mm_ss hms(dt.t);
+
+			if (max_length == 0) {
+				return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:02}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
+								hms.hours().count(), hms.minutes().count(), hms.seconds().count());
+			} else {
+				double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() / 10000000.0);
+
+				return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:0{}.{}f}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
+								   hms.hours().count(), hms.minutes().count(), s, max_length + 3, max_length);
+			}
 		}
 
 		case tds::sql_type::DATETIMEOFFSET: {
