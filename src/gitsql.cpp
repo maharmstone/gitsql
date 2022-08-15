@@ -490,21 +490,21 @@ static string grant_string(const vector<sql_perms>& perms, const string& obj) {
 	return ret;
 }
 
-static string get_schema_definition(tds::tds& tds, const string& name, const string& dbs) {
+static string get_schema_definition(tds::tds& tds, string_view name) {
 	vector<sql_perms> perms;
 	string ret = "CREATE SCHEMA " + brackets_escape(name) + ";\n";
 
 	{
-		tds::query sq(tds, tds::no_check{R"(SELECT database_permissions.state_desc,
+		tds::query sq(tds, R"(SELECT database_permissions.state_desc,
 	database_permissions.permission_name,
 	USER_NAME(database_permissions.grantee_principal_id)
-FROM )" + dbs + R"(sys.database_permissions
-JOIN )" + dbs + R"(sys.database_principals ON database_principals.principal_id = database_permissions.grantee_principal_id
+FROM sys.database_permissions
+JOIN sys.database_principals ON database_principals.principal_id = database_permissions.grantee_principal_id
 WHERE database_permissions.class_desc = 'SCHEMA' AND
 	database_permissions.major_id = SCHEMA_ID(?)
 ORDER BY USER_NAME(database_permissions.grantee_principal_id),
 	database_permissions.state_desc,
-	database_permissions.permission_name)"}, name);
+	database_permissions.permission_name)", name);
 
 		while (sq.fetch_row()) {
 			bool found = false;
@@ -1225,7 +1225,7 @@ ORDER BY schemas.name, objects.name)");
 		}
 
 		for (const auto& v : schemas) {
-			objs.emplace_back("schemas", (string)v, get_schema_definition(tds, v, dbs));
+			objs.emplace_back("schemas", (string)v, get_schema_definition(tds, v));
 		}
 	}
 
