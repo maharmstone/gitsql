@@ -701,7 +701,7 @@ static string get_type_definition(string_view name, string_view schema, int32_t 
 	return ret;
 }
 
-string object_perms(tds::tds& tds, int64_t id, const string& dbs, const string& name) {
+static string object_perms(tds::tds& tds, int64_t id, const string& dbs, const string& name) {
 	vector<sql_perms> perms;
 
 	{
