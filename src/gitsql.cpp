@@ -1101,19 +1101,30 @@ ORDER BY partition_functions.function_id, partition_range_values.boundary_id)");
 
 static void dump_partition_schemes(tds::tds& tds, list<git_file>& files) {
 	struct partscheme {
+		int32_t id;
 		string scheme_name;
 		string func_name;
+		vector<string> dests;
 	};
 
 	vector<partscheme> schemes;
 
 	{
-		tds::query sq(tds, R"(SELECT partition_schemes.name, partition_functions.name
-	FROM sys.partition_schemes
-	JOIN sys.partition_functions ON partition_functions.function_id = partition_schemes.function_id)");
+		tds::query sq(tds, R"(SELECT partition_schemes.data_space_id, partition_schemes.name, partition_functions.name, data_spaces.name
+FROM sys.partition_schemes
+JOIN sys.partition_functions ON partition_functions.function_id = partition_schemes.function_id
+LEFT JOIN sys.destination_data_spaces ON destination_data_spaces.partition_scheme_id = partition_schemes.data_space_id
+LEFT JOIN sys.data_spaces ON data_spaces.data_space_id = destination_data_spaces.data_space_id
+ORDER BY partition_schemes.data_space_id, destination_data_spaces.destination_id)");
 
 		while (sq.fetch_row()) {
-			schemes.emplace_back((string)sq[0], (string)sq[1]);
+			auto id = (int32_t)sq[0];
+
+			if (schemes.empty() || schemes.back().id != id)
+				schemes.emplace_back(id, (string)sq[1], (string)sq[2]);
+
+			if (!sq[3].is_null)
+				schemes.back().dests.emplace_back((string)sq[3]);
 		}
 	}
 
@@ -1126,7 +1137,15 @@ static void dump_partition_schemes(tds::tds& tds, list<git_file>& files) {
 		sql += brackets_escape(s.func_name);
 		sql += " TO (";
 
-		sql += "?"; // FIXME
+		bool first = true;
+		for (const auto& d : s.dests) {
+			if (!first)
+				sql += ", ";
+
+			sql += brackets_escape(d);
+
+			first = false;
+		}
 
 		sql += ");\n";
 
