@@ -998,7 +998,7 @@ string value_to_literal(const tds::value& v) {
 
 			double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() * ratio2);
 
-			return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:05.3f}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
+			return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:06.3f}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
 																	  hms.hours().count(), hms.minutes().count(), s);
 		}
 
@@ -1016,7 +1016,7 @@ string value_to_literal(const tds::value& v) {
 					constexpr double ratio2 = (double)ratio.num / (double)ratio.den;
 					double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() * ratio2);
 
-					return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:05.3f}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
+					return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:06.3f}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
 																			hms.hours().count(), hms.minutes().count(), s);
 				}
 
