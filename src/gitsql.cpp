@@ -1167,6 +1167,21 @@ ORDER BY partition_schemes.data_space_id, destination_data_spaces.destination_id
 	}
 }
 
+static string pages_to_data_size(int32_t pages) {
+	// 1 page = 8 KB
+
+	if (pages >= 134217728 && (pages % 134217728) == 0)
+		return to_string(pages / 134217728) + " TB";
+
+	if (pages >= 131072 && (pages % 131072) == 0)
+		return to_string(pages / 131072) + " GB";
+
+	if (pages >= 128 && (pages % 128) == 0)
+		return to_string(pages / 128) + " MB";
+
+	return to_string(pages * 8) + " KB";
+}
+
 static void dump_filegroups(tds::tds& tds, list<git_file>& files) {
 	struct fg_file {
 		string name;
@@ -1198,9 +1213,11 @@ ORDER BY filegroups.data_space_id, database_files.file_id)");
 			if (filegroups.empty() || filegroups.back().id != id)
 				filegroups.emplace_back(id, (string)sq[1]);
 
-			// FIXME - files
+			filegroups.back().files.emplace_back((string)sq[2], (string)sq[3], (int32_t)sq[4], (int32_t)sq[5], (int32_t)sq[6], (unsigned int)sq[7] != 0);
 		}
 	}
+
+	// FIXME - log files
 
 	for (const auto& f : filegroups) {
 		string sql;
@@ -1209,9 +1226,39 @@ ORDER BY filegroups.data_space_id, database_files.file_id)");
 		sql += brackets_escape(tds::utf16_to_utf8(tds.db_name()));
 		sql += " ADD FILEGROUP ";
 		sql += brackets_escape(f.name);
-		sql += ";\n";
+		sql += ";\n\n";
 
-		// FIXME - files
+		sql += "ALTER DATABASE ";
+		sql += brackets_escape(tds::utf16_to_utf8(tds.db_name()));
+		sql += " ADD FILE\n";
+
+		bool first = true;
+		for (const auto& f2 : f.files) {
+			if (!first)
+				sql += ",\n";
+
+			sql += "(\n";
+
+			sql += "    NAME = " + brackets_escape(f2.name) + ",\n";
+			sql += "    FILENAME = " + value_to_literal(tds::value{f2.physical_name}) + ",\n";
+			sql += "    SIZE = " + pages_to_data_size(f2.size) + ",\n";
+
+			if (f2.max_size == -1)
+				sql += "    MAXSIZE = UNLIMITED,\n";
+			else
+				sql += "    MAXSIZE = " + pages_to_data_size(f2.max_size) + ",\n";
+
+			if (f2.is_percent_growth)
+				sql += "    FILEGROWTH = " + to_string(f2.growth) + "%\n";
+			else
+				sql += "    FILEGROWTH = " + pages_to_data_size(f2.growth) + "\n";
+
+			sql += ")";
+
+			first = false;
+		}
+
+		sql += "\nTO FILEGROUP " + brackets_escape(f.name) + ";\n";
 
 		files.emplace_back("filegroups/" + f.name + ".sql", sql);
 	}
