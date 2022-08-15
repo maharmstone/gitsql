@@ -1245,7 +1245,11 @@ ORDER BY schemas.name, objects.name)");
 		}
 	}
 
-	git_update gu;
+	GitRepo repo(repo_dir.string());
+
+	git_update gu(repo);
+
+	gu.start();
 
 	{
 		tds::query sq(tds, R"(SELECT name,
@@ -1319,22 +1323,11 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 	dump_filegroups(tds, gu);
 	dump_log_files(tds, gu);
 
+	gu.stop();
+
 	string name, email;
 
 	get_current_user_details(name, email);
-
-	GitRepo repo(repo_dir.string());
-
-	while (!gu.files.empty()) {
-		auto f = move(gu.files.front());
-
-		gu.files.pop_front();
-
-		if (f.data.has_value())
-			gu.files2.emplace_back(f.filename, repo.blob_create_from_buffer(f.data.value()));
-		else
-			gu.files2.emplace_back(f.filename, nullopt);
-	}
 
 	update_git(repo, name, email, "Update", gu.files2, true, nullopt, branch);
 

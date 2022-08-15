@@ -688,5 +688,65 @@ bool GitRepo::is_bare() {
 }
 
 void git_update::add_file(string_view filename, string_view data) {
+	lock_guard lg(lock);
+
 	files.emplace_back(filename, data);
+
+	if (!sem.try_acquire())
+		sem.release();
+}
+
+void git_update::run(stop_token st) noexcept {
+	try {
+		do {
+			decltype(files) local_files;
+
+			while (true) {
+				{
+					lock_guard lg(lock);
+
+					local_files.splice(local_files.end(), files);
+				}
+
+				if (local_files.empty())
+					break;
+
+				while (!local_files.empty()) {
+					auto f = move(local_files.front());
+
+					local_files.pop_front();
+
+					if (f.data.has_value())
+						files2.emplace_back(f.filename, repo.blob_create_from_buffer(f.data.value()));
+					else
+						files2.emplace_back(f.filename, nullopt);
+				}
+			}
+
+			if (!st.stop_requested())
+				sem.acquire();
+			else {
+				lock_guard lg(lock);
+
+				if (files.empty())
+					break;
+			}
+		} while (true);
+	} catch (...) {
+		teptr = current_exception();
+	}
+}
+
+void git_update::start() {
+	t = jthread([](stop_token st, git_update* gu) {
+		gu->run(st);
+	}, this);
+}
+
+void git_update::stop() {
+	t.request_stop();
+	t.join();
+
+	if (teptr)
+		rethrow_exception(teptr);
 }

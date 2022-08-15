@@ -9,6 +9,8 @@
 #include <list>
 #include <optional>
 #include <filesystem>
+#include <semaphore>
+#include <thread>
 #include <time.h>
 #include <tdscpp.h>
 
@@ -197,10 +199,20 @@ struct git_file2 {
 };
 
 struct git_update {
-	void add_file(std::string_view filename, std::string_view data);
+	git_update(GitRepo& repo) : repo(repo) { }
 
+	void add_file(std::string_view filename, std::string_view data);
+	void run(std::stop_token st) noexcept;
+	void start();
+	void stop();
+
+	GitRepo& repo;
+	std::mutex lock;
+	std::binary_semaphore sem{1};
+	std::jthread t;
 	std::list<git_file> files;
 	std::list<git_file2> files2;
+	std::exception_ptr teptr;
 };
 
 #ifdef _WIN32
