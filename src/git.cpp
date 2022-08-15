@@ -320,20 +320,6 @@ git_oid GitRepo::tree_create_updated(const GitTree& baseline, span<const git_tre
 	return oid;
 }
 
-GitDiff::GitDiff(const GitRepo& repo, const GitTree& old_tree, const GitTree& new_tree, const git_diff_options* opts) {
-	unsigned int ret;
-	git_diff* tmp = nullptr;
-
-	if ((ret = git_diff_tree_to_tree(&tmp, repo.repo.get(), old_tree.tree.get(), new_tree.tree.get(), opts)))
-		throw git_exception(ret, "git_diff_tree_to_tree");
-
-	diff.reset(tmp);
-}
-
-size_t GitDiff::num_deltas() {
-	return git_diff_num_deltas(diff.get());
-}
-
 git_oid GitRepo::index_tree_id() const {
 	unsigned int ret;
 	git_index_ptr index;
@@ -559,14 +545,10 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 		oid = repo.tree_create_updated(parent_tree, upd);
 	}
 
+	if (!memcmp(&oid, git_tree_id(parent_tree.tree.get()), sizeof(git_oid))) // no changes - avoid doing empty commit
+		return;
+
 	GitTree tree(repo, oid);
-
-	{
-		GitDiff diff(repo, parent_tree, tree, nullptr);
-
-		if (diff.num_deltas() == 0) // no changes - avoid doing empty commit
-			return;
-	}
 
 	auto commit_oid = repo.commit_create(sig, sig, description, tree, parent.get());
 

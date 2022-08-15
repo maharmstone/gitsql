@@ -13,7 +13,6 @@
 #include <tdscpp.h>
 
 class GitRepo;
-class GitDiff;
 class GitIndex;
 class GitTreeEntry;
 
@@ -60,17 +59,6 @@ public:
 };
 
 using git_tree_ptr = std::unique_ptr<git_tree*, git_tree_deleter>;
-
-class git_diff_deleter {
-public:
-	typedef git_diff* pointer;
-
-	void operator()(git_diff* diff) {
-		git_diff_free(diff);
-	}
-};
-
-using git_diff_ptr = std::unique_ptr<git_diff*, git_diff_deleter>;
 
 class git_index_deleter {
 public:
@@ -133,14 +121,6 @@ public:
 	git_tree_entry_ptr entry_bypath(const std::string& path);
 
 	git_tree_ptr tree;
-};
-
-class GitDiff {
-public:
-	GitDiff(const GitRepo& repo, const GitTree& old_tree, const GitTree& new_tree, const git_diff_options* opts = nullptr);
-	size_t num_deltas();
-
-	git_diff_ptr diff;
 };
 
 class GitRepo {
