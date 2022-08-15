@@ -1063,12 +1063,19 @@ string value_to_literal(const tds::value& v) {
 
 			chrono::hh_mm_ss hms(t);
 
-			// FIXME - decimal seconds (make sure correct number of DP)
+			if (max_length == 0) {
+				return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:02}{:+03}:{:02}'",
+									(int)dto.d.year(), (unsigned int)dto.d.month(), (unsigned int)dto.d.day(),
+									hms.hours().count(), hms.minutes().count(), hms.seconds().count(),
+									dto.offset / 60, abs(dto.offset) % 60);
+			} else {
+				double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() / 10000000.0);
 
-			return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:02}{:+03}:{:02}'",
-							   (int)dto.d.year(), (unsigned int)dto.d.month(), (unsigned int)dto.d.day(),
-								hms.hours().count(), hms.minutes().count(), hms.seconds().count(),
-							   dto.offset / 60, abs(dto.offset) % 60);
+				return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:0{}.{}f}{:+03}:{:02}'",
+								   (int)dto.d.year(), (unsigned int)dto.d.month(), (unsigned int)dto.d.day(),
+								   hms.hours().count(), hms.minutes().count(), s, max_length + 3, max_length,
+								   dto.offset / 60, abs(dto.offset) % 60);
+			}
 		}
 
 		default:
