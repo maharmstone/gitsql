@@ -1167,6 +1167,56 @@ ORDER BY partition_schemes.data_space_id, destination_data_spaces.destination_id
 	}
 }
 
+static void dump_filegroups(tds::tds& tds, list<git_file>& files) {
+	struct fg_file {
+		string name;
+		string physical_name;
+		int32_t size;
+		int32_t max_size;
+		int32_t growth;
+		bool is_percent_growth;
+	};
+
+	struct fg {
+		int32_t id;
+		string name;
+		vector<fg_file> files;
+	};
+
+	vector<fg> filegroups;
+	string db_name;
+
+	{
+		tds::query sq(tds, R"(SELECT filegroups.data_space_id, filegroups.name, database_files.name, database_files.physical_name, database_files.size, database_files.max_size, database_files.growth, database_files.is_percent_growth
+FROM sys.filegroups
+JOIN sys.database_files ON database_files.data_space_id = filegroups.data_space_id
+ORDER BY filegroups.data_space_id, database_files.file_id)");
+
+		while (sq.fetch_row()) {
+			auto id = (int32_t)sq[0];
+
+			if (filegroups.empty() || filegroups.back().id != id)
+				filegroups.emplace_back(id, (string)sq[1]);
+
+			// FIXME - files
+		}
+	}
+
+	for (const auto& f : filegroups) {
+		string sql;
+
+		sql = "ALTER DATABASE ";
+		sql += brackets_escape(tds::utf16_to_utf8(tds.db_name()));
+		sql += " ADD FILEGROUP ";
+		sql += brackets_escape(f.name);
+		sql += ";\n";
+
+		// FIXME - files
+
+		files.emplace_back("filegroups/" + f.name + ".sql", sql);
+	}
+}
+
 static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& db, const string& branch) {
 	string dbs;
 	list<git_file> files;
@@ -1311,6 +1361,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 
 	dump_partition_functions(tds, files);
 	dump_partition_schemes(tds, files);
+	dump_filegroups(tds, files);
 
 	string name, email;
 
