@@ -972,8 +972,7 @@ string value_to_literal(const tds::value& v) {
 		case tds::sql_type::FLOAT:
 		case tds::sql_type::REAL:
 		case tds::sql_type::FLTN:
-			// FIXME - sensible number of decimal places?
-			return to_string((double)v);
+			return fmt::format("{}", (double)v);
 
 		case tds::sql_type::MONEY:
 		case tds::sql_type::SMALLMONEY:
