@@ -201,7 +201,7 @@ static string dump_table(tds::tds& tds, const string& escaped_name) {
 			if (i != 0)
 				s += ", ";
 
-			s += value_to_literal(sq[i]);
+			s += sq[i].to_literal();
 		}
 
 		s += ");\n";

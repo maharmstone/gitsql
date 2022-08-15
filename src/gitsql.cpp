@@ -884,212 +884,6 @@ static void get_current_user_details(string& name, string& email) {
 #endif
 }
 
-static string quote_string(string_view s) {
-	string ret;
-
-	ret.reserve(s.size() + 2);
-
-	ret += "'";
-
-	for (auto c : s) {
-		if (c == '\'')
-			ret += "''";
-		else
-			ret += c;
-	}
-
-	ret += "'";
-
-	return ret;
-}
-
-string value_to_literal(const tds::value& v) {
-	if (v.is_null)
-		return "NULL";
-
-	unsigned int max_length = v.max_length;
-	auto type = v.type;
-	span d = v.val;
-
-	if (type == tds::sql_type::SQL_VARIANT) {
-		type = (tds::sql_type)d[0];
-
-		d = d.subspan(1);
-
-		auto propbytes = d[0];
-
-		d = d.subspan(1);
-
-		switch (type) {
-			case tds::sql_type::TIME:
-			case tds::sql_type::DATETIME2:
-			case tds::sql_type::DATETIMEOFFSET:
-				max_length = d[0];
-				break;
-
-			default:
-				break;
-		}
-
-		d = d.subspan(propbytes);
-	}
-
-	switch (type) {
-		case tds::sql_type::INTN:
-		case tds::sql_type::TINYINT:
-		case tds::sql_type::SMALLINT:
-		case tds::sql_type::INT:
-		case tds::sql_type::BIGINT:
-		case tds::sql_type::BIT:
-		case tds::sql_type::BITN:
-			return to_string((int64_t)v);
-
-		case tds::sql_type::TEXT:
-		case tds::sql_type::VARCHAR:
-		case tds::sql_type::CHAR:
-		case tds::sql_type::XML:
-		case tds::sql_type::UNIQUEIDENTIFIER:
-			return quote_string((string)v);
-
-		case tds::sql_type::NTEXT:
-		case tds::sql_type::NVARCHAR:
-		case tds::sql_type::NCHAR:
-			return "N" + quote_string((string)v);
-
-		case tds::sql_type::IMAGE:
-		case tds::sql_type::VARBINARY:
-		case tds::sql_type::BINARY:
-		case tds::sql_type::UDT: {
-			string ret = "0x";
-
-			for (auto b : d) {
-				ret += fmt::format("{:02x}", b);
-			}
-
-			return ret;
-		}
-
-		case tds::sql_type::FLOAT:
-		case tds::sql_type::REAL:
-		case tds::sql_type::FLTN:
-			return fmt::format("{}", (double)v);
-
-		case tds::sql_type::MONEY:
-		case tds::sql_type::SMALLMONEY:
-		case tds::sql_type::MONEYN:
-		case tds::sql_type::DECIMAL:
-		case tds::sql_type::NUMERIC:
-			return (string)v;
-
-		case tds::sql_type::DATE: {
-			auto ymd = (chrono::year_month_day)v;
-
-			return fmt::format("'{:04}{:02}{:02}'", (int)ymd.year(), (unsigned int)ymd.month(), (unsigned int)ymd.day());
-		}
-
-		case tds::sql_type::TIME:
-			return "'" + (string)v + "'";
-
-		case tds::sql_type::DATETIME: {
-			auto dt = (tds::datetime)v;
-			chrono::hh_mm_ss hms(dt.t);
-			constexpr decltype(dt.t)::period ratio;
-			constexpr double ratio2 = (double)ratio.num / (double)ratio.den;
-
-			double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() * ratio2);
-
-			return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:06.3f}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
-																	  hms.hours().count(), hms.minutes().count(), s);
-		}
-
-		case tds::sql_type::DATETIMN: {
-			auto dt = (tds::datetime)v;
-			chrono::hh_mm_ss hms(dt.t);
-
-			switch (d.size()) {
-				case 4:
-					return fmt::format("'{:04}{:02}{:02} {:02}:{:02}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
-																		hms.hours().count(), hms.minutes().count());
-
-				case 8: {
-					constexpr decltype(dt.t)::period ratio;
-					constexpr double ratio2 = (double)ratio.num / (double)ratio.den;
-					double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() * ratio2);
-
-					return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:06.3f}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
-																			hms.hours().count(), hms.minutes().count(), s);
-				}
-
-				default:
-					throw formatted_error("DATETIMN has invalid length {}.", d.size());
-			}
-		}
-
-		case tds::sql_type::DATETIM4: {
-			auto dt = (tds::datetime)v;
-			chrono::hh_mm_ss hms(dt.t);
-
-			return fmt::format("'{:04}{:02}{:02} {:02}:{:02}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
-																hms.hours().count(), hms.minutes().count());
-		}
-
-		case tds::sql_type::DATETIME2: {
-			auto dt = (tds::datetime)v;
-			chrono::hh_mm_ss hms(dt.t);
-
-			if (max_length == 0) {
-				return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:02}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
-								hms.hours().count(), hms.minutes().count(), hms.seconds().count());
-			} else {
-				constexpr decltype(dt.t)::period ratio;
-				constexpr double ratio2 = (double)ratio.num / (double)ratio.den;
-				double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() * ratio2);
-
-				return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:0{}.{}f}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
-								   hms.hours().count(), hms.minutes().count(), s, max_length + 3, max_length);
-			}
-		}
-
-		case tds::sql_type::DATETIMEOFFSET: {
-			auto dto = (tds::datetimeoffset)v;
-
-			auto d = dto.d;
-			auto t = dto.t;
-
-			t += chrono::minutes{dto.offset};
-
-			if (t < tds::time_t::zero()) {
-				d = chrono::year_month_day{(chrono::sys_days)d - chrono::days{1}};
-				t += chrono::days{1};
-			} else if (t >= chrono::days{1}) {
-				d = chrono::year_month_day{(chrono::sys_days)d + chrono::days{1}};
-				t -= chrono::days{1};
-			}
-
-			chrono::hh_mm_ss hms(t);
-
-			if (max_length == 0) {
-				return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:02}{:+03}:{:02}'",
-									(int)dto.d.year(), (unsigned int)dto.d.month(), (unsigned int)dto.d.day(),
-									hms.hours().count(), hms.minutes().count(), hms.seconds().count(),
-									dto.offset / 60, abs(dto.offset) % 60);
-			} else {
-				constexpr decltype(t)::period ratio;
-				constexpr double ratio2 = (double)ratio.num / (double)ratio.den;
-				double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() * ratio2);
-
-				return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:0{}.{}f}{:+03}:{:02}'",
-								   (int)dto.d.year(), (unsigned int)dto.d.month(), (unsigned int)dto.d.day(),
-								   hms.hours().count(), hms.minutes().count(), s, max_length + 3, max_length,
-								   dto.offset / 60, abs(dto.offset) % 60);
-			}
-		}
-
-		default:
-			throw formatted_error("Cannot convert {} to literal.", type);
-	}
-}
-
 static void dump_partition_functions(tds::tds& tds, list<git_file>& files) {
 	struct partfunc {
 		int32_t id;
@@ -1156,7 +950,7 @@ ORDER BY partition_functions.function_id, partition_range_values.boundary_id)");
 			if (!first)
 				sql += ", ";
 
-			sql += value_to_literal(v);
+			sql += v.to_literal();
 			first = false;
 		}
 
@@ -1304,7 +1098,7 @@ ORDER BY filegroups.data_space_id, database_files.file_id)");
 			sql += "(\n";
 
 			sql += "    NAME = " + brackets_escape(f2.name) + ",\n";
-			sql += "    FILENAME = " + value_to_literal(tds::value{f2.physical_name}) + ",\n";
+			sql += "    FILENAME = " + tds::value{f2.physical_name}.to_literal() + ",\n";
 			sql += "    SIZE = " + pages_to_data_size(f2.size) + ",\n";
 
 			if (f2.max_size == -1)
@@ -1358,7 +1152,7 @@ WHERE data_space_id = 0)");
 		sql += " ADD LOG FILE (\n";
 
 		sql += "    NAME = " + brackets_escape(l.name) + ",\n";
-		sql += "    FILENAME = " + value_to_literal(tds::value{l.physical_name}) + ",\n";
+		sql += "    FILENAME = " + tds::value{l.physical_name}.to_literal() + ",\n";
 		sql += "    SIZE = " + pages_to_data_size(l.size) + ",\n";
 
 		if (l.max_size == -1)
