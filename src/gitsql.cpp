@@ -991,16 +991,43 @@ string value_to_literal(const tds::value& v) {
 		case tds::sql_type::TIME:
 			return "'" + (string)v + "'";
 
-		case tds::sql_type::DATETIM4:
-		case tds::sql_type::DATETIME:
+		case tds::sql_type::DATETIME: {
+			auto dt = (tds::datetime)v;
+			chrono::hh_mm_ss hms(dt.t);
+
+			double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() / 10000000.0);
+
+			return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:05.3f}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
+																	  hms.hours().count(), hms.minutes().count(), s);
+		}
+
 		case tds::sql_type::DATETIMN: {
 			auto dt = (tds::datetime)v;
 			chrono::hh_mm_ss hms(dt.t);
 
-			// FIXME - decimal seconds (make sure correct number of DP)
+			switch (d.size()) {
+				case 4:
+					return fmt::format("'{:04}{:02}{:02} {:02}:{:02}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
+																		hms.hours().count(), hms.minutes().count());
 
-			return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:02}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
-																	  hms.hours().count(), hms.minutes().count(), hms.seconds().count());
+				case 8: {
+					double s = (double)hms.seconds().count() + ((double)hms.subseconds().count() / 10000000.0);
+
+					return fmt::format("'{:04}{:02}{:02} {:02}:{:02}:{:05.3f}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
+																			hms.hours().count(), hms.minutes().count(), s);
+				}
+
+				default:
+					throw formatted_error("DATETIMN has invalid length {}.", d.size());
+			}
+		}
+
+		case tds::sql_type::DATETIM4: {
+			auto dt = (tds::datetime)v;
+			chrono::hh_mm_ss hms(dt.t);
+
+			return fmt::format("'{:04}{:02}{:02} {:02}:{:02}'", (int)dt.d.year(), (unsigned int)dt.d.month(), (unsigned int)dt.d.day(),
+																hms.hours().count(), hms.minutes().count());
 		}
 
 		case tds::sql_type::DATETIME2: {
