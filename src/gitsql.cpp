@@ -1199,7 +1199,6 @@ static void dump_filegroups(tds::tds& tds, list<git_file>& files) {
 	};
 
 	vector<fg> filegroups;
-	string db_name;
 
 	{
 		tds::query sq(tds, R"(SELECT filegroups.data_space_id, filegroups.name, database_files.name, database_files.physical_name, database_files.size, database_files.max_size, database_files.growth, database_files.is_percent_growth
@@ -1216,8 +1215,6 @@ ORDER BY filegroups.data_space_id, database_files.file_id)");
 			filegroups.back().files.emplace_back((string)sq[2], (string)sq[3], (int32_t)sq[4], (int32_t)sq[5], (int32_t)sq[6], (unsigned int)sq[7] != 0);
 		}
 	}
-
-	// FIXME - log files
 
 	for (const auto& f : filegroups) {
 		string sql;
@@ -1261,6 +1258,55 @@ ORDER BY filegroups.data_space_id, database_files.file_id)");
 		sql += "\nTO FILEGROUP " + brackets_escape(f.name) + ";\n";
 
 		files.emplace_back("filegroups/" + f.name + ".sql", sql);
+	}
+}
+
+static void dump_log_files(tds::tds& tds, list<git_file>& files) {
+	struct fg_file {
+		string name;
+		string physical_name;
+		int32_t size;
+		int32_t max_size;
+		int32_t growth;
+		bool is_percent_growth;
+	};
+
+	vector<fg_file> log_files;
+
+	{
+		tds::query sq(tds, R"(SELECT name, physical_name, size, max_size, growth, is_percent_growth
+FROM sys.database_files
+WHERE data_space_id = 0)");
+
+		while (sq.fetch_row()) {
+			log_files.emplace_back((string)sq[0], (string)sq[1], (int32_t)sq[2], (int32_t)sq[3], (int32_t)sq[4], (unsigned int)sq[5] != 0);
+		}
+	}
+
+	for (const auto& l : log_files) {
+		string sql;
+
+		sql = "ALTER DATABASE ";
+		sql += brackets_escape(tds::utf16_to_utf8(tds.db_name()));
+		sql += " ADD LOG FILE (\n";
+
+		sql += "    NAME = " + brackets_escape(l.name) + ",\n";
+		sql += "    FILENAME = " + value_to_literal(tds::value{l.physical_name}) + ",\n";
+		sql += "    SIZE = " + pages_to_data_size(l.size) + ",\n";
+
+		if (l.max_size == -1)
+			sql += "    MAXSIZE = UNLIMITED,\n";
+		else
+			sql += "    MAXSIZE = " + pages_to_data_size(l.max_size) + ",\n";
+
+		if (l.is_percent_growth)
+			sql += "    FILEGROWTH = " + to_string(l.growth) + "%\n";
+		else
+			sql += "    FILEGROWTH = " + pages_to_data_size(l.growth) + "\n";
+
+		sql += ");\n";
+
+		files.emplace_back("log_files/" + l.name + ".sql", sql);
 	}
 }
 
@@ -1409,6 +1455,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 	dump_partition_functions(tds, files);
 	dump_partition_schemes(tds, files);
 	dump_filegroups(tds, files);
+	dump_log_files(tds, files);
 
 	string name, email;
 
