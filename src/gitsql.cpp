@@ -2029,19 +2029,13 @@ int main(int argc, char* argv[])
 		} else if (cmd == "master") {
 			unsigned int repo;
 
-			if (argc < 5)
+			if (argc < 4)
 				throw runtime_error("Too few arguments.");
 
 #ifdef _WIN32
-			auto master_server = tds::utf16_to_utf8((char16_t*)argv[2]);
+			auto repo_str = tds::utf16_to_utf8((char16_t*)argv[2]);
 #else
-			string_view master_server = argv[2];
-#endif
-
-#ifdef _WIN32
-			auto repo_str = tds::utf16_to_utf8((char16_t*)argv[3]);
-#else
-			string_view repo_str = argv[3];
+			string_view repo_str = argv[2];
 #endif
 			auto [ptr, ec] = from_chars(repo_str.data(), repo_str.data() + repo_str.length(), repo);
 
@@ -2049,9 +2043,9 @@ int main(int argc, char* argv[])
 				throw formatted_error("Unable to interpret \"{}\" as integer.", repo_str);
 
 #ifdef _WIN32
-			auto smk_str = tds::utf16_to_utf8((char16_t*)argv[4]);
+			auto smk_str = tds::utf16_to_utf8((char16_t*)argv[3]);
 #else
-			string_view smk_str = argv[4];
+			string_view smk_str = argv[3];
 #endif
 
 			if (smk_str.size() % 2)
@@ -2072,7 +2066,7 @@ int main(int argc, char* argv[])
 				smk.push_back(std::byte{b});
 			}
 
-			dump_master(db_server, master_server, repo, smk);
+			dump_master(db_server, repo, smk);
 		}
 	} catch (const exception& e) {
 		fmt::print(stderr, "{}\n", e.what());

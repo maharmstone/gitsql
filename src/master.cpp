@@ -301,24 +301,28 @@ static void dump_extended_stored_procedures(const tds::options& opts, git_update
 	}
 }
 
-void dump_master(const string& db_server, string_view master_server, unsigned int repo_num, span<const std::byte> smk) {
+void dump_master(string_view db_server, unsigned int repo_num, span<const std::byte> smk) {
 	if (smk.size() == 16)
 		throw runtime_error("3DES SMK not supported.");
 	else if (smk.size() != 32)
 		throw runtime_error("Invalid SMK length.");
 
-	string repo_dir, branch;
+	string repo_dir, master_server, branch;
 
 	{
 		tds::tds tds(db_server, db_username, db_password, db_app);
-		tds::query sq(tds, "SELECT dir, branch FROM Restricted.GitRepo WHERE id = ?", repo_num);
+		tds::query sq(tds, "SELECT dir, server, branch FROM Restricted.GitRepo WHERE id = ?", repo_num);
 
 		if (!sq.fetch_row())
 			throw formatted_error("Repo {} not found in Restricted.GitRepo.", repo_num);
 
 		repo_dir = (string)sq[0];
-		branch = (string)sq[1];
+		master_server = (string)sq[1];
+		branch = (string)sq[2];
 	}
+
+	if (master_server.empty())
+		throw formatted_error("No server specified for repo {}.", repo_num);
 
 	git_libgit2_init();
 	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
