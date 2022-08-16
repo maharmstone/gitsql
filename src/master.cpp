@@ -86,7 +86,7 @@ static optional<string> decrypt_pwdhash(span<const uint8_t> hash, span<std::byte
 	return tds::utf16_to_utf8(u16sv);
 }
 
-static void dump_linked_servers(const tds::options& opts, list<git_file>& files, span<std::byte> smk) {
+static void dump_linked_servers(const tds::options& opts, git_update& gu, span<std::byte> smk) {
 	vector<linked_server> servs;
 	vector<linked_server_logins> logins;
 
@@ -191,7 +191,7 @@ WHERE syslnklgns.pwdhash IS NOT NULL)");
 				c = '-';
 		}
 
-		files.emplace_back("linked_servers/" + fn + ".json", j.dump(3) + "\n");
+		gu.add_file("linked_servers/" + fn + ".json", j.dump(3) + "\n");
 	}
 }
 
@@ -236,7 +236,7 @@ static string sid_to_string(span<const uint8_t> sid) {
 	return ret;
 }
 
-static void dump_principals(const tds::options& opts, list<git_file>& files) {
+static void dump_principals(const tds::options& opts, git_update& gu) {
 	vector<principal> principals;
 
 	{
@@ -276,11 +276,11 @@ static void dump_principals(const tds::options& opts, list<git_file>& files) {
 				c = '-';
 		}
 
-		files.emplace_back("principals/" + fn + ".json", j.dump(3) + "\n");
+		gu.add_file("principals/" + fn + ".json", j.dump(3) + "\n");
 	}
 }
 
-static void dump_extended_stored_procedures(const tds::options& opts, list<git_file>& files) {
+static void dump_extended_stored_procedures(const tds::options& opts, git_update& gu) {
 	vector<pair<string, string>> xps;
 
 	{
@@ -297,13 +297,11 @@ static void dump_extended_stored_procedures(const tds::options& opts, list<git_f
 		// FIXME - escape any single quotes in generated SQL
 		string sql = "EXEC sp_addextendedproc '" + name + "', '" + dll_name + "';\n";
 
-		files.emplace_back("extended_stored_procedures/" + name + ".sql", sql);
+		gu.add_file("extended_stored_procedures/" + name + ".sql", sql);
 	}
 }
 
 void dump_master(const string& db_server, string_view master_server, unsigned int repo_num, span<std::byte> smk) {
-	list<git_file> files;
-
 	if (smk.size() == 16)
 		throw runtime_error("3DES SMK not supported.");
 	else if (smk.size() != 32)
@@ -335,22 +333,19 @@ void dump_master(const string& db_server, string_view master_server, unsigned in
 	opts.app_name = db_app;
 	opts.port = 1434; // FIXME - find DAC port by querying server
 
-	dump_linked_servers(opts, files, smk);
-	dump_principals(opts, files);
-	dump_extended_stored_procedures(opts, files);
+	git_update gu(repo);
 
-	list<git_file2> files2;
+	gu.start();
 
-	for (const auto& f : files) {
-		if (f.data.has_value())
-			files2.emplace_back(f.filename, repo.blob_create_from_buffer(f.data.value()));
-		else
-			files2.emplace_back(f.filename, nullopt);
-	}
+	dump_linked_servers(opts, gu, smk);
+	dump_principals(opts, gu);
+	dump_extended_stored_procedures(opts, gu);
 
 	string name, email;
 
 	get_current_user_details(name, email);
 
-	update_git(repo, name, email, "Update", files2, true, nullopt, branch);
+	gu.stop();
+
+	update_git(repo, name, email, "Update", gu.files2, true, nullopt, branch);
 }
