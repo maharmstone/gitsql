@@ -740,3 +740,10 @@ void git_update::stop() {
 	if (teptr)
 		rethrow_exception(teptr);
 }
+
+git_update::~git_update() {
+	t.request_stop();
+
+	if (!sem.try_acquire())
+		sem.release();
+}

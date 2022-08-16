@@ -201,6 +201,7 @@ struct git_file2 {
 
 struct git_update {
 	git_update(GitRepo& repo) : repo(repo) { }
+	~git_update();
 
 	void add_file(std::string_view filename, std::string_view data);
 	void run(std::stop_token st) noexcept;
