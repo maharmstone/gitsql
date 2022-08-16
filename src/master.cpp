@@ -1,5 +1,6 @@
 #include "gitsql.h"
 #include "aes.h"
+#include "git.h"
 #include <nlohmann/json.hpp>
 
 using namespace std;
@@ -85,7 +86,7 @@ static optional<string> decrypt_pwdhash(span<const uint8_t> hash, span<std::byte
 	return tds::utf16_to_utf8(u16sv);
 }
 
-static void dump_linked_servers(const tds::options& opts, tds::tds& tds, unsigned int commit, span<std::byte> smk) {
+static void dump_linked_servers(const tds::options& opts, list<git_file>& files, span<std::byte> smk) {
 	vector<linked_server> servs;
 	vector<linked_server_logins> logins;
 
@@ -190,7 +191,7 @@ WHERE syslnklgns.pwdhash IS NOT NULL)");
 				c = '-';
 		}
 
-		tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, CONVERT(VARBINARY(MAX), ?))", commit, "linked_servers/" + fn + ".json", j.dump(3) + "\n");
+		files.emplace_back("linked_servers/" + fn + ".json", j.dump(3) + "\n");
 	}
 }
 
@@ -235,7 +236,7 @@ static string sid_to_string(span<const uint8_t> sid) {
 	return ret;
 }
 
-static void dump_principals(const tds::options& opts, tds::tds& tds, unsigned int commit) {
+static void dump_principals(const tds::options& opts, list<git_file>& files) {
 	vector<principal> principals;
 
 	{
@@ -275,11 +276,11 @@ static void dump_principals(const tds::options& opts, tds::tds& tds, unsigned in
 				c = '-';
 		}
 
-		tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, CONVERT(VARBINARY(MAX), ?))", commit, "principals/" + fn + ".json", j.dump(3) + "\n");
+		files.emplace_back("principals/" + fn + ".json", j.dump(3) + "\n");
 	}
 }
 
-static void dump_extended_stored_procedures(const tds::options& opts, tds::tds& tds, unsigned int commit) {
+static void dump_extended_stored_procedures(const tds::options& opts, list<git_file>& files) {
 	vector<pair<string, string>> xps;
 
 	{
@@ -296,11 +297,13 @@ static void dump_extended_stored_procedures(const tds::options& opts, tds::tds& 
 		// FIXME - escape any single quotes in generated SQL
 		string sql = "EXEC sp_addextendedproc '" + name + "', '" + dll_name + "';\n";
 
-		tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, CONVERT(VARBINARY(MAX), ?))", commit, "extended_stored_procedures/" + name + ".sql", sql);
+		files.emplace_back("extended_stored_procedures/" + name + ".sql", sql);
 	}
 }
 
 void dump_master(const string& db_server, string_view master_server, unsigned int repo, span<std::byte> smk) {
+	list<git_file> files;
+
 	if (smk.size() == 16)
 		throw runtime_error("3DES SMK not supported.");
 	else if (smk.size() != 32)
@@ -333,12 +336,16 @@ void dump_master(const string& db_server, string_view master_server, unsigned in
 		commit = (unsigned int)sq[0];
 	}
 
+	dump_linked_servers(opts, files, smk);
+	dump_principals(opts, files);
+	dump_extended_stored_procedures(opts, files);
+
 	// clear existing files
 	tds.run("INSERT INTO Restricted.GitFiles(id) VALUES(?)", commit);
 
-	dump_linked_servers(opts, tds, commit, smk);
-	dump_principals(opts, tds, commit);
-	dump_extended_stored_procedures(opts, tds, commit);
+	for (const auto& f : files) {
+		tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, CONVERT(VARBINARY(MAX), ?))", commit, f.filename, f.data.value());
+	}
 
 	trans.commit();
 }
