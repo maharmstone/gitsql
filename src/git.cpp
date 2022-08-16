@@ -731,6 +731,10 @@ void git_update::start() {
 
 void git_update::stop() {
 	t.request_stop();
+
+	if (!sem.try_acquire())
+		sem.release();
+
 	t.join();
 
 	if (teptr)
