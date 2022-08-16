@@ -74,7 +74,7 @@ static vector<uint8_t> aes256_cbc_decrypt(span<const std::byte> key, span<const 
 	return ret;
 }
 
-static optional<string> decrypt_pwdhash(span<const uint8_t> hash, span<std::byte> smk) {
+static optional<string> decrypt_pwdhash(span<const uint8_t> hash, span<const std::byte> smk) {
 	auto plaintext = aes256_cbc_decrypt(smk, hash.subspan(4, 16), hash.subspan(20));
 
 	if (plaintext.size() < 8 || *(uint32_t*)plaintext.data() != 0xbaadf00d)
@@ -86,7 +86,7 @@ static optional<string> decrypt_pwdhash(span<const uint8_t> hash, span<std::byte
 	return tds::utf16_to_utf8(u16sv);
 }
 
-static void dump_linked_servers(const tds::options& opts, git_update& gu, span<std::byte> smk) {
+static void dump_linked_servers(const tds::options& opts, git_update& gu, span<const std::byte> smk) {
 	vector<linked_server> servs;
 	vector<linked_server_logins> logins;
 
@@ -301,7 +301,7 @@ static void dump_extended_stored_procedures(const tds::options& opts, git_update
 	}
 }
 
-void dump_master(const string& db_server, string_view master_server, unsigned int repo_num, span<std::byte> smk) {
+void dump_master(const string& db_server, string_view master_server, unsigned int repo_num, span<const std::byte> smk) {
 	if (smk.size() == 16)
 		throw runtime_error("3DES SMK not supported.");
 	else if (smk.size() != 32)
