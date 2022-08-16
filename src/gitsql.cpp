@@ -833,7 +833,7 @@ string get_current_username() {
 #endif
 }
 
-static void get_current_user_details(string& name, string& email) {
+void get_current_user_details(string& name, string& email) {
 #ifdef _WIN32
 	auto token = open_process_token(GetCurrentProcess(), TOKEN_QUERY);
 

@@ -88,6 +88,7 @@ private:
 
 // gitsql.cpp
 std::string get_current_username();
+void get_current_user_details(std::string& name, std::string& email);
 
 // table.cpp
 std::string table_ddl(tds::tds& tds, int64_t id);

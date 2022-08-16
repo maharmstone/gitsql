@@ -301,7 +301,7 @@ static void dump_extended_stored_procedures(const tds::options& opts, list<git_f
 	}
 }
 
-void dump_master(const string& db_server, string_view master_server, unsigned int repo, span<std::byte> smk) {
+void dump_master(const string& db_server, string_view master_server, unsigned int repo_num, span<std::byte> smk) {
 	list<git_file> files;
 
 	if (smk.size() == 16)
@@ -309,7 +309,25 @@ void dump_master(const string& db_server, string_view master_server, unsigned in
 	else if (smk.size() != 32)
 		throw runtime_error("Invalid SMK length.");
 
-	tds::options opts(db_server, db_username, db_password);
+	string repo_dir, branch;
+
+	{
+		tds::tds tds(db_server, db_username, db_password, db_app);
+		tds::query sq(tds, "SELECT dir, branch FROM Restricted.GitRepo WHERE id = ?", repo_num);
+
+		if (!sq.fetch_row())
+			throw formatted_error("Repo {} not found in Restricted.GitRepo.", repo_num);
+
+		repo_dir = (string)sq[0];
+		branch = (string)sq[1];
+	}
+
+	git_libgit2_init();
+	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
+
+	GitRepo repo(repo_dir);
+
+	tds::options opts("", db_username, db_password);
 
 	// FIXME - different instances?
 
@@ -317,35 +335,22 @@ void dump_master(const string& db_server, string_view master_server, unsigned in
 	opts.app_name = db_app;
 	opts.port = 1434; // FIXME - find DAC port by querying server
 
-	tds::tds tds(db_server, db_username, db_password, db_app);
-
-	tds::trans trans(tds);
-
-	unsigned int commit;
-
-	{
-		tds::query sq(tds, "INSERT INTO Restricted.Git(repo, username, description, dto) OUTPUT inserted.id VALUES(?, ?, 'Update', SYSDATETIMEOFFSET())",
-					  repo, get_current_username());
-
-		if (!sq.fetch_row())
-			throw runtime_error("Error inserting entry into Restricted.Git.");
-
-		if (sq[0].is_null)
-			throw runtime_error("Returned commit ID was NULL.");
-
-		commit = (unsigned int)sq[0];
-	}
-
 	dump_linked_servers(opts, files, smk);
 	dump_principals(opts, files);
 	dump_extended_stored_procedures(opts, files);
 
-	// clear existing files
-	tds.run("INSERT INTO Restricted.GitFiles(id) VALUES(?)", commit);
+	list<git_file2> files2;
 
 	for (const auto& f : files) {
-		tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, CONVERT(VARBINARY(MAX), ?))", commit, f.filename, f.data.value());
+		if (f.data.has_value())
+			files2.emplace_back(f.filename, repo.blob_create_from_buffer(f.data.value()));
+		else
+			files2.emplace_back(f.filename, nullopt);
 	}
 
-	trans.commit();
+	string name, email;
+
+	get_current_user_details(name, email);
+
+	update_git(repo, name, email, "Update", files2, true, nullopt, branch);
 }
