@@ -294,8 +294,7 @@ static void dump_extended_stored_procedures(const tds::options& opts, git_update
 	}
 
 	for (const auto& [name, dll_name] : xps) {
-		// FIXME - escape any single quotes in generated SQL
-		string sql = "EXEC sp_addextendedproc '" + name + "', '" + dll_name + "';\n";
+		string sql = "EXEC sp_addextendedproc " + tds::value{name}.to_literal() + ", " + tds::value{dll_name}.to_literal() + ";\n";
 
 		gu.add_file("extended_stored_procedures/" + name + ".sql", sql);
 	}
