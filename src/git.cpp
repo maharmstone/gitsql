@@ -312,20 +312,19 @@ git_oid GitRepo::tree_create_updated(const GitTree& baseline, span<const git_tre
 }
 
 git_oid GitRepo::index_tree_id() const {
-	unsigned int ret;
 	git_index_ptr index;
 	git_oid tree_id;
 
 	{
 		git_index* tmp = nullptr;
 
-		if ((ret = git_repository_index(&tmp, repo.get())))
+		if (auto ret = git_repository_index(&tmp, repo.get()))
 			throw git_exception(ret, "git_repository_index");
 
 		index.reset(tmp);
 	}
 
-	if ((ret = git_index_write_tree(&tree_id, index.get())))
+	if (auto ret = git_index_write_tree(&tree_id, index.get()))
 		throw git_exception(ret, "git_index_write_tree");
 
 	return tree_id;
