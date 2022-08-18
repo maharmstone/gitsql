@@ -648,12 +648,13 @@ bool GitRepo::is_bare() {
 }
 
 void git_update::add_file(string_view filename, string_view data) {
-	lock_guard lg(lock);
+	{
+		lock_guard lg(lock);
 
-	files.emplace_back(filename, data);
+		files.emplace_back(filename, data);
+	}
 
-	if (!sem.try_acquire())
-		sem.release();
+	cv.notify_one();
 }
 
 void git_update::run(stop_token st) noexcept {
@@ -661,35 +662,26 @@ void git_update::run(stop_token st) noexcept {
 		do {
 			decltype(files) local_files;
 
-			while (true) {
-				{
-					lock_guard lg(lock);
+			{
+				unique_lock ul(lock);
 
-					local_files.splice(local_files.end(), files);
-				}
+				cv.wait(ul, st, [&]{ return !files.empty(); });
 
-				if (local_files.empty())
-					break;
-
-				while (!local_files.empty()) {
-					auto f = move(local_files.front());
-
-					local_files.pop_front();
-
-					if (f.data.has_value())
-						files2.emplace_back(f.filename, repo.blob_create_from_buffer(f.data.value()));
-					else
-						files2.emplace_back(f.filename, nullopt);
-				}
+				local_files.splice(local_files.end(), files);
 			}
 
-			if (!st.stop_requested())
-				sem.acquire();
-			else {
-				lock_guard lg(lock);
+			if (local_files.empty() && st.stop_requested())
+				break;
 
-				if (files.empty())
-					break;
+			while (!local_files.empty()) {
+				auto f = move(local_files.front());
+
+				local_files.pop_front();
+
+				if (f.data.has_value())
+					files2.emplace_back(f.filename, repo.blob_create_from_buffer(f.data.value()));
+				else
+					files2.emplace_back(f.filename, nullopt);
 			}
 		} while (true);
 	} catch (...) {
@@ -705,19 +697,9 @@ void git_update::start() {
 
 void git_update::stop() {
 	t.request_stop();
-
-	if (!sem.try_acquire())
-		sem.release();
-
 	t.join();
 
 	if (teptr)
 		rethrow_exception(teptr);
 }
 
-git_update::~git_update() {
-	t.request_stop();
-
-	if (!sem.try_acquire())
-		sem.release();
-}
