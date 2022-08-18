@@ -116,10 +116,9 @@ bool GitRepo::reference_name_to_id(git_oid* out, const string& name) {
 }
 
 git_commit_ptr GitRepo::commit_lookup(const git_oid* oid) {
-	unsigned int ret;
 	git_commit* tmp = nullptr;
 
-	if ((ret = git_commit_lookup(&tmp, repo.get(), oid)))
+	if (auto ret = git_commit_lookup(&tmp, repo.get(), oid))
 		throw git_exception(ret, "git_commit_lookup");
 
 	return git_commit_ptr{tmp};
