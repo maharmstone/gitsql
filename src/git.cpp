@@ -180,17 +180,16 @@ static filesystem::path get_object_filename(const filesystem::path& repopath, co
 }
 
 git_oid GitRepo::blob_create_from_buffer(string_view data) {
-	unsigned int ret;
 	git_oid blob;
 	unique_ptr<git_odb, decltype(&git_odb_free)> odb(nullptr, git_odb_free);
 
-	if ((ret = git_odb_hash(&blob, data.data(), data.length(), GIT_OBJECT_BLOB)))
+	if (auto ret = git_odb_hash(&blob, data.data(), data.length(), GIT_OBJECT_BLOB))
 		throw git_exception(ret, "git_odb_hash");
 
 	{
 		git_odb* tmp;
 
-		if ((ret = git_repository_odb(&tmp, repo.get())))
+		if (auto ret = git_repository_odb(&tmp, repo.get()))
 			throw git_exception(ret, "git_repository_odb");
 
 		odb.reset(tmp);
