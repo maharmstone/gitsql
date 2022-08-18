@@ -886,6 +886,12 @@ void get_current_user_details(string& name, string& email) {
 
 static void dump_partition_functions(tds::tds& tds, git_update& gu) {
 	struct partfunc {
+		partfunc(int32_t id, string_view name, bool boundary_value_on_right, string_view type, int max_length,
+				 int precision, int scale, string_view collation_name) :
+				 id(id), name(name), boundary_value_on_right(boundary_value_on_right), type(type),
+				 max_length(max_length), precision(precision), scale(scale), collation_name(collation_name) {
+		}
+
 		int32_t id;
 		string name;
 		bool boundary_value_on_right;
