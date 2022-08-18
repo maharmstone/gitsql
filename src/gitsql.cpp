@@ -1349,7 +1349,10 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 	update_git(repo, name, email, "Update", gu.files2, true, nullopt, branch);
 
 	if (!repo.is_bare() && repo.branch_is_head(branch)) {
-		git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+		git_checkout_options opts;
+
+		if (git_checkout_options_init(&opts, GIT_CHECKOUT_OPTIONS_VERSION))
+			throw runtime_error("git_checkout_options_init failed");
 
 		opts.checkout_strategy = GIT_CHECKOUT_FORCE;
 
