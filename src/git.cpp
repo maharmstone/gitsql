@@ -126,14 +126,13 @@ git_commit_ptr GitRepo::commit_lookup(const git_oid* oid) {
 
 git_oid GitRepo::commit_create(const GitSignature& author, const GitSignature& committer, const string& message, const GitTree& tree,
 							   git_commit* parent) {
-	unsigned int ret;
 	git_oid id;
 
 	if (parent) {
-		if ((ret = git_commit_create_v(&id, repo.get(), nullptr, author.sig.get(), committer.sig.get(), nullptr, message.c_str(), tree.tree.get(), 1, parent)))
+		if (auto ret = git_commit_create_v(&id, repo.get(), nullptr, author.sig.get(), committer.sig.get(), nullptr, message.c_str(), tree.tree.get(), 1, parent))
 			throw git_exception(ret, "git_commit_create_v");
 	} else {
-		if ((ret = git_commit_create_v(&id, repo.get(), nullptr, author.sig.get(), committer.sig.get(), nullptr, message.c_str(), tree.tree.get(), 0)))
+		if (auto ret = git_commit_create_v(&id, repo.get(), nullptr, author.sig.get(), committer.sig.get(), nullptr, message.c_str(), tree.tree.get(), 0))
 			throw git_exception(ret, "git_commit_create_v");
 	}
 
