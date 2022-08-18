@@ -556,9 +556,7 @@ GitIndex::GitIndex(const GitRepo& repo) {
 }
 
 void GitIndex::write_tree(git_oid* oid) {
-	unsigned int ret;
-
-	if ((ret = git_index_write_tree(oid, index.get())))
+	if (auto ret = git_index_write_tree(oid, index.get()))
 		throw git_exception(ret, "git_index_write_tree");
 }
 
