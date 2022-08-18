@@ -126,13 +126,13 @@ static char32_t char_val(string_view s) noexcept {
     } else if ((v & 0xf0) == 0xe0) {
         v &= 0xf;
         v <<= 12;
-        v |= ((uint8_t)s[1] & 0x3f) << 6;
+        v |= (char32_t)(((uint8_t)s[1] & 0x3f) << 6);
         v |= (uint8_t)s[2] & 0x3f;
     } else if ((v & 0xf8) == 0xf0) {
         v &= 0x7;
         v <<= 18;
-        v |= ((uint8_t)s[1] & 0x3f) << 6;
-        v |= ((uint8_t)s[2] & 0x3f) << 12;
+        v |= (char32_t)(((uint8_t)s[1] & 0x3f) << 6);
+        v |= (char32_t)(((uint8_t)s[2] & 0x3f) << 12);
         v |= (uint8_t)s[3] & 0x3f;
     }
 
