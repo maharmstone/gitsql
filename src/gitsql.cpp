@@ -1922,7 +1922,7 @@ int main(int argc, char* argv[])
 				bind_token = tds::utf8_to_utf16(bind_token_u8.value());
 #endif
 
-			int32_t commit_id;
+			unsigned int commit_id;
 
 			{
 #ifdef _WIN32
