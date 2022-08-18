@@ -617,9 +617,7 @@ GitBlob::operator string() const {
 }
 
 void GitRepo::checkout_head(const git_checkout_options* opts) {
-	unsigned int ret;
-
-	if ((ret = git_checkout_head(repo.get(), opts)))
+	if (auto ret = git_checkout_head(repo.get(), opts))
 		throw git_exception(ret, "git_checkout_head");
 }
 
