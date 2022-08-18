@@ -161,20 +161,17 @@ static void rename_open_file(HANDLE h, const filesystem::path& fn) {
 
 static filesystem::path get_object_filename(const filesystem::path& repopath, const git_oid& oid) {
 	filesystem::path file = repopath;
-	char fn[39];
 
 	file /= "objects";
 
-	sprintf(fn, "%02x", oid.id[0]);
-	file /= fn;
+	file /= fmt::format("{:02x}", oid.id[0]);
 
 	create_directory(file);
 
-	sprintf(fn, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-			oid.id[1], oid.id[2], oid.id[3], oid.id[4], oid.id[5], oid.id[6], oid.id[7], oid.id[8],
-			oid.id[9], oid.id[10], oid.id[11], oid.id[12], oid.id[13], oid.id[14], oid.id[15],
-			oid.id[16], oid.id[17], oid.id[18], oid.id[19]);
-	file /= fn;
+	file /= fmt::format("{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+						oid.id[1], oid.id[2], oid.id[3], oid.id[4], oid.id[5], oid.id[6], oid.id[7], oid.id[8],
+						oid.id[9], oid.id[10], oid.id[11], oid.id[12], oid.id[13], oid.id[14], oid.id[15],
+						oid.id[16], oid.id[17], oid.id[18], oid.id[19]);
 
 	return file;
 }
