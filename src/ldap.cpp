@@ -131,7 +131,7 @@ static int lutil_sasl_interact(LDAP*, unsigned int, void*, void* in) {
 #endif
 
 ldapobj::ldapobj() {
-	int err;
+	ldap_error::ldap_err_t err;
 
 #ifdef _WIN32
 	ld.reset(ldap_init(nullptr, LDAP_PORT));
