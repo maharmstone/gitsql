@@ -1567,7 +1567,10 @@ ORDER BY Git.id
 		}
 
 		if (!repo.is_bare() && repo.branch_is_head(r.branch.empty() ? "master" : r.branch)) {
-			git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+			git_checkout_options opts;
+
+			if (git_checkout_options_init(&opts, GIT_CHECKOUT_OPTIONS_VERSION))
+				throw runtime_error("git_checkout_options_init failed");
 
 			opts.checkout_strategy = GIT_CHECKOUT_FORCE;
 
