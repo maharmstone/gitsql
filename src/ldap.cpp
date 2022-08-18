@@ -187,16 +187,15 @@ ldapobj::ldapobj() {
 void ldapobj::find_naming_context() {
 	ldap_message res;
 	BerElement* ber = nullptr;
-	int err;
 
 	const char* atts[] = { "defaultNamingContext", nullptr };
 
 	{
 		LDAPMessage* tmp = nullptr;
 
-		err = ldap_search_ext_s(ld.get(), nullptr, LDAP_SCOPE_BASE, nullptr,
-								(char**)atts, false, nullptr, nullptr, nullptr,
-								0, &tmp);
+		auto err = ldap_search_ext_s(ld.get(), nullptr, LDAP_SCOPE_BASE, nullptr,
+									(char**)atts, false, nullptr, nullptr, nullptr,
+									0, &tmp);
 
 		res.reset(tmp);
 
