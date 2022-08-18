@@ -968,6 +968,10 @@ ORDER BY partition_functions.function_id, partition_range_values.boundary_id)");
 
 static void dump_partition_schemes(tds::tds& tds, git_update& gu) {
 	struct partscheme {
+		partscheme(int32_t id, string_view scheme_name, string_view func_name) :
+			id(id), scheme_name(scheme_name), func_name(func_name) {
+		}
+
 		int32_t id;
 		string scheme_name;
 		string func_name;
