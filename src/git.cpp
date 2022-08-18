@@ -596,9 +596,8 @@ git_object_t GitTreeEntry::type() {
 
 GitTree::GitTree(const GitRepo& repo, const string& rev) {
 	git_object* tmp = nullptr;
-	unsigned int ret;
 
-	if ((ret = git_revparse_single(&tmp, repo.repo.get(), rev.c_str())))
+	if (auto ret = git_revparse_single(&tmp, repo.repo.get(), rev.c_str()))
 		throw git_exception(ret, "git_revparse_single");
 
 	tree.reset((git_tree*)tmp);
