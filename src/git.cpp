@@ -97,9 +97,8 @@ git_tree_entry_ptr GitTree::entry_bypath(const string& path) {
 
 GitRepo::GitRepo(const string& dir) {
 	git_repository* tmp = nullptr;
-	unsigned int ret;
 
-	if ((ret = git_repository_open(&tmp, dir.c_str())))
+	if (auto ret = git_repository_open(&tmp, dir.c_str()))
 		throw git_exception(ret, "git_repository_open");
 
 	repo.reset(tmp);
