@@ -216,9 +216,9 @@ static string sid_to_string(span<const uint8_t> sid) {
 
 	first_part = (uint64_t)sid[0] << 40;
 	first_part |= (uint64_t)sid[1] << 32;
-	first_part |= sid[2] << 24;
-	first_part |= sid[3] << 16;
-	first_part |= sid[4] << 8;
+	first_part |= (uint64_t)sid[2] << 24;
+	first_part |= (uint64_t)sid[3] << 16;
+	first_part |= (uint64_t)sid[4] << 8;
 	first_part |= sid[5];
 
 	sid = sid.subspan(6);
