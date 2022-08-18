@@ -571,9 +571,7 @@ void GitIndex::remove_bypath(const string& fn) {
 }
 
 void GitIndex::clear() {
-	unsigned int ret;
-
-	if ((ret = git_index_clear(index.get())))
+	if (auto ret = git_index_clear(index.get()))
 		throw git_exception(ret, "git_index_clear");
 }
 
