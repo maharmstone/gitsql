@@ -566,9 +566,7 @@ void GitIndex::add_bypath(const string& fn) {
 }
 
 void GitIndex::remove_bypath(const string& fn) {
-	unsigned int ret;
-
-	if ((ret = git_index_remove_bypath(index.get(), fn.c_str())))
+	if (auto ret = git_index_remove_bypath(index.get(), fn.c_str()))
 		throw git_exception(ret, "git_index_remove_bypath");
 }
 
