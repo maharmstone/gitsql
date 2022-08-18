@@ -195,6 +195,10 @@ struct git_file {
 };
 
 struct git_file2 {
+	git_file2(std::string_view filename, const std::optional<git_oid>& oid) :
+		filename(filename), oid(oid) {
+	}
+
 	std::string filename;
 	std::optional<git_oid> oid;
 };
