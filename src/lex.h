@@ -828,6 +828,8 @@ struct fmt::formatter<enum lex> {
 };
 
 struct word {
+	word(enum lex type, std::string_view val) : type(type), val(val) { }
+
     enum lex type;
     std::string_view val;
 };
