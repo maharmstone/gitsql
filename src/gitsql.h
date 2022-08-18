@@ -34,7 +34,7 @@ private:
 
 class last_error : public std::exception {
 public:
-	last_error(std::string_view function, int le) {
+	last_error(std::string_view function, unsigned long le) {
 		std::string nice_msg;
 
 		{
