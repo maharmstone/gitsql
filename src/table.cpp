@@ -95,7 +95,7 @@ u16string brackets_escape(u16string_view s) {
 
 struct column {
 	column(const string& name, const string& type, int max_length, bool nullable, int precision,
-		   int scale, const tds::value& def, int column_id, bool is_identity, bool is_computed,
+		   int scale, const tds::value& def, unsigned int column_id, bool is_identity, bool is_computed,
 		   bool is_persisted, const string& computed_definition, const tds::value& collation) :
 		name(name), type(type), max_length(max_length), nullable(nullable), precision(precision),
 		scale(scale), def(def.is_null ? optional<string>(nullopt) : optional<string>(def)),
