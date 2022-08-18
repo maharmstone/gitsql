@@ -36,7 +36,7 @@ string munge_definition(string_view sql, string_view schema, string_view name,
 	if (words.front().type != lex::identifier)
 		return string{sql};
 
-	auto sv = sql.substr((words.front().val.data() + words.front().val.size()) - sql.data());
+	auto sv = sql.substr((size_t)((words.front().val.data() + words.front().val.size()) - sql.data()));
 
 	words.pop_front();
 
@@ -52,7 +52,7 @@ string munge_definition(string_view sql, string_view schema, string_view name,
 		if (words.front().type != lex::identifier)
 			return string{sql};
 
-		sv = sql.substr((words.front().val.data() + words.front().val.size()) - sql.data());
+		sv = sql.substr((size_t)((words.front().val.data() + words.front().val.size()) - sql.data()));
 
 		words.pop_front();
 
@@ -60,7 +60,7 @@ string munge_definition(string_view sql, string_view schema, string_view name,
 			return string{sql};
 	}
 
-	string sql2{string_view(sql).substr(0, create.val.data() - sql.data())};
+	string sql2{sql.data(), create.val.data()};
 
 	if (type == lex::PROCEDURE)
 		sql2.append("CREATE OR ALTER PROCEDURE ");
