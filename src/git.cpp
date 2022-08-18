@@ -547,10 +547,9 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 }
 
 GitIndex::GitIndex(const GitRepo& repo) {
-	unsigned int ret;
 	git_index* tmp = nullptr;
 
-	if ((ret = git_repository_index(&tmp, repo.repo.get())))
+	if (auto ret = git_repository_index(&tmp, repo.repo.get()))
 		throw git_exception(ret, "git_repository_index");
 
 	index.reset(tmp);
