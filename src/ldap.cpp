@@ -41,7 +41,13 @@ static unordered_map<string, pair<string, string>, string_hash, equal_to<>> ldap
 
 class ldap_error : public exception {
 public:
-	ldap_error(const string& func, int err) {
+#ifdef _WIN32
+	using ldap_err_t = unsigned long;
+#else
+	using ldap_err_t = int;
+#endif
+
+	ldap_error(const string& func, ldap_err_t err) {
 		auto errmsg = ldap_err2string(err);
 
 		if (errmsg)
