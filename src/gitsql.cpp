@@ -1055,6 +1055,11 @@ static string pages_to_data_size(int32_t pages) {
 
 static void dump_filegroups(tds::tds& tds, git_update& gu) {
 	struct fg_file {
+		fg_file(string_view name, string_view physical_name, int32_t size, int32_t max_size, int32_t growth, bool is_percent_growth) :
+			name(name), physical_name(physical_name), size(size), max_size(max_size), growth(growth),
+			is_percent_growth(is_percent_growth) {
+		}
+
 		string name;
 		string physical_name;
 		int32_t size;
@@ -1064,6 +1069,8 @@ static void dump_filegroups(tds::tds& tds, git_update& gu) {
 	};
 
 	struct fg {
+		fg(int32_t id, string_view name) : id(id), name(name) { }
+
 		int32_t id;
 		string name;
 		vector<fg_file> files;
