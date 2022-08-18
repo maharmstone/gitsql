@@ -604,10 +604,9 @@ GitTree::GitTree(const GitRepo& repo, const string& rev) {
 }
 
 GitBlob::GitBlob(const GitTree& tree, const string& path) {
-	unsigned int ret;
 	git_object* tmp = nullptr;
 
-	if ((ret = git_object_lookup_bypath(&tmp, (git_object*)tree.tree.get(), path.c_str(), GIT_OBJECT_BLOB)))
+	if (auto ret = git_object_lookup_bypath(&tmp, (git_object*)tree.tree.get(), path.c_str(), GIT_OBJECT_BLOB))
 		throw git_exception(ret, "git_object_lookup_bypath");
 
 	obj.reset(tmp);
