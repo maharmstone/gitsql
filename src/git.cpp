@@ -303,10 +303,9 @@ git_oid GitRepo::blob_create_from_buffer(string_view data) {
 }
 
 git_oid GitRepo::tree_create_updated(const GitTree& baseline, span<const git_tree_update> updates) {
-	unsigned int ret;
 	git_oid oid;
 
-	if ((ret = git_tree_create_updated(&oid, repo.get(), baseline.tree.get(), updates.size(), updates.data())))
+	if (auto ret = git_tree_create_updated(&oid, repo.get(), baseline.tree.get(), updates.size(), updates.data()))
 		throw git_exception(ret, "git_tree_create_updated");
 
 	return oid;
