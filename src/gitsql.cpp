@@ -1957,7 +1957,7 @@ int main(int argc, char* argv[])
 
 			write_object_ddl(tds, schema, object, bind_token, commit_id, filename, db);
 		} else if (cmd == "dump") {
-			int32_t repo_id;
+			unsigned int repo_id;
 
 			{
 #ifdef _WIN32
