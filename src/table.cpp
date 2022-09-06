@@ -356,7 +356,7 @@ FROM sys.indexes
 LEFT JOIN sys.index_columns ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
 LEFT JOIN sys.data_spaces ON data_spaces.data_space_id = indexes.data_space_id
 WHERE indexes.object_id = ? AND indexes.data_space_id != 0
-ORDER BY indexes.name, index_columns.index_column_id
+ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.index_column_id
 )", id);
 
 		// indices with data_space_id == 0 are in-memory indices(?)
@@ -423,7 +423,6 @@ ORDER BY indexes.name, index_columns.index_column_id
 					ind.data_space.reset();
 			}
 		}
-
 	} else {
 		const auto& pk = primary_index.value().get();
 		const auto& pkds = index_data_space(pk);
