@@ -1599,7 +1599,7 @@ public:
 
 		if (res == WAIT_FAILED)
 			throw last_error("WaitForSingleObject", GetLastError());
-        else if (res != WAIT_OBJECT_0)
+        else if (res != WAIT_OBJECT_0 && res != WAIT_ABANDONED)
             throw formatted_error("WaitForSingleObject returned {}", res);
 #else
 		h.reset(open("/tmp/gitsql_lock", O_CREAT, 0666));
