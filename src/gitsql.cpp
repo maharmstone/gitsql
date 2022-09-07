@@ -1196,59 +1196,73 @@ WHERE data_space_id = 0)");
 }
 
 static void dump_options(tds::tds& tds, git_update& gu) {
-	tds::batch sq(tds, "SELECT compatibility_level, collation_name, user_access, is_read_only, is_auto_close_on, is_auto_shrink_on, is_supplemental_logging_enabled, snapshot_isolation_state, is_read_committed_snapshot_on, recovery_model, page_verify_option, is_auto_create_stats_on, is_auto_create_stats_incremental_on, is_auto_update_stats_on, is_auto_update_stats_async_on, is_ansi_null_default_on, is_ansi_nulls_on, is_ansi_padding_on, is_ansi_warnings_on, is_arithabort_on, is_concat_null_yields_null_on, is_numeric_roundabort_on, is_quoted_identifier_on, is_recursive_triggers_on, is_cursor_close_on_commit_on, is_local_cursor_default, is_fulltext_enabled, is_trustworthy_on, is_db_chaining_on, is_parameterization_forced, is_master_key_encrypted_by_server, is_query_store_on, is_published, is_subscribed, is_merge_published, is_distributor, is_sync_with_backup, is_broker_enabled, is_date_correlation_on, is_cdc_enabled, is_encrypted, is_honor_broker_priority_on, containment, is_memory_optimized_elevate_to_snapshot_on FROM sys.databases WHERE database_id = DB_ID()");
-
-	if (!sq.fetch_row())
-		throw runtime_error("Unable to dump database options.");
-
 	auto j = json::object();
 
-	// FIXME - string descriptions
+	{
+		tds::batch sq(tds, "SELECT compatibility_level, collation_name, user_access, is_read_only, is_auto_close_on, is_auto_shrink_on, is_supplemental_logging_enabled, snapshot_isolation_state, is_read_committed_snapshot_on, recovery_model, page_verify_option, is_auto_create_stats_on, is_auto_create_stats_incremental_on, is_auto_update_stats_on, is_auto_update_stats_async_on, is_ansi_null_default_on, is_ansi_nulls_on, is_ansi_padding_on, is_ansi_warnings_on, is_arithabort_on, is_concat_null_yields_null_on, is_numeric_roundabort_on, is_quoted_identifier_on, is_recursive_triggers_on, is_cursor_close_on_commit_on, is_local_cursor_default, is_fulltext_enabled, is_trustworthy_on, is_db_chaining_on, is_parameterization_forced, is_master_key_encrypted_by_server, is_query_store_on, is_published, is_subscribed, is_merge_published, is_distributor, is_sync_with_backup, is_broker_enabled, is_date_correlation_on, is_cdc_enabled, is_encrypted, is_honor_broker_priority_on, containment, is_memory_optimized_elevate_to_snapshot_on FROM sys.databases WHERE database_id = DB_ID()");
 
-	j["compatibility_level"] = (unsigned int)sq[0];
-	j["collation_name"] = (string)sq[1];
-	j["user_access"] = (unsigned int)sq[2];
-	j["read_only"] = (unsigned int)sq[3] != 0;
-	j["auto_close"] = (unsigned int)sq[4] != 0;
-	j["auto_shrink"] = (unsigned int)sq[5] != 0;
-	j["supplemental_logging_enabled"] = (unsigned int)sq[6] != 0;
-	j["snapshot_isolation_state"] = (unsigned int)sq[7];
-	j["read_committed_snapshot"] = (unsigned int)sq[8] != 0;
-	j["recovery_model"] = (unsigned int)sq[9];
-	j["page_verify_option"] = (unsigned int)sq[10];
-	j["auto_create_stats"] = (unsigned int)sq[11] != 0;
-	j["auto_create_stats_incremental"] = (unsigned int)sq[12] != 0;
-	j["auto_update_stats"] = (unsigned int)sq[13] != 0;
-	j["auto_update_stats_async"] = (unsigned int)sq[14] != 0;
-	j["ansi_null_default"] = (unsigned int)sq[15] != 0;
-	j["ansi_nulls"] = (unsigned int)sq[16] != 0;
-	j["ansi_padding"] = (unsigned int)sq[17] != 0;
-	j["ansi_warnings"] = (unsigned int)sq[18] != 0;
-	j["arithabort"] = (unsigned int)sq[19] != 0;
-	j["concat_null_yield_null"] = (unsigned int)sq[20] != 0;
-	j["numeric_roundabort"] = (unsigned int)sq[21] != 0;
-	j["quoted_identifier"] = (unsigned int)sq[22] != 0;
-	j["recursive_triggers"] = (unsigned int)sq[23] != 0;
-	j["cursor_close_on_commit"] = (unsigned int)sq[24] != 0;
-	j["local_cursor_default"] = (unsigned int)sq[25] != 0;
-	j["fulltext_enabled"] = (unsigned int)sq[26] != 0;
-	j["trustworthy"] = (unsigned int)sq[27] != 0;
-	j["db_chaining"] = (unsigned int)sq[28] != 0;
-	j["parameterization_forced"] = (unsigned int)sq[29] != 0;
-	j["master_key_encrypted_by_server"] = (unsigned int)sq[30] != 0;
-	j["query_store"] = (unsigned int)sq[31] != 0;
-	j["published"] = (unsigned int)sq[32] != 0;
-	j["subscribed"] = (unsigned int)sq[33] != 0;
-	j["merge_published"] = (unsigned int)sq[34] != 0;
-	j["distributor"] = (unsigned int)sq[35] != 0;
-	j["sync_with_backup"] = (unsigned int)sq[36] != 0;
-	j["broker_enabled"] = (unsigned int)sq[37] != 0;
-	j["date_correlation"] = (unsigned int)sq[38] != 0;
-	j["cdc_enabled"] = (unsigned int)sq[39] != 0;
-	j["encrypted"] = (unsigned int)sq[40] != 0;
-	j["honour_broker_priority"] = (unsigned int)sq[41] != 0;
-	j["containment"] = (unsigned int)sq[42];
-	j["memory_optimized_elevate_to_snapshot"] = (unsigned int)sq[43] != 0;
+		if (!sq.fetch_row())
+			throw runtime_error("Unable to dump database options.");
+
+		// FIXME - string descriptions
+
+		j["compatibility_level"] = (unsigned int)sq[0];
+		j["collation_name"] = (string)sq[1];
+		j["user_access"] = (unsigned int)sq[2];
+		j["read_only"] = (unsigned int)sq[3] != 0;
+		j["auto_close"] = (unsigned int)sq[4] != 0;
+		j["auto_shrink"] = (unsigned int)sq[5] != 0;
+		j["supplemental_logging_enabled"] = (unsigned int)sq[6] != 0;
+		j["snapshot_isolation_state"] = (unsigned int)sq[7];
+		j["read_committed_snapshot"] = (unsigned int)sq[8] != 0;
+		j["recovery_model"] = (unsigned int)sq[9];
+		j["page_verify_option"] = (unsigned int)sq[10];
+		j["auto_create_stats"] = (unsigned int)sq[11] != 0;
+		j["auto_create_stats_incremental"] = (unsigned int)sq[12] != 0;
+		j["auto_update_stats"] = (unsigned int)sq[13] != 0;
+		j["auto_update_stats_async"] = (unsigned int)sq[14] != 0;
+		j["ansi_null_default"] = (unsigned int)sq[15] != 0;
+		j["ansi_nulls"] = (unsigned int)sq[16] != 0;
+		j["ansi_padding"] = (unsigned int)sq[17] != 0;
+		j["ansi_warnings"] = (unsigned int)sq[18] != 0;
+		j["arithabort"] = (unsigned int)sq[19] != 0;
+		j["concat_null_yield_null"] = (unsigned int)sq[20] != 0;
+		j["numeric_roundabort"] = (unsigned int)sq[21] != 0;
+		j["quoted_identifier"] = (unsigned int)sq[22] != 0;
+		j["recursive_triggers"] = (unsigned int)sq[23] != 0;
+		j["cursor_close_on_commit"] = (unsigned int)sq[24] != 0;
+		j["local_cursor_default"] = (unsigned int)sq[25] != 0;
+		j["fulltext_enabled"] = (unsigned int)sq[26] != 0;
+		j["trustworthy"] = (unsigned int)sq[27] != 0;
+		j["db_chaining"] = (unsigned int)sq[28] != 0;
+		j["parameterization_forced"] = (unsigned int)sq[29] != 0;
+		j["master_key_encrypted_by_server"] = (unsigned int)sq[30] != 0;
+		j["query_store"] = (unsigned int)sq[31] != 0;
+		j["published"] = (unsigned int)sq[32] != 0;
+		j["subscribed"] = (unsigned int)sq[33] != 0;
+		j["merge_published"] = (unsigned int)sq[34] != 0;
+		j["distributor"] = (unsigned int)sq[35] != 0;
+		j["sync_with_backup"] = (unsigned int)sq[36] != 0;
+		j["broker_enabled"] = (unsigned int)sq[37] != 0;
+		j["date_correlation"] = (unsigned int)sq[38] != 0;
+		j["cdc_enabled"] = (unsigned int)sq[39] != 0;
+		j["encrypted"] = (unsigned int)sq[40] != 0;
+		j["honour_broker_priority"] = (unsigned int)sq[41] != 0;
+		j["containment"] = (unsigned int)sq[42];
+		j["memory_optimized_elevate_to_snapshot"] = (unsigned int)sq[43] != 0;
+	}
+
+	auto sc = json::object();
+
+	{
+		tds::batch sq(tds, "SELECT name, value FROM sys.database_scoped_configurations");
+
+		while (sq.fetch_row()) {
+			sc[(string)sq[0]] = sq[1];
+		}
+	}
+
+	j["scoped_configurations"] = sc;
 
 	gu.add_file("options.json", j.dump(3) + "\n");
 }
