@@ -1499,7 +1499,7 @@ static void flush_git(const string& db_server) {
 		tds.run("SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; DELETE FROM Restricted.Git WHERE (SELECT COUNT(*) FROM Restricted.GitFiles WHERE id = Git.id) = 0");
 
 		{
-			tds::query sq(tds, "SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; SELECT Git.repo, GitRepo.dir, GitRepo.branch FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
+			tds::batch sq(tds, "SELECT Git.repo, GitRepo.dir, GitRepo.branch FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
 
 			while (sq.fetch_row()) {
 				repos.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2]);
@@ -1523,15 +1523,13 @@ static void flush_git(const string& db_server) {
 
 			tds::tds tds(db_server, db_username, db_password, db_app);
 
+			tds.run("SET LOCK_TIMEOUT 0; SET XACT_ABORT ON;");
+
 			// FIXME - get this working with git_update thread?
 
 			{
 				tds::trans trans(tds);
-				tds::query sq(tds, R"(
-SET LOCK_TIMEOUT 0;
-SET XACT_ABORT ON;
-
-SELECT
+				tds::query sq(tds, R"(SELECT
 	Git.id,
 	Git.username,
 	Git.description,
