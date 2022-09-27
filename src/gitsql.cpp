@@ -2076,7 +2076,8 @@ static void install(tds::tds& tds) {
 
 				fmt::print("Created repository {} for {} in {}.\n", repo_num.value(), db, path);
 
-				// FIXME - do initial dump
+				fmt::print("Doing initial dump.\n");
+				dump_sql2(tds, repo_num.value());
 			}
 
 			// FIXME - install trigger
