@@ -2120,7 +2120,28 @@ static void install(tds::tds& tds) {
 
 	tds.run("USE master");
 
-	// FIXME - install xp_cmd
+	bool has_xp_cmd;
+
+	{
+		tds::query sq(tds, "SELECT object_id FROM master.sys.extended_procedures WHERE name = ?", "xp_cmd");
+
+		has_xp_cmd = sq.fetch_row();
+	}
+
+	if (has_xp_cmd)
+		fmt::print("Extended stored procedure xp_cmd already installed.\n");
+	else if (!filesystem::exists("xp_cmd.dll"))
+		fmt::print(stderr, "Not installing extended stored procedure as xp_cmd.dll not found.\n");
+	else {
+		auto dll = filesystem::absolute(filesystem::path("xp_cmd.dll"));
+
+		fmt::print("Installing extended stored procedure xp_cmd.\n");
+
+		tds::rpc r(tds, "sp_addextendedproc", "xp_cmd", dll.string());
+
+		while (r.fetch_row()) {
+		}
+	}
 
 	if (!object_exists(tds, "dbo.git_repo")) {
 		fmt::print("Creating table master.dbo.git_repo.\n");
