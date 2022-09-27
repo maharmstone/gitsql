@@ -1876,12 +1876,33 @@ static bool object_exists(tds::tds& tds, string_view name) {
 }
 
 static string prompt_str(string_view msg) {
+#ifdef _WIN32
+	auto con = GetStdHandle(STD_INPUT_HANDLE);
+	char16_t s[255];
+	DWORD mode, read;
+#else
 	char* buf = nullptr;
 	size_t n;
 	string s;
+#endif
 
 	fmt::print("{} ", msg);
 
+#ifdef _WIN32
+	if (!GetConsoleMode(con, &mode))
+		throw last_error("GetConsoleMode", GetLastError());
+
+	if (!ReadConsoleW(con, s, sizeof(s) / sizeof(char16_t), &read, nullptr))
+		throw last_error("ReadConsole", GetLastError());
+
+	auto sv = u16string_view(s, read);
+
+	while (!sv.empty() && (sv.back() == u'\r' || sv.back() == u'\n')) {
+		sv.remove_suffix(1);
+	}
+
+	return tds::utf16_to_utf8(sv);
+#else
 	auto ret = getline(&buf, &n, stdin);
 
 	if (ret == -1) {
@@ -1897,6 +1918,7 @@ static string prompt_str(string_view msg) {
 	}
 
 	return s;
+#endif
 }
 
 static void install_trigger(tds::tds& tds, string_view db, const filesystem::path& exe,
