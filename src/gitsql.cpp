@@ -1899,8 +1899,9 @@ static string prompt_str(string_view msg) {
 	return s;
 }
 
-static void install_trigger(tds::tds& tds, string_view db, string_view exe, unsigned int repo_num) {
-	auto escaped_exe = tds::value{exe}.to_literal();
+static void install_trigger(tds::tds& tds, string_view db, const filesystem::path& exe,
+							unsigned int repo_num) {
+	auto escaped_exe = tds::value{exe.string()}.to_literal();
 
 	tds.run(tds::no_check{"USE " + brackets_escape(db)});
 
@@ -2094,6 +2095,25 @@ END;)"s});
 	tds.run("ENABLE TRIGGER git_trigger ON DATABASE");
 }
 
+static filesystem::path get_exe_path() {
+#ifdef _WIN32
+	WCHAR path[MAX_PATH];
+
+	if (GetModuleFileNameW(nullptr, path, sizeof(path) / sizeof(WCHAR)) == 0)
+		throw last_error("GetModuleFileName", GetLastError());
+
+	return path;
+#else
+	char buf[PATH_MAX];
+
+	auto ret = readlink("/proc/self/exe", buf, sizeof(buf));
+	if (ret < 0)
+		throw errno_error("readlink", errno);
+
+	return string(buf, buf + ret);
+#endif
+}
+
 static void install(tds::tds& tds) {
 	git_libgit2_init();
 	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
@@ -2277,7 +2297,7 @@ static void install(tds::tds& tds) {
 			}
 
 			fmt::print("Installing trigger.\n");
-			install_trigger(tds, db, "I:\\Manual Data Files\\GitSQL\\gitsql.exe", repo_num.value()); // FIXME - EXE
+			install_trigger(tds, db, get_exe_path(), repo_num.value());
 
 			if (do_dump) {
 				fmt::print("Doing initial dump.\n");
