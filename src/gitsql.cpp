@@ -1510,10 +1510,10 @@ static void flush_git(const string& db_server) {
 
 	{
 		tds::tds tds(db_server, db_username, db_password, db_app);
-		tds.run("SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; DELETE FROM Restricted.Git WHERE (SELECT COUNT(*) FROM Restricted.GitFiles WHERE id = Git.id) = 0");
+		tds.run("SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; DELETE FROM master.dbo.git WHERE (SELECT COUNT(*) FROM master.dbo.git_files WHERE id = Git.id) = 0");
 
 		{
-			tds::batch sq(tds, "SELECT Git.repo, GitRepo.dir, GitRepo.branch FROM (SELECT repo FROM Restricted.Git GROUP BY repo) Git JOIN Restricted.GitRepo ON GitRepo.id=Git.repo");
+			tds::batch sq(tds, "SELECT git.repo, git_repo.dir, git_repo.branch FROM (SELECT repo FROM master.dbo.git GROUP BY repo) git JOIN master.dbo.git_repo ON git_repo.id = Git.repo");
 
 			while (sq.fetch_row()) {
 				repos.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2]);
@@ -1544,17 +1544,17 @@ static void flush_git(const string& db_server) {
 			{
 				tds::trans trans(tds);
 				tds::query sq(tds, R"(SELECT
-	Git.id,
-	Git.username,
-	Git.description,
-	Git.dto,
-	GitFiles.file_id,
-	GitFiles.filename,
-	GitFiles.data
-FROM Restricted.Git
-JOIN Restricted.GitFiles ON GitFiles.id = Git.id
-WHERE Git.id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?) OR (Git.tran_id = (SELECT tran_id FROM Restricted.Git WHERE id = (SELECT MIN(id) FROM Restricted.Git WHERE repo = ?)) AND Git.repo = ?)
-ORDER BY Git.id
+	git.id,
+	git.username,
+	git.description,
+	git.dto,
+	git_files.file_id,
+	git_files.filename,
+	git_files.data
+FROM master.dbo.git
+JOIN master.dbo.git_files ON git_files.id = git.id
+WHERE git.id = (SELECT MIN(id) FROM master.dbo.git WHERE repo = ?) OR (git.tran_id = (SELECT tran_id FROM master.dbo.git WHERE id = (SELECT MIN(id) FROM master.dbo.git WHERE repo = ?)) AND git.repo = ?)
+ORDER BY git.id
 )", r.id, r.id, r.id);
 
 				if (!sq.fetch_row())
@@ -1633,8 +1633,8 @@ ORDER BY Git.id
 				tds::trans trans(tds);
 
 				while (!delete_commits.empty()) {
-					tds.run("DELETE FROM Restricted.Git WHERE id=?", delete_commits.front());
-					tds.run("DELETE FROM Restricted.GitFiles WHERE id=?", delete_commits.front());
+					tds.run("DELETE FROM master.dbo.git WHERE id=?", delete_commits.front());
+					tds.run("DELETE FROM master.dbo.git_files WHERE id=?", delete_commits.front());
 					delete_commits.pop_front();
 				}
 
@@ -1830,17 +1830,17 @@ static void write_object_ddl(tds::tds& tds, u16string_view schema, u16string_vie
 	if (!db.empty() && db != old_db)
 		tds.run(tds::no_check{u"USE " + brackets_escape(old_db)});
 
-	tds.run("INSERT INTO Restricted.GitFiles(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, tds::to_bytes(ddl));
+	tds.run("INSERT INTO master.dbo.git_files(id, filename, data) VALUES(?, ?, ?)", commit_id, filename, tds::to_bytes(ddl));
 }
 
 static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 	string repo_dir, db, server, branch;
 
 	{
-		tds::query sq(tds, "SELECT dir, db, server, branch FROM Restricted.GitRepo WHERE id = ?", repo_num);
+		tds::query sq(tds, "SELECT dir, db, server, branch FROM master.dbo.git_repo WHERE id = ?", repo_num);
 
 		if (!sq.fetch_row())
-			throw formatted_error("Repo {} not found in Restricted.GitRepo.", repo_num);
+			throw formatted_error("Repo {} not found in master.dbo.git_repo.", repo_num);
 
 		repo_dir = (string)sq[0];
 		db = (string)sq[1];

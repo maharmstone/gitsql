@@ -310,10 +310,10 @@ void dump_master(string_view db_server, unsigned int repo_num, span<const std::b
 
 	{
 		tds::tds tds(db_server, db_username, db_password, db_app);
-		tds::query sq(tds, "SELECT dir, server, branch FROM Restricted.GitRepo WHERE id = ?", repo_num);
+		tds::query sq(tds, "SELECT dir, server, branch FROM master.dbo.git_repo WHERE id = ?", repo_num);
 
 		if (!sq.fetch_row())
-			throw formatted_error("Repo {} not found in Restricted.GitRepo.", repo_num);
+			throw formatted_error("Repo {} not found in master.dbo.git_repo.", repo_num);
 
 		repo_dir = (string)sq[0];
 		master_server = (string)sq[1];
