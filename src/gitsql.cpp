@@ -1900,16 +1900,7 @@ static string prompt_str(string_view msg) {
 }
 
 static void install_trigger(tds::tds& tds, string_view db, string_view exe, unsigned int repo_num) {
-	string escaped_exe;
-
-	escaped_exe.reserve(exe.size());
-
-	for (auto c : exe) {
-		if (c == '\'')
-			escaped_exe += "''";
-		else
-			escaped_exe += c;
-	}
+	auto escaped_exe = tds::value{exe}.to_literal();
 
 	tds.run(tds::no_check{"USE " + brackets_escape(db)});
 
@@ -2087,7 +2078,7 @@ IF @type = N'DROP_FUNCTION' OR @type = N'DROP_PROCEDURE' OR @type = N'DROP_TABLE
 ELSE
 BEGIN
 	SET @args = N'object "' + @schema + N'" "' + @tbl + N'" ' + CONVERT(NVARCHAR, @id) + N' "' + @schema + N'/' + @dir + N'/' + @tbl + N'.sql" ' + @dbname;
-	EXEC @ret = master.dbo.xp_cmd ')" + escaped_exe + R"(', @args;
+	EXEC @ret = master.dbo.xp_cmd )" + escaped_exe + R"(, @args;
 
 	IF @ret != 0
 		THROW 50000, 'GitSQL failed.', 1;
