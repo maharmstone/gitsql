@@ -1911,7 +1911,7 @@ static void install(tds::tds& tds) {
 		fmt::print("Creating table master.dbo.git_repo.\n");
 
 		tds.run(R"(CREATE TABLE dbo.git_repo (
-	id INT NOT NULL PRIMARY KEY,
+	id INT IDENTITY NOT NULL PRIMARY KEY,
 	dir VARCHAR(260) NOT NULL,
 	db VARCHAR(255) NULL,
 	branch VARCHAR(50) NULL,
@@ -1992,17 +1992,17 @@ static void install(tds::tds& tds) {
 				continue;
 			}
 
-			optional<unsigned int> repo;
+			optional<unsigned int> repo_num;
 
 			{
 				tds::query sq(tds, "SELECT id FROM master.dbo.git_repo WHERE db = ? AND server IS NULL", db);
 
 				if (sq.fetch_row())
-					repo = (unsigned int)sq[0];
+					repo_num = (unsigned int)sq[0];
 			}
 
-			if (repo.has_value())
-				fmt::print("Repository {} already set up for database {}.\n", repo.value(), db);
+			if (repo_num.has_value())
+				fmt::print("Repository {} already set up for database {}.\n", repo_num.value(), db);
 			else {
 				fmt::print("Setting up repository for database {}.\n", db);
 
@@ -2058,8 +2058,25 @@ static void install(tds::tds& tds) {
 						throw formatted_error("git_repository_open returned {}", ret);
 				}
 
-				// FIXME - ask for branch
-				// FIXME - INSERT into master.dbo.git_repo
+				optional<string> branchv;
+
+				auto branch = prompt_str("Branch name (leave blank for master):");
+
+				if (!branch.empty())
+					branchv = branch;
+
+				{
+					tds::query sq(tds, "INSERT INTO master.dbo.git_repo(dir, db, branch) OUTPUT inserted.id VALUES(?, ?, ?)", path, db, branchv);
+
+					if (!sq.fetch_row())
+						throw runtime_error("Could not get ID of new repository.");
+
+					repo_num = (unsigned int)sq[0];
+				}
+
+				fmt::print("Created repository {} for {} in {}.\n", repo_num.value(), db, path);
+
+				// FIXME - do initial dump
 			}
 
 			// FIXME - install trigger
