@@ -1875,7 +1875,34 @@ static bool object_exists(tds::tds& tds, string_view name) {
 	return !sq[0].is_null;
 }
 
+static string prompt_str(string_view msg) {
+	char* buf = nullptr;
+	size_t n;
+	string s;
+
+	fmt::print("{} ", msg);
+
+	auto ret = getline(&buf, &n, stdin);
+
+	if (ret == -1) {
+		free(buf);
+		throw errno_error("getline", errno);
+	}
+
+	s.assign(buf, ret);
+	free(buf);
+
+	while (!s.empty() && (s.back() == '\r' || s.back() == '\n')) {
+		s.pop_back();
+	}
+
+	return s;
+}
+
 static void install(tds::tds& tds) {
+	git_libgit2_init();
+	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
+
 	tds.run("USE master");
 
 	// FIXME - install xp_cmd
@@ -1925,9 +1952,119 @@ static void install(tds::tds& tds) {
 	fmt::print("Granting INSERT permissions on dbo.git_files to public.\n");
 	tds.run("GRANT INSERT ON dbo.git_files TO public");
 
-	// FIXME - prompt for databases to add Git to
-	// FIXME - set up repo
-	// FIXME - install trigger
+	vector<string> dbs;
+
+	{
+		tds::query sq(tds, "SELECT name FROM master.sys.databases WHERE name NOT IN ('tempdb', 'master') ORDER BY name");
+
+		while (sq.fetch_row()) {
+			dbs.emplace_back((string)sq[0]);
+		}
+	}
+
+	if (!dbs.empty()) {
+		string db_string;
+
+		for (const auto& s : dbs) {
+			if (!db_string.empty())
+				db_string += ", ";
+
+			db_string += s;
+		}
+
+		while (true) {
+			fmt::print("\n");
+			auto db = prompt_str("Add to database? Choices are " + db_string + ". Press Enter to skip.");
+
+			if (db.empty())
+				break;
+
+			bool found = false;
+			for (const auto& s : dbs) {
+				if (s == db) {
+					found = true;
+					break;
+				}
+			}
+
+			if (!found) {
+				fmt::print(stderr, "Database {} not found.\n", db);
+				continue;
+			}
+
+			optional<unsigned int> repo;
+
+			{
+				tds::query sq(tds, "SELECT id FROM master.dbo.git_repo WHERE db = ? AND server IS NULL", db);
+
+				if (sq.fetch_row())
+					repo = (unsigned int)sq[0];
+			}
+
+			if (repo.has_value())
+				fmt::print("Repository {} already set up for database {}.\n", repo.value(), db);
+			else {
+				fmt::print("Setting up repository for database {}.\n", db);
+
+				string path;
+
+				while (true) {
+					path = prompt_str("Repository path:");
+
+					if (path.empty())
+						continue;
+
+					try {
+						if (filesystem::exists(path))
+							fmt::print("Directory {} already exists.\n", path);
+						else {
+							fmt::print("Creating directory {}.\n", path);
+
+							filesystem::create_directories(path);
+						}
+					} catch (const exception& e) {
+						fmt::print(stderr, "{}\n", e.what());
+						continue;
+					}
+
+					break;
+				}
+
+				// FIXME - ask if it should be bare?
+
+				git_repository_ptr repo;
+				int ret;
+
+				{
+					git_repository* tmp = nullptr;
+					ret = git_repository_open(&tmp, path.c_str());
+					repo.reset(tmp);
+				}
+
+				if (ret == GIT_OK)
+					fmt::print("Repository already exists.\n");
+				else if (ret != GIT_ENOTFOUND)
+					throw formatted_error("git_repository_open returned {}", ret);
+				else {
+					fmt::print("Creating new repository in {}.\n", path);
+
+					{
+						git_repository* tmp = nullptr;
+						ret = git_repository_init(&tmp, path.c_str(), false);
+						repo.reset(tmp);
+					}
+
+					if (ret)
+						throw formatted_error("git_repository_open returned {}", ret);
+				}
+
+				// FIXME - ask for branch
+				// FIXME - INSERT into master.dbo.git_repo
+			}
+
+			// FIXME - install trigger
+		}
+	}
 
 	// FIXME - set up SQL Agent jobs
 }
