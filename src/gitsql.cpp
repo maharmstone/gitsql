@@ -1899,6 +1899,210 @@ static string prompt_str(string_view msg) {
 	return s;
 }
 
+static void install_trigger(tds::tds& tds, string_view db, string_view exe, unsigned int repo_num) {
+	string escaped_exe;
+
+	escaped_exe.reserve(exe.size());
+
+	for (auto c : exe) {
+		if (c == '\'')
+			escaped_exe += "''";
+		else
+			escaped_exe += c;
+	}
+
+	tds.run(tds::no_check{"USE " + brackets_escape(db)});
+
+	tds.run(tds::no_check{R"(
+CREATE OR ALTER TRIGGER git_trigger ON DATABASE
+AFTER CREATE_FUNCTION, CREATE_PROCEDURE, CREATE_TABLE, CREATE_VIEW, ALTER_FUNCTION, ALTER_PROCEDURE, ALTER_TABLE, ALTER_VIEW, DROP_FUNCTION, DROP_PROCEDURE, DROP_TABLE, DROP_VIEW, CREATE_INDEX, DROP_INDEX, CREATE_TRIGGER, ALTER_TRIGGER, DROP_TRIGGER, RENAME
+AS
+BEGIN
+
+SET NOCOUNT ON;
+
+DECLARE @repo INT = )"s + to_string(repo_num) + R"(;
+
+DECLARE @type NVARCHAR(100), @tbl NVARCHAR(100), @schema NVARCHAR(100), @idx NVARCHAR(100), @login VARCHAR(255), @id INT;
+DECLARE @args NVARCHAR(255), @dir NVARCHAR(20), @msg NVARCHAR(255), @dbname NVARCHAR(100), @objtype NVARCHAR(20), @oldname NVARCHAR(100);
+DECLARE @ret INT;
+DECLARE @idtbl TABLE(id INT);
+
+SELECT @type = EVENTDATA().value('(/EVENT_INSTANCE/EventType)[1]','nvarchar(100)');
+SELECT @tbl = EVENTDATA().value('(/EVENT_INSTANCE/ObjectName)[1]','nvarchar(100)');
+SELECT @schema = EVENTDATA().value('(/EVENT_INSTANCE/SchemaName)[1]','nvarchar(100)');
+SELECT @login = EVENTDATA().value('(/EVENT_INSTANCE/LoginName)[1]','nvarchar(100)');
+SELECT @dbname = EVENTDATA().value('(/EVENT_INSTANCE/DatabaseName)[1]','nvarchar(100)');
+
+IF @type = N'CREATE_INDEX' OR @type = N'DROP_INDEX' OR @type = N'CREATE_TRIGGER' OR @type = N'ALTER_TRIGGER' OR @type = N'DROP_TRIGGER'
+BEGIN
+	IF EVENTDATA().value('(/EVENT_INSTANCE/TargetObjectType)[1]','nvarchar(100)') != N'TABLE'
+		RETURN;
+
+	SET @idx = @tbl;
+	SET @tbl = EVENTDATA().value('(/EVENT_INSTANCE/TargetObjectName)[1]','nvarchar(100)');
+END;
+
+IF @type = N'RENAME'
+BEGIN
+	SET @objtype = EVENTDATA().value('(/EVENT_INSTANCE/ObjectType)[1]','nvarchar(100)');
+
+	IF @objtype != 'TABLE' AND @objtype != 'VIEW' AND @objtype != 'FUNCTION' AND @objtype != 'PROCEDURE' AND @objtype != 'INDEX'
+		RETURN;
+
+	IF @objtype = 'INDEX'
+	BEGIN
+		SET @oldname = @tbl;
+		SET @idx = EVENTDATA().value('(/EVENT_INSTANCE/NewObjectName)[1]','nvarchar(100)');
+		SET @tbl = EVENTDATA().value('(/EVENT_INSTANCE/TargetObjectName)[1]','nvarchar(100)');
+	END
+	ELSE
+	BEGIN
+		SET @oldname = @tbl;
+		SET @tbl = EVENTDATA().value('(/EVENT_INSTANCE/NewObjectName)[1]','nvarchar(100)');
+	END;
+END;
+
+IF @type = N'CREATE_FUNCTION'
+BEGIN
+	SET @dir = 'functions';
+	SET @msg = N'CREATE FUNCTION ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'CREATE_PROCEDURE'
+BEGIN
+	SET @dir = 'procedures';
+	SET @msg = N'CREATE PROCEDURE ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'CREATE_TABLE'
+BEGIN
+	SET @dir = 'tables';
+	SET @msg = N'CREATE TABLE ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'CREATE_VIEW'
+BEGIN
+	SET @dir = 'views';
+	SET @msg = N'CREATE VIEW ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'ALTER_FUNCTION'
+BEGIN
+	SET @dir = 'functions';
+	SET @msg = N'ALTER FUNCTION ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'ALTER_PROCEDURE'
+BEGIN
+	SET @dir = 'procedures';
+	SET @msg = N'ALTER PROCEDURE ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'ALTER_TABLE'
+BEGIN
+	SET @dir = 'tables';
+	SET @msg = N'ALTER TABLE ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'ALTER_VIEW'
+BEGIN
+	SET @dir = 'views';
+	SET @msg = N'ALTER VIEW ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'DROP_FUNCTION'
+BEGIN
+	SET @dir = 'functions';
+	SET @msg = N'DROP FUNCTION ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'DROP_PROCEDURE'
+BEGIN
+	SET @dir = 'procedures';
+	SET @msg = N'DROP PROCEDURE ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'DROP_TABLE'
+BEGIN
+	SET @dir = 'tables';
+	SET @msg = N'DROP TABLE ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'DROP_VIEW'
+BEGIN
+	SET @dir = 'views';
+	SET @msg = N'DROP VIEW ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'CREATE_INDEX'
+BEGIN
+	SET @dir = 'tables';
+	SET @msg = N'CREATE INDEX ' + @idx + N' ON ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'DROP_INDEX'
+BEGIN
+	SET @dir = 'tables';
+	SET @msg = N'DROP INDEX ' + @idx + N' ON ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'CREATE_TRIGGER'
+BEGIN
+	SET @dir = 'tables';
+	SET @msg = N'CREATE TRIGGER ' + @idx + N' ON ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'ALTER_TRIGGER'
+BEGIN
+	SET @dir = 'tables';
+	SET @msg = N'ALTER TRIGGER ' + @idx + N' ON ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'DROP_TRIGGER'
+BEGIN
+	SET @dir = 'tables';
+	SET @msg = N'DROP TRIGGER ' + @idx + N' ON ' + @schema + N'.' + @tbl;
+END
+ELSE IF @type = N'RENAME'
+BEGIN
+	IF @objtype = 'TABLE'
+	BEGIN
+		SET @dir = 'tables';
+		SET @msg = N'RENAME TABLE ' + @schema + N'.' + @oldname + N' TO ' + @tbl;
+	END
+	ELSE IF @objtype = 'VIEW'
+	BEGIN
+		SET @dir = 'views';
+		SET @msg = N'RENAME VIEW ' + @schema + N'.' + @oldname + N' TO ' + @tbl;
+	END
+	ELSE IF @objtype = 'FUNCTION'
+	BEGIN
+		SET @dir = 'functions';
+		SET @msg = N'RENAME FUNCTION ' + @schema + N'.' + @oldname + N' TO ' + @tbl;
+	END
+	ELSE IF @objtype = 'PROCEDURE'
+	BEGIN
+		SET @dir = 'procedures';
+		SET @msg = N'RENAME PROCEDURE ' + @schema + N'.' + @oldname + N' TO ' + @tbl;
+	END
+	ELSE IF @objtype = 'INDEX'
+	BEGIN
+		SET @dir = 'tables';
+		SET @msg = N'RENAME INDEX ' + @oldname + N' ON ' + @schema + N'.' + @tbl + N' TO ' + @idx;
+	END;
+END;
+
+BEGIN TRANSACTION;
+
+INSERT INTO master.dbo.git(repo, username, description, dto, tran_id) OUTPUT inserted.id INTO @idtbl VALUES(@repo, @login, @msg, SYSDATETIMEOFFSET(), CURRENT_TRANSACTION_ID());
+SET @id = (SELECT id FROM @idtbl);
+
+IF @type = N'DROP_FUNCTION' OR @type = N'DROP_PROCEDURE' OR @type = N'DROP_TABLE' OR @type = N'DROP_VIEW'
+	INSERT INTO master.dbo.git_files(id, filename, data) VALUES(@id, @schema + N'/' + @dir + N'/' + @tbl + N'.sql', NULL);
+ELSE
+BEGIN
+	SET @args = N'object "' + @schema + N'" "' + @tbl + N'" ' + CONVERT(NVARCHAR, @id) + N' "' + @schema + N'/' + @dir + N'/' + @tbl + N'.sql" ' + @dbname;
+	EXEC @ret = master.dbo.xp_cmd ')" + escaped_exe + R"(', @args;
+
+	IF @ret != 0
+		THROW 50000, 'GitSQL failed.', 1;
+
+	IF @type = N'RENAME' AND @objtype != N'INDEX'
+		INSERT INTO master.dbo.git_files(id, filename, data) VALUES(@id, @schema + N'/' + @dir + N'/' + @oldname + N'.sql', NULL);
+END;
+
+COMMIT;
+
+END;)"s});
+
+	tds.run("ENABLE TRIGGER git_trigger ON DATABASE");
+}
+
 static void install(tds::tds& tds) {
 	git_libgit2_init();
 	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
@@ -2001,6 +2205,8 @@ static void install(tds::tds& tds) {
 					repo_num = (unsigned int)sq[0];
 			}
 
+			bool do_dump = false;
+
 			if (repo_num.has_value())
 				fmt::print("Repository {} already set up for database {}.\n", repo_num.value(), db);
 			else {
@@ -2076,11 +2282,16 @@ static void install(tds::tds& tds) {
 
 				fmt::print("Created repository {} for {} in {}.\n", repo_num.value(), db, path);
 
+				do_dump = true;
+			}
+
+			fmt::print("Installing trigger.\n");
+			install_trigger(tds, db, "I:\\Manual Data Files\\GitSQL\\gitsql.exe", repo_num.value()); // FIXME - EXE
+
+			if (do_dump) {
 				fmt::print("Doing initial dump.\n");
 				dump_sql2(tds, repo_num.value());
 			}
-
-			// FIXME - install trigger
 		}
 	}
 
