@@ -1866,6 +1866,72 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 	}
 }
 
+static bool object_exists(tds::tds& tds, string_view name) {
+	tds::query sq(tds, "SELECT OBJECT_ID(?)", name);
+
+	if (!sq.fetch_row())
+		throw formatted_error("Could not check whether {} exists.", name);
+
+	return !sq[0].is_null;
+}
+
+static void install(tds::tds& tds) {
+	tds.run("USE master");
+
+	// FIXME - install xp_cmd
+
+	if (!object_exists(tds, "dbo.git_repo")) {
+		fmt::print("Creating table master.dbo.git_repo.\n");
+
+		tds.run(R"(CREATE TABLE dbo.git_repo (
+	id INT NOT NULL PRIMARY KEY,
+	dir VARCHAR(260) NOT NULL,
+	db VARCHAR(255) NULL,
+	branch VARCHAR(50) NULL,
+	server VARCHAR(15) NULL
+);)");
+	} else
+		fmt::print("Table master.dbo.git_repo already exists.\n");
+
+	if (!object_exists(tds, "dbo.git")) {
+		fmt::print("Creating table master.dbo.git.\n");
+
+		tds.run(R"(CREATE TABLE dbo.git (
+	id INT IDENTITY NOT NULL PRIMARY KEY,
+	repo INT NOT NULL FOREIGN KEY REFERENCES dbo.git_repo(id),
+	username NVARCHAR(MAX) NOT NULL,
+	description VARCHAR(MAX) NOT NULL,
+	dto DATETIMEOFFSET(0) NOT NULL,
+	tran_id BIGINT NULL
+);)");
+	} else
+		fmt::print("Table master.dbo.git already exists.\n");
+
+	if (!object_exists(tds, "dbo.git_files")) {
+		fmt::print("Creating table master.dbo.git_files.\n");
+
+		tds.run(R"(CREATE TABLE dbo.git_files (
+	file_id INT IDENTITY NOT NULL PRIMARY KEY,
+	id INT NOT NULL FOREIGN KEY REFERENCES dbo.git(id),
+	filename VARCHAR(260),
+	data VARBINARY(MAX) NULL
+);)");
+	} else
+		fmt::print("Table master.dbo.git_files already exists.\n");
+
+	fmt::print("Granting INSERT permissions on dbo.git to public.\n");
+	tds.run("GRANT INSERT ON dbo.git TO public");
+
+	fmt::print("Granting INSERT permissions on dbo.git_files to public.\n");
+	tds.run("GRANT INSERT ON dbo.git_files TO public");
+
+	// FIXME - prompt for databases to add Git to
+	// FIXME - set up repo
+	// FIXME - install trigger
+
+	// FIXME - set up SQL Agent jobs
+}
+
 #ifdef _WIN32
 
 static optional<u16string> get_environment_variable(const u16string& name) {
@@ -1910,6 +1976,7 @@ static void print_usage() {
     gitsql dump <repo-id>
     gitsql show <object>
     gitsql show <database> <object id>
+    gitsql install <server>
 )");
 }
 
@@ -1932,7 +1999,7 @@ int main(int argc, char* argv[])
 	string_view cmd = argv[1];
 #endif
 
-	if (cmd != "flush" && cmd != "object" && cmd != "dump" && cmd != "show" && cmd != "master") {
+	if (cmd != "flush" && cmd != "object" && cmd != "dump" && cmd != "show" && cmd != "master" && cmd != "install") {
 		print_usage();
 		return 1;
 	}
@@ -1981,6 +2048,25 @@ int main(int argc, char* argv[])
 		if (db_password_env.has_value())
 			db_password = db_password_env.value();
 #endif
+
+		if (cmd == "install") {
+			if (argc < 3)
+				throw runtime_error("Too few arguments.");
+
+#ifdef _WIN32
+			u16string_view u16server = (char16_t*)argv[2];
+
+			auto server = tds::utf16_to_utf8(u16server);
+#else
+			string_view server = argv[2];
+#endif
+
+			tds::tds tds(server, db_username, db_password, db_app);
+
+			install(tds);
+
+			return 0;
+		}
 
 		if (cmd == "flush") {
 			lockfile lf;
