@@ -215,3 +215,39 @@ string dequote(string_view sql) {
 
 	return ret;
 }
+
+string cleanup_sql(string_view sql) {
+	auto sql2 = dequote(sql);
+	auto words = parse(sql2);
+	string ret;
+
+	ret.reserve(sql2.size());
+
+	// FIXME - remove unneeded brackets around conditions
+	// FIXME - put spaces around < and > etc.
+
+	// remove brackets around numbers
+
+	do {
+		bool changed = false;
+
+		for (auto it = words.begin(); it != words.end(); it++) {
+			const auto& w = *it;
+
+			if (w.type == lex::number && it != words.begin() && prev(it)->type == lex::open_bracket && it != words.end() && next(it)->type == lex::close_bracket) {
+				words.erase(prev(it));
+				words.erase(next(it));
+				changed = true;
+			}
+		}
+
+		if (!changed)
+			break;
+	} while (true);
+
+	for (const auto& w : words) {
+		ret.append(w.val);
+	}
+
+	return ret;
+}

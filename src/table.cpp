@@ -760,7 +760,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 				}
 
 				if (ind.filter.has_value())
-					ddl += " WHERE " + ind.filter.value();
+					ddl += " WHERE " + cleanup_sql(ind.filter.value());
 
 				if (ind.data_space)
 					ddl += " ON " + index_data_space(ind);
