@@ -1175,19 +1175,19 @@ WHERE data_space_id = 0)");
 		sql += brackets_escape(tds::utf16_to_utf8(tds.db_name()));
 		sql += " ADD LOG FILE (\n";
 
-		sql += "    NAME = " + brackets_escape(l.name) + ",\n";
-		sql += "    FILENAME = " + tds::value{l.physical_name}.to_literal() + ",\n";
-		sql += "    SIZE = " + pages_to_data_size(l.size) + ",\n";
+		sql += "\tNAME = " + brackets_escape(l.name) + ",\n";
+		sql += "\tFILENAME = " + tds::value{l.physical_name}.to_literal() + ",\n";
+		sql += "\tSIZE = " + pages_to_data_size(l.size) + ",\n";
 
 		if (l.max_size == -1)
-			sql += "    MAXSIZE = UNLIMITED,\n";
+			sql += "\tMAXSIZE = UNLIMITED,\n";
 		else
-			sql += "    MAXSIZE = " + pages_to_data_size(l.max_size) + ",\n";
+			sql += "\tMAXSIZE = " + pages_to_data_size(l.max_size) + ",\n";
 
 		if (l.is_percent_growth)
-			sql += "    FILEGROWTH = " + to_string(l.growth) + "%\n";
+			sql += "\tFILEGROWTH = " + to_string(l.growth) + "%\n";
 		else
-			sql += "    FILEGROWTH = " + pages_to_data_size(l.growth) + "\n";
+			sql += "\tFILEGROWTH = " + pages_to_data_size(l.growth) + "\n";
 
 		sql += ");\n";
 
