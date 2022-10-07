@@ -521,7 +521,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 				ddl += " " + type_to_string(col.type, col.max_length, col.precision, col.scale);
 
 				if (col.def.has_value())
-					ddl += " DEFAULT" + col.def.value();
+					ddl += " DEFAULT(" + cleanup_sql(col.def.value()) + ")";
 
 				if (col.is_identity) {
 					ddl += " IDENTITY";
