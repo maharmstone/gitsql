@@ -1116,19 +1116,19 @@ ORDER BY filegroups.data_space_id, database_files.file_id)");
 
 			sql += "(\n";
 
-			sql += "    NAME = " + brackets_escape(f2.name) + ",\n";
-			sql += "    FILENAME = " + tds::value{f2.physical_name}.to_literal() + ",\n";
-			sql += "    SIZE = " + pages_to_data_size(f2.size) + ",\n";
+			sql += "\tNAME = " + brackets_escape(f2.name) + ",\n";
+			sql += "\tFILENAME = " + tds::value{f2.physical_name}.to_literal() + ",\n";
+			sql += "\tSIZE = " + pages_to_data_size(f2.size) + ",\n";
 
 			if (f2.max_size == -1)
-				sql += "    MAXSIZE = UNLIMITED,\n";
+				sql += "\tMAXSIZE = UNLIMITED,\n";
 			else
-				sql += "    MAXSIZE = " + pages_to_data_size(f2.max_size) + ",\n";
+				sql += "\tMAXSIZE = " + pages_to_data_size(f2.max_size) + ",\n";
 
 			if (f2.is_percent_growth)
-				sql += "    FILEGROWTH = " + to_string(f2.growth) + "%\n";
+				sql += "\tFILEGROWTH = " + to_string(f2.growth) + "%\n";
 			else
-				sql += "    FILEGROWTH = " + pages_to_data_size(f2.growth) + "\n";
+				sql += "\tFILEGROWTH = " + pages_to_data_size(f2.growth) + "\n";
 
 			sql += ")";
 
