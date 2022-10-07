@@ -245,6 +245,15 @@ string cleanup_sql(string_view sql) {
 			break;
 	} while (true);
 
+	// remove brackets around whole thing
+
+	while (words.size() >= 2 && words.front().type == lex::open_bracket && words.back().type == lex::close_bracket) {
+		words.pop_front();
+		words.pop_back();
+	}
+
+	// put back as string
+
 	for (const auto& w : words) {
 		ret.append(w.val);
 	}
