@@ -511,7 +511,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 
 			first = false;
 
-			ddl += "    " + brackets_escape(col.name);
+			ddl += "\t" + brackets_escape(col.name);
 
 			if (!col.is_computed) {
 				ddl += " " + type_to_string(col.type, col.max_length, col.precision, col.scale);
