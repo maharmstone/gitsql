@@ -125,8 +125,9 @@ struct index_column {
 };
 
 struct table_index {
-	table_index(const string& name, unsigned int type, bool is_unique, bool is_primary_key, optional<string> data_space, bool is_default_data_space) :
-		name(name), type(type), is_unique(is_unique), is_primary_key(is_primary_key), data_space(data_space), is_default_data_space(is_default_data_space) { }
+	table_index(const string& name, unsigned int type, bool is_unique, bool is_primary_key, const optional<string>& data_space, bool is_default_data_space, const optional<string>& filter) :
+		name(name), type(type), is_unique(is_unique), is_primary_key(is_primary_key), data_space(data_space), is_default_data_space(is_default_data_space),
+		filter(filter) { }
 
 	string name;
 	unsigned int type;
@@ -135,6 +136,7 @@ struct table_index {
 	optional<string> data_space;
 	bool is_default_data_space;
 	bool needs_explicit = false;
+	optional<string> filter;
 };
 
 struct constraint {
@@ -351,7 +353,8 @@ SELECT indexes.name,
 	data_spaces.name,
 	indexes.index_id,
 	index_columns.partition_ordinal,
-	data_spaces.is_default
+	data_spaces.is_default,
+	indexes.filter_definition
 FROM sys.indexes
 LEFT JOIN sys.index_columns ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
 LEFT JOIN sys.data_spaces ON data_spaces.data_space_id = indexes.data_space_id
@@ -365,6 +368,7 @@ ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.index_column_i
 			bool found = false;
 			auto col_id = (unsigned int)sq[4];
 			auto is_included = (unsigned int)sq[6] != 0;
+			auto filter = sq[11].is_null ? optional<string>{nullopt} : optional<string>{sq[11]};
 
 			if (!last_name || (string)sq[0] != last_name.value()) {
 				auto data_space = (string)sq[7];
@@ -373,13 +377,13 @@ ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.index_column_i
 
 				last_name = (string)sq[0];
 				indices.emplace_back(last_name.value(), (unsigned int)sq[1], (unsigned int)sq[2] != 0, is_primary_key,
-									 data_space, is_default_data_space);
+									 data_space, is_default_data_space, filter);
 
 				if (is_primary_key)
 					primary_index = indices.back();
 			}
 
-			if (is_included) {
+			if (is_included || filter.has_value()) {
 				indices.back().needs_explicit = true;
 				has_explicit_indices = true;
 			}
@@ -754,6 +758,9 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 
 					ddl += ")";
 				}
+
+				if (ind.filter.has_value())
+					ddl += " WHERE " + ind.filter.value();
 
 				if (ind.data_space)
 					ddl += " ON " + index_data_space(ind);
