@@ -545,7 +545,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 
 							first_con = false;
 
-							ddl += " CHECK" + con.definition;
+							ddl += " CHECK (" + cleanup_sql(con.definition) + ")";
 						}
 					}
 
@@ -637,7 +637,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 
 	for (const auto& con : constraints) {
 		if (con.column_id == 0)
-			ddl += ",\n    CHECK" + con.definition;
+			ddl += ",\n    CHECK (" + cleanup_sql(con.definition) + ")";
 	}
 
 	for (const auto& fk : foreign_keys) {
