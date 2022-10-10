@@ -600,7 +600,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 					}
 				}
 			} else {
-				ddl += " AS " + dequote(col.computed_definition);
+				ddl += " AS " + cleanup_sql(col.computed_definition);
 
 				if (col.is_persisted)
 					ddl += " PERSISTED";
