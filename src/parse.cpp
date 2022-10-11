@@ -235,6 +235,34 @@ string cleanup_sql(string_view sql) {
 			const auto& w = *it;
 
 			if (w.type == lex::number && it != words.begin() && prev(it)->type == lex::open_bracket && it != words.end() && next(it)->type == lex::close_bracket) {
+				// don't munge CHAR(5) etc.
+				if (prev(it) != words.begin()) {
+					optional<decltype(words.begin())> last_nonws = prev(it, 2);
+
+					while (last_nonws.has_value() && last_nonws.value()->type == lex::whitespace) {
+						if (last_nonws.value() == words.begin()) {
+							last_nonws = nullopt;
+							break;
+						}
+
+						last_nonws = prev(last_nonws.value());
+					}
+
+					if (last_nonws.has_value() && last_nonws.value()->type == lex::identifier) {
+						string s{last_nonws.value()->val};
+
+						for (auto& c : s) {
+							if (c >= 'a' && c <= 'z')
+								c = c - 'a' + 'A';
+						}
+
+						if (s == "CHAR" || s == "NCHAR" || s == "VARCHAR" || s == "NVARCHAR" || s == "BINARY" || s == "VARBINARY" ||
+							s == "TIME" || s == "DATETIME2" || s == "DATETIMEOFFSET") {
+							continue;
+						}
+					}
+				}
+
 				words.erase(prev(it));
 				words.erase(next(it));
 				changed = true;
