@@ -1718,7 +1718,7 @@ static string object_ddl2(tds::tds& tds, string_view type, string_view orig_ddl,
 	else if (type == "P")
 		ddl = munge_definition(orig_ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), lex::PROCEDURE);
 	else if (type == "FN" || type == "TF" || type == "IF")
-		ddl = munge_definition(ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), lex::FUNCTION);
+		ddl = munge_definition(orig_ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), lex::FUNCTION);
 
 	ddl = fix_whitespace(ddl);
 
