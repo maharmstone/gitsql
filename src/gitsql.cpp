@@ -2451,14 +2451,14 @@ int main(int argc, char* argv[])
 
 		if (!db_server_env.has_value())
 			db_server = "localhost"; // SQL Import Wizard doesn't provide DB_RMTSERVER
-			else {
-				db_server = db_server_env.value();
+		else {
+			db_server = db_server_env.value();
 
-				if (db_server == "(local)") // SQL Agent does this
-					db_server = "localhost";
-			}
+			if (db_server == "(local)") // SQL Agent does this
+				db_server = "localhost";
+		}
 
-			auto db_username_env = get_environment_variable("DB_USERNAME");
+		auto db_username_env = get_environment_variable("DB_USERNAME");
 
 		if (db_username_env.has_value())
 			db_username = db_username_env.value();
