@@ -770,23 +770,28 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 		}
 	}
 
+	bool has_trig = false;
+
 	{
 		tds::query sq(tds, R"(
 SELECT sql_modules.definition, triggers.is_disabled, triggers.name
 FROM sys.triggers
 JOIN sys.sql_modules ON sql_modules.object_id = triggers.object_id
-WHERE triggers.parent_id = ?)", id);
+WHERE triggers.parent_id = ?)", id); // FIXME - needs ORDER BY
 
 		while (sq.fetch_row()) {
 			auto trig = (string)sq[0];
 			bool disabled = (unsigned int)sq[1] != 0;
 
+			// FIXME - fix square brackets
 			replace_all(trig, "\r\n", "\n");
 
 			ddl += "\nGO\n" + trig;
 
 			if (disabled)
 				ddl += "\nDISABLE TRIGGER " + brackets_escape((string)sq[2]) + " ON " + escaped_name + ";\nGO";
+
+			has_trig = true;
 		}
 	}
 
@@ -803,8 +808,13 @@ WHERE major_id = ? AND
 			fulldump = true;
 	}
 
-	if (fulldump)
+	if (fulldump) {
+		if (has_trig)
+			ddl += "\n";
+
+		ddl += "\nEXEC sys.sp_addextendedproperty @name = 'fulldump', @value = '1', @level0type = 'SCHEMA', @level0name = " + tds::value{schema}.to_literal() + ", @level1type = 'TABLE', @level1name = " + tds::value{table}.to_literal() + ";\nGO\n";
 		ddl += "\n" + dump_table(tds, escaped_name);
+	}
 
 	return ddl;
 }
