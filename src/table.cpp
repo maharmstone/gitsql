@@ -795,26 +795,49 @@ WHERE triggers.parent_id = ?)", id); // FIXME - needs ORDER BY
 		}
 	}
 
+	vector<tuple<optional<string>, string, string>> exprop;
+
 	{
 		tds::query sq(tds, R"(
-SELECT * FROM sys.extended_properties
-WHERE major_id = ? AND
-	minor_id = 0 AND
-	class = 1 AND
-	name = 'fulldump'
+SELECT columns.name, extended_properties.name, extended_properties.value
+FROM sys.extended_properties
+LEFT JOIN sys.columns ON columns.object_id = extended_properties.major_id AND
+	columns.column_id = extended_properties.minor_id
+WHERE extended_properties.class = 1 AND
+	extended_properties.major_id = ?
+ORDER BY extended_properties.minor_id,
+	extended_properties.name
 )", id);
 
-		if (sq.fetch_row())
-			fulldump = true;
+		while (sq.fetch_row()) {
+			exprop.emplace_back(sq[0].is_null ? optional<string>{nullopt} : (string)sq[0],
+								(string)sq[1], (string)sq[2]);
+
+			if ((string)sq[1] == "fulldump")
+				fulldump = true;
+		}
 	}
 
-	if (fulldump) {
+	if (!exprop.empty()) {
 		if (has_trig)
 			ddl += "\n";
 
-		ddl += "\nEXEC sys.sp_addextendedproperty @name = 'fulldump', @value = '1', @level0type = 'SCHEMA', @level0name = " + tds::value{schema}.to_literal() + ", @level1type = 'TABLE', @level1name = " + tds::value{table}.to_literal() + ";\nGO\n";
-		ddl += "\n" + dump_table(tds, escaped_name);
+		ddl += "\n";
+
+		for (const auto& p : exprop) {
+			ddl += "EXEC sys.sp_addextendedproperty @name = " + tds::value{get<1>(p)}.to_literal() +", @value = " + tds::value{get<2>(p)}.to_literal() + ", @level0type = 'SCHEMA', @level0name = " + tds::value{schema}.to_literal() + ", @level1type = 'TABLE', @level1name = " + tds::value{table}.to_literal();
+
+			if (get<0>(p).has_value())
+				ddl += ", @level2type = 'COLUMN', @level2name = " + tds::value{get<0>(p).value()}.to_literal();
+
+			ddl += ";\n";
+		}
+
+		ddl += "GO\n";
 	}
+
+	if (fulldump)
+		ddl += "\n" + dump_table(tds, escaped_name);
 
 	return ddl;
 }
