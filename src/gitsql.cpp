@@ -1373,7 +1373,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 			filename += "types/";
 
 		if (obj.type == "U" || obj.type == "TT")
-			obj.def = table_ddl(tds, obj.id);
+			obj.def = table_ddl(tds, obj.id, false);
 		else if (obj.type == "V")
 			obj.def = munge_definition(obj.def, obj.schema, obj.name, lex::VIEW);
 		else if (obj.type == "P")
@@ -1708,11 +1708,11 @@ private:
 };
 
 static string object_ddl2(tds::tds& tds, string_view type, string_view orig_ddl, int64_t id, u16string_view schema,
-						  u16string_view object, bool has_perms) {
+						  u16string_view object, bool has_perms, bool nolock) {
 	string ddl;
 
 	if (type == "U") // table
-		ddl = table_ddl(tds, id);
+		ddl = table_ddl(tds, id, nolock);
 	else if (type == "V")
 		ddl = munge_definition(orig_ddl, tds::utf16_to_utf8(schema), tds::utf16_to_utf8(object), lex::VIEW);
 	else if (type == "P")
@@ -1776,7 +1776,7 @@ WHERE objects.name = ? AND objects.schema_id = SCHEMA_ID(?))", object, schema);
 		ddl = (string)sq[3];
 	}
 
-	return object_ddl2(tds, type, ddl, id, schema, object, has_perms);
+	return object_ddl2(tds, type, ddl, id, schema, object, has_perms, false);
 }
 
 static string object_ddl_id(tds::tds& tds, int64_t id) {
@@ -1787,11 +1787,11 @@ static string object_ddl_id(tds::tds& tds, int64_t id) {
 	{
 		tds::query sq(tds, R"(SELECT objects.name,
 	RTRIM(objects.type),
-	CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END,
+	CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WITH (NOLOCK) WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END,
 	sql_modules.definition,
 	SCHEMA_NAME(objects.schema_id)
-FROM sys.objects
-LEFT JOIN sys.sql_modules ON sql_modules.object_id = objects.object_id
+FROM sys.objects WITH (NOLOCK)
+LEFT JOIN sys.sql_modules WITH (NOLOCK) ON sql_modules.object_id = objects.object_id
 WHERE objects.object_id = ?)", id);
 
 		if (!sq.fetch_row())
@@ -1804,7 +1804,7 @@ WHERE objects.object_id = ?)", id);
 		schema = (u16string)sq[4];
 	}
 
-	return object_ddl2(tds, type, ddl, id, schema, name, has_perms);
+	return object_ddl2(tds, type, ddl, id, schema, name, has_perms, true);
 }
 
 static void write_object_ddl(tds::tds& tds, u16string_view schema, u16string_view object,

@@ -91,7 +91,7 @@ std::string get_current_username();
 void get_current_user_details(std::string& name, std::string& email);
 
 // table.cpp
-std::string table_ddl(tds::tds& tds, int64_t id);
+std::string table_ddl(tds::tds& tds, int64_t id, bool nolock);
 std::string brackets_escape(std::string_view s);
 std::u16string brackets_escape(std::u16string_view s);
 std::string type_to_string(std::string_view name, int max_length, int precision, int scale);

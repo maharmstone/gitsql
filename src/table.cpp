@@ -263,7 +263,7 @@ string type_to_string(string_view name, int max_length, int precision, int scale
 	return ret;
 }
 
-string table_ddl(tds::tds& tds, int64_t id) {
+string table_ddl(tds::tds& tds, int64_t id, bool nolock) {
 	int64_t seed_value, increment_value;
 	string table, schema, type;
 	vector<column> columns;
@@ -273,19 +273,23 @@ string table_ddl(tds::tds& tds, int64_t id) {
 	string escaped_name, ddl;
 	bool has_explicit_indices = false, fulldump = false;
 	optional<string> table_data_space;
+	string hint;
+
+	if (nolock)
+		hint = " WITH (NOLOCK)";
 
 	{
-		tds::query sq(tds, R"(
+		tds::query sq(tds, tds::no_check{R"(
 SELECT objects.name,
 	schemas.name,
 	identity_columns.seed_value,
 	identity_columns.increment_value,
 	objects.type
-FROM sys.objects
-JOIN sys.schemas ON schemas.schema_id = objects.schema_id
-LEFT JOIN sys.identity_columns ON identity_columns.object_id = objects.object_id
+FROM sys.objects)" + hint + R"(
+JOIN sys.schemas)" + hint + R"( ON schemas.schema_id = objects.schema_id
+LEFT JOIN sys.identity_columns)" + hint + R"( ON identity_columns.object_id = objects.object_id
 WHERE objects.object_id = ?
-)", id);
+)"}, id);
 
 		if (!sq.fetch_row())
 			throw formatted_error("Cannot find name for object ID {}.", id);
@@ -308,7 +312,7 @@ WHERE objects.object_id = ?
 	}
 
 	{
-		tds::query sq (tds, R"(
+		tds::query sq (tds, tds::no_check{R"(
 SELECT columns.name,
 	CASE WHEN types.is_user_defined = 0 THEN UPPER(types.name) ELSE types.name END,
 	columns.max_length,
@@ -322,13 +326,13 @@ SELECT columns.name,
 	computed_columns.is_persisted,
 	computed_columns.definition,
 	CASE WHEN columns.collation_name != CONVERT(VARCHAR(MAX),DATABASEPROPERTYEX(DB_NAME(), 'Collation')) THEN columns.collation_name END
-FROM sys.columns
-JOIN sys.types ON types.user_type_id = columns.user_type_id
-LEFT JOIN sys.default_constraints ON default_constraints.parent_object_id = columns.object_id AND default_constraints.parent_column_id  = columns.column_id
-LEFT JOIN sys.computed_columns ON computed_columns.object_id = columns.object_id AND computed_columns.column_id = columns.column_id
+FROM sys.columns)" + hint + R"(
+JOIN sys.types)" + hint + R"( ON types.user_type_id = columns.user_type_id
+LEFT JOIN sys.default_constraints)" + hint + R"( ON default_constraints.parent_object_id = columns.object_id AND default_constraints.parent_column_id  = columns.column_id
+LEFT JOIN sys.computed_columns)" + hint + R"( ON computed_columns.object_id = columns.object_id AND computed_columns.column_id = columns.column_id
 WHERE columns.object_id = ?
 ORDER BY columns.column_id
-)", id);
+)"}, id);
 
 		while (sq.fetch_row()) {
 			columns.emplace_back((string)sq[0], (string)sq[1], (int)sq[2], (int)sq[3] != 0, (int)sq[4], (int)sq[5],
@@ -342,7 +346,7 @@ ORDER BY columns.column_id
 	{
 		optional<string> last_name;
 
-		tds::query sq(tds, R"(
+		tds::query sq(tds, tds::no_check{R"(
 SELECT indexes.name,
 	indexes.type,
 	indexes.is_unique,
@@ -355,12 +359,12 @@ SELECT indexes.name,
 	index_columns.partition_ordinal,
 	data_spaces.is_default,
 	indexes.filter_definition
-FROM sys.indexes
-LEFT JOIN sys.index_columns ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
-LEFT JOIN sys.data_spaces ON data_spaces.data_space_id = indexes.data_space_id
+FROM sys.indexes)" + hint + R"(
+LEFT JOIN sys.index_columns)" + hint + R"( ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
+LEFT JOIN sys.data_spaces)" + hint + R"( ON data_spaces.data_space_id = indexes.data_space_id
 WHERE indexes.object_id = ? AND indexes.data_space_id != 0
 ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.index_column_id
-)", id);
+)"}, id);
 
 		// indices with data_space_id == 0 are in-memory indices(?)
 
@@ -449,7 +453,7 @@ ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.index_column_i
 	}
 
 	{
-		tds::query sq(tds, "SELECT definition, parent_column_id FROM sys.check_constraints WHERE parent_object_id = ? ORDER BY name", id);
+		tds::query sq(tds, tds::no_check{"SELECT definition, parent_column_id FROM sys.check_constraints" + hint + " WHERE parent_object_id = ? ORDER BY name"}, id);
 
 		while (sq.fetch_row()) {
 			constraints.emplace_back((string)sq[0], (unsigned int)sq[1]);
@@ -459,14 +463,20 @@ ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.index_column_i
 	{
 		int64_t last_num = 0;
 
-		tds::query sq(tds, R"(
-SELECT foreign_key_columns.constraint_object_id, foreign_key_columns.parent_column_id, OBJECT_SCHEMA_NAME(foreign_key_columns.referenced_object_id), OBJECT_NAME(foreign_key_columns.referenced_object_id), columns.name, foreign_keys.delete_referential_action, foreign_keys.update_referential_action
-FROM sys.foreign_key_columns
-JOIN sys.columns ON columns.object_id = foreign_key_columns.referenced_object_id AND columns.column_id = foreign_key_columns.referenced_column_id
-JOIN sys.foreign_keys ON foreign_keys.object_id = foreign_key_columns.constraint_object_id
+		tds::query sq(tds, tds::no_check{R"(
+SELECT foreign_key_columns.constraint_object_id,
+	foreign_key_columns.parent_column_id,
+	OBJECT_SCHEMA_NAME(foreign_key_columns.referenced_object_id),
+	OBJECT_NAME(foreign_key_columns.referenced_object_id),
+	columns.name,
+	foreign_keys.delete_referential_action,
+	foreign_keys.update_referential_action
+FROM sys.foreign_key_columns)" + hint + R"(
+JOIN sys.columns)" + hint + R"( ON columns.object_id = foreign_key_columns.referenced_object_id AND columns.column_id = foreign_key_columns.referenced_column_id
+JOIN sys.foreign_keys)" + hint + R"( ON foreign_keys.object_id = foreign_key_columns.constraint_object_id
 WHERE foreign_key_columns.parent_object_id = ?
 ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constraint_column_id
-)", id);
+)"}, id);
 
 		while (sq.fetch_row()) {
 			if (last_num != (int64_t)sq[0]) {
@@ -773,11 +783,11 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 	bool has_trig = false;
 
 	{
-		tds::query sq(tds, R"(
+		tds::query sq(tds, tds::no_check{R"(
 SELECT sql_modules.definition, triggers.is_disabled, triggers.name
-FROM sys.triggers
-JOIN sys.sql_modules ON sql_modules.object_id = triggers.object_id
-WHERE triggers.parent_id = ?)", id); // FIXME - needs ORDER BY
+FROM sys.triggers)" + hint + R"(
+JOIN sys.sql_modules)" + hint + R"( ON sql_modules.object_id = triggers.object_id
+WHERE triggers.parent_id = ?)"}, id); // FIXME - needs ORDER BY
 
 		while (sq.fetch_row()) {
 			auto trig = (string)sq[0];
@@ -798,16 +808,16 @@ WHERE triggers.parent_id = ?)", id); // FIXME - needs ORDER BY
 	vector<tuple<optional<string>, string, string>> exprop;
 
 	{
-		tds::query sq(tds, R"(
+		tds::query sq(tds, tds::no_check{R"(
 SELECT columns.name, extended_properties.name, extended_properties.value
-FROM sys.extended_properties
-LEFT JOIN sys.columns ON columns.object_id = extended_properties.major_id AND
+FROM sys.extended_properties)" + hint + R"(
+LEFT JOIN sys.columns)" + hint + R"( ON columns.object_id = extended_properties.major_id AND
 	columns.column_id = extended_properties.minor_id
 WHERE extended_properties.class = 1 AND
 	extended_properties.major_id = ?
 ORDER BY extended_properties.minor_id,
 	extended_properties.name
-)", id);
+)"}, id);
 
 		while (sq.fetch_row()) {
 			exprop.emplace_back(sq[0].is_null ? optional<string>{nullopt} : (string)sq[0],
