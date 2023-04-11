@@ -127,9 +127,9 @@ struct index_column {
 struct table_index {
 	table_index(const string& name, unsigned int type, bool is_unique, bool is_primary_key, const optional<string>& data_space,
 				bool is_default_data_space, const optional<string>& filter, bool is_padded, unsigned int fill_factor,
-				bool ignore_dup_key) :
+				bool ignore_dup_key, bool is_disabled) :
 		name(name), type(type), is_unique(is_unique), is_primary_key(is_primary_key), data_space(data_space), is_default_data_space(is_default_data_space),
-		filter(filter), is_padded(is_padded), fill_factor(fill_factor), ignore_dup_key(ignore_dup_key) { }
+		filter(filter), is_padded(is_padded), fill_factor(fill_factor), ignore_dup_key(ignore_dup_key), is_disabled(is_disabled) { }
 
 	string name;
 	unsigned int type;
@@ -142,6 +142,7 @@ struct table_index {
 	bool is_padded;
 	unsigned int fill_factor;
 	bool ignore_dup_key;
+	bool is_disabled;
 };
 
 struct constraint {
@@ -276,7 +277,7 @@ string table_ddl(tds::tds& tds, int64_t id, bool nolock) {
 	vector<constraint> constraints;
 	vector<foreign_key> foreign_keys;
 	string escaped_name, ddl;
-	bool has_explicit_indices = false, fulldump = false;
+	bool has_explicit_indices = false, fulldump = false, has_disabled_indices = false;
 	optional<string> table_data_space;
 	string hint;
 
@@ -366,7 +367,8 @@ SELECT indexes.name,
 	indexes.filter_definition,
 	indexes.is_padded,
 	indexes.fill_factor,
-	indexes.ignore_dup_key
+	indexes.ignore_dup_key,
+	indexes.is_disabled
 FROM sys.indexes)" + hint + R"(
 LEFT JOIN sys.index_columns)" + hint + R"( ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
 LEFT JOIN sys.data_spaces)" + hint + R"( ON data_spaces.data_space_id = indexes.data_space_id
@@ -384,9 +386,13 @@ ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.key_ordinal
 			auto is_padded = (unsigned int)sq[12] != 0;
 			auto fill_factor = (unsigned int)sq[13];
 			auto ignore_dup_key = (unsigned int)sq[14] != 0;
+			auto is_disabled = (unsigned int)sq[15] != 0;
 
 			if (fill_factor == 100)
 				fill_factor = 0;
+
+			if (is_disabled)
+				has_disabled_indices = true;
 
 			if (!last_name || (string)sq[0] != last_name.value()) {
 				auto data_space = (string)sq[7];
@@ -396,7 +402,7 @@ ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.key_ordinal
 				last_name = (string)sq[0];
 				indices.emplace_back(last_name.value(), (unsigned int)sq[1], (unsigned int)sq[2] != 0, is_primary_key,
 									 data_space, is_default_data_space, filter, is_padded, fill_factor,
-									 ignore_dup_key);
+									 ignore_dup_key, is_disabled);
 
 				if (is_primary_key)
 					primary_index = indices.back();
@@ -883,6 +889,17 @@ ORDER BY extended_properties.minor_id,
 				ddl += ", @level2type = 'COLUMN', @level2name = " + tds::value{get<0>(p).value()}.to_literal();
 
 			ddl += ";\n";
+		}
+
+		ddl += "GO\n";
+	}
+
+	if (has_disabled_indices) {
+		ddl += "\n";
+
+		for (const auto& ind : indices) {
+			if (ind.is_disabled)
+				ddl += "ALTER INDEX " + brackets_escape(ind.name) + " ON " + escaped_name + " DISABLE;\n";
 		}
 
 		ddl += "GO\n";
