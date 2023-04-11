@@ -125,9 +125,10 @@ struct index_column {
 };
 
 struct table_index {
-	table_index(const string& name, unsigned int type, bool is_unique, bool is_primary_key, const optional<string>& data_space, bool is_default_data_space, const optional<string>& filter) :
+	table_index(const string& name, unsigned int type, bool is_unique, bool is_primary_key, const optional<string>& data_space,
+				bool is_default_data_space, const optional<string>& filter, bool is_padded) :
 		name(name), type(type), is_unique(is_unique), is_primary_key(is_primary_key), data_space(data_space), is_default_data_space(is_default_data_space),
-		filter(filter) { }
+		filter(filter), is_padded(is_padded) { }
 
 	string name;
 	unsigned int type;
@@ -137,6 +138,7 @@ struct table_index {
 	bool is_default_data_space;
 	bool needs_explicit = false;
 	optional<string> filter;
+	bool is_padded;
 };
 
 struct constraint {
@@ -358,7 +360,8 @@ SELECT indexes.name,
 	indexes.index_id,
 	index_columns.partition_ordinal,
 	data_spaces.is_default,
-	indexes.filter_definition
+	indexes.filter_definition,
+	indexes.is_padded
 FROM sys.indexes)" + hint + R"(
 LEFT JOIN sys.index_columns)" + hint + R"( ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
 LEFT JOIN sys.data_spaces)" + hint + R"( ON data_spaces.data_space_id = indexes.data_space_id
@@ -373,6 +376,7 @@ ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.key_ordinal
 			auto col_id = (unsigned int)sq[4];
 			auto is_included = (unsigned int)sq[6] != 0;
 			auto filter = sq[11].is_null ? optional<string>{nullopt} : optional<string>{sq[11]};
+			auto is_padded = (unsigned int)sq[12] != 0;
 
 			if (!last_name || (string)sq[0] != last_name.value()) {
 				auto data_space = (string)sq[7];
@@ -381,13 +385,13 @@ ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.key_ordinal
 
 				last_name = (string)sq[0];
 				indices.emplace_back(last_name.value(), (unsigned int)sq[1], (unsigned int)sq[2] != 0, is_primary_key,
-									 data_space, is_default_data_space, filter);
+									 data_space, is_default_data_space, filter, is_padded);
 
 				if (is_primary_key)
 					primary_index = indices.back();
 			}
 
-			if (is_included || filter.has_value()) {
+			if (is_included || filter.has_value() || is_padded) {
 				indices.back().needs_explicit = true;
 				has_explicit_indices = true;
 			}
@@ -771,6 +775,9 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 
 				if (ind.filter.has_value())
 					ddl += " WHERE " + cleanup_sql(ind.filter.value());
+
+				if (ind.is_padded)
+					ddl += " WITH (PAD_INDEX = ON)";
 
 				if (ind.data_space)
 					ddl += " ON " + index_data_space(ind);
