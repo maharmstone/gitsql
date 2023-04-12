@@ -127,10 +127,10 @@ struct index_column {
 struct table_index {
 	table_index(const string& name, unsigned int type, bool is_unique, bool is_primary_key, const optional<string>& data_space,
 				bool is_default_data_space, const optional<string>& filter, bool is_padded, unsigned int fill_factor,
-				bool ignore_dup_key, bool is_disabled, bool allow_row_locks, bool allow_page_locks) :
+				bool ignore_dup_key, bool is_disabled, bool allow_row_locks, bool allow_page_locks, bool no_recompute) :
 		name(name), type(type), is_unique(is_unique), is_primary_key(is_primary_key), data_space(data_space), is_default_data_space(is_default_data_space),
 		filter(filter), is_padded(is_padded), fill_factor(fill_factor), ignore_dup_key(ignore_dup_key), is_disabled(is_disabled),
-		allow_row_locks(allow_row_locks), allow_page_locks(allow_page_locks) { }
+		allow_row_locks(allow_row_locks), allow_page_locks(allow_page_locks), no_recompute(no_recompute) { }
 
 	string name;
 	unsigned int type;
@@ -146,6 +146,7 @@ struct table_index {
 	bool is_disabled;
 	bool allow_row_locks;
 	bool allow_page_locks;
+	bool no_recompute;
 };
 
 struct constraint {
@@ -373,10 +374,12 @@ SELECT indexes.name,
 	indexes.ignore_dup_key,
 	indexes.is_disabled,
 	indexes.allow_row_locks,
-	indexes.allow_page_locks
+	indexes.allow_page_locks,
+	stats.no_recompute
 FROM sys.indexes)" + hint + R"(
 LEFT JOIN sys.index_columns)" + hint + R"( ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
 LEFT JOIN sys.data_spaces)" + hint + R"( ON data_spaces.data_space_id = indexes.data_space_id
+LEFT JOIN sys.stats)" + hint + R"( ON stats.object_id = indexes.object_id
 WHERE indexes.object_id = ? AND indexes.data_space_id != 0
 ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.key_ordinal
 )"}, id);
@@ -393,7 +396,8 @@ ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.key_ordinal
 			auto ignore_dup_key = (unsigned int)sq[14] != 0;
 			auto is_disabled = (unsigned int)sq[15] != 0;
 			auto allow_row_locks = (unsigned int)sq[16] != 0;
-			auto allow_page_locks = (unsigned int)sq[16] != 0;
+			auto allow_page_locks = (unsigned int)sq[17] != 0;
+			auto no_recompute = (unsigned int)!sq[18].is_null && sq[18] != 0;
 
 			if (fill_factor == 100)
 				fill_factor = 0;
@@ -409,13 +413,14 @@ ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.key_ordinal
 				last_name = (string)sq[0];
 				indices.emplace_back(last_name.value(), (unsigned int)sq[1], (unsigned int)sq[2] != 0, is_primary_key,
 									 data_space, is_default_data_space, filter, is_padded, fill_factor,
-									 ignore_dup_key, is_disabled, allow_row_locks, allow_page_locks);
+									 ignore_dup_key, is_disabled, allow_row_locks, allow_page_locks,
+									 no_recompute);
 
 				if (is_primary_key)
 					primary_index = indices.back();
 			}
 
-			if (is_included || filter.has_value() || is_padded || fill_factor != 0 || ignore_dup_key || !allow_row_locks || !allow_page_locks) {
+			if (is_included || filter.has_value() || is_padded || fill_factor != 0 || ignore_dup_key || !allow_row_locks || !allow_page_locks || no_recompute) {
 				indices.back().needs_explicit = true;
 				has_explicit_indices = true;
 			}
@@ -800,7 +805,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 				if (ind.filter.has_value())
 					ddl += " WHERE " + cleanup_sql(ind.filter.value());
 
-				if (ind.is_padded || ind.fill_factor != 0 || ind.ignore_dup_key || !ind.allow_row_locks || !ind.allow_page_locks) {
+				if (ind.is_padded || ind.fill_factor != 0 || ind.ignore_dup_key || !ind.allow_row_locks || !ind.allow_page_locks || ind.no_recompute) {
 					vector<string> withs;
 
 					if (ind.is_padded)
@@ -814,7 +819,9 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 					if (ind.ignore_dup_key)
 						withs.emplace_back("IGNORE_DUP_KEY = ON");
 
-					// FIXME - STATISTICS_NORECOMPUTE
+					if (ind.no_recompute)
+						withs.emplace_back("STATISTICS_NORECOMPUTE = ON");
+
 					// FIXME - STATISTICS_INCREMENTAL
 					// FIXME - DROP_EXISTING
 					// FIXME - ONLINE
