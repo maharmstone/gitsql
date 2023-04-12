@@ -379,7 +379,7 @@ SELECT indexes.name,
 FROM sys.indexes)" + hint + R"(
 LEFT JOIN sys.index_columns)" + hint + R"( ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
 LEFT JOIN sys.data_spaces)" + hint + R"( ON data_spaces.data_space_id = indexes.data_space_id
-LEFT JOIN sys.stats)" + hint + R"( ON stats.object_id = indexes.object_id
+LEFT JOIN sys.stats)" + hint + R"( ON stats.object_id = indexes.object_id AND stats.name = indexes.name
 WHERE indexes.object_id = ? AND indexes.data_space_id != 0
 ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.key_ordinal
 )"}, id);
