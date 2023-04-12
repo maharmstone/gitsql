@@ -802,8 +802,23 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 					if (ind.fill_factor != 0)
 						withs.emplace_back(fmt::format("FILLFACTOR = {}", ind.fill_factor));
 
+					// FIXME - SORT_IN_TEMPDB
+
 					if (ind.ignore_dup_key)
 						withs.emplace_back("IGNORE_DUP_KEY = ON");
+
+					// FIXME - STATISTICS_NORECOMPUTE
+					// FIXME - STATISTICS_INCREMENTAL
+					// FIXME - DROP_EXISTING
+					// FIXME - ONLINE
+					// FIXME - RESUMABLE
+					// FIXME - MAX_DURATION
+					// FIXME - ALLOW_ROW_LOCKS
+					// FIXME - ALLOW_PAGE_LOCKS
+					// FIXME - OPTIMIZE_FOR_SEQUENTIAL_KEY
+					// FIXME - MAXDOP
+					// FIXME - DATA_COMPRESSION
+					// FIXME - XML_COMPRESSION
 
 					ddl += " WITH (";
 
