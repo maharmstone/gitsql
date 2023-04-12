@@ -127,9 +127,10 @@ struct index_column {
 struct table_index {
 	table_index(const string& name, unsigned int type, bool is_unique, bool is_primary_key, const optional<string>& data_space,
 				bool is_default_data_space, const optional<string>& filter, bool is_padded, unsigned int fill_factor,
-				bool ignore_dup_key, bool is_disabled) :
+				bool ignore_dup_key, bool is_disabled, bool allow_row_locks, bool allow_page_locks) :
 		name(name), type(type), is_unique(is_unique), is_primary_key(is_primary_key), data_space(data_space), is_default_data_space(is_default_data_space),
-		filter(filter), is_padded(is_padded), fill_factor(fill_factor), ignore_dup_key(ignore_dup_key), is_disabled(is_disabled) { }
+		filter(filter), is_padded(is_padded), fill_factor(fill_factor), ignore_dup_key(ignore_dup_key), is_disabled(is_disabled),
+		allow_row_locks(allow_row_locks), allow_page_locks(allow_page_locks) { }
 
 	string name;
 	unsigned int type;
@@ -143,6 +144,8 @@ struct table_index {
 	unsigned int fill_factor;
 	bool ignore_dup_key;
 	bool is_disabled;
+	bool allow_row_locks;
+	bool allow_page_locks;
 };
 
 struct constraint {
@@ -368,7 +371,9 @@ SELECT indexes.name,
 	indexes.is_padded,
 	indexes.fill_factor,
 	indexes.ignore_dup_key,
-	indexes.is_disabled
+	indexes.is_disabled,
+	indexes.allow_row_locks,
+	indexes.allow_page_locks
 FROM sys.indexes)" + hint + R"(
 LEFT JOIN sys.index_columns)" + hint + R"( ON index_columns.object_id = indexes.object_id AND index_columns.index_id = indexes.index_id
 LEFT JOIN sys.data_spaces)" + hint + R"( ON data_spaces.data_space_id = indexes.data_space_id
@@ -387,6 +392,8 @@ ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.key_ordinal
 			auto fill_factor = (unsigned int)sq[13];
 			auto ignore_dup_key = (unsigned int)sq[14] != 0;
 			auto is_disabled = (unsigned int)sq[15] != 0;
+			auto allow_row_locks = (unsigned int)sq[16] != 0;
+			auto allow_page_locks = (unsigned int)sq[16] != 0;
 
 			if (fill_factor == 100)
 				fill_factor = 0;
@@ -402,13 +409,13 @@ ORDER BY indexes.is_primary_key DESC, indexes.name, index_columns.key_ordinal
 				last_name = (string)sq[0];
 				indices.emplace_back(last_name.value(), (unsigned int)sq[1], (unsigned int)sq[2] != 0, is_primary_key,
 									 data_space, is_default_data_space, filter, is_padded, fill_factor,
-									 ignore_dup_key, is_disabled);
+									 ignore_dup_key, is_disabled, allow_row_locks, allow_page_locks);
 
 				if (is_primary_key)
 					primary_index = indices.back();
 			}
 
-			if (is_included || filter.has_value() || is_padded || fill_factor != 0 || ignore_dup_key) {
+			if (is_included || filter.has_value() || is_padded || fill_factor != 0 || ignore_dup_key || !allow_row_locks || !allow_page_locks) {
 				indices.back().needs_explicit = true;
 				has_explicit_indices = true;
 			}
@@ -793,7 +800,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 				if (ind.filter.has_value())
 					ddl += " WHERE " + cleanup_sql(ind.filter.value());
 
-				if (ind.is_padded || ind.fill_factor != 0 || ind.ignore_dup_key) {
+				if (ind.is_padded || ind.fill_factor != 0 || ind.ignore_dup_key || !ind.allow_row_locks || !ind.allow_page_locks) {
 					vector<string> withs;
 
 					if (ind.is_padded)
@@ -813,8 +820,13 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 					// FIXME - ONLINE
 					// FIXME - RESUMABLE
 					// FIXME - MAX_DURATION
-					// FIXME - ALLOW_ROW_LOCKS
-					// FIXME - ALLOW_PAGE_LOCKS
+
+					if (!ind.allow_row_locks)
+						withs.emplace_back("ALLOW_ROW_LOCKS = OFF");
+
+					if (!ind.allow_page_locks)
+						withs.emplace_back("ALLOW_PAGE_LOCKS = OFF");
+
 					// FIXME - OPTIMIZE_FOR_SEQUENTIAL_KEY
 					// FIXME - MAXDOP
 					// FIXME - DATA_COMPRESSION
