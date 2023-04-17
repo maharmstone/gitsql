@@ -759,7 +759,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 				bool has_included_columns = false;
 
 				if (ind.is_primary_key)
-					ddl += "ALTER TABLE " + escaped_name + " ADD PRIMARY KEY " + (ind.type == 2 ? "NONCLUSTEDRED " : "") + "(";
+					ddl += "ALTER TABLE " + escaped_name + " ADD PRIMARY KEY " + (ind.type == 2 ? "NONCLUSTERED " : "") + "(";
 				else
 					ddl += "CREATE "s + (ind.is_unique ? "UNIQUE " : "") + (ind.type == 1 ? "CLUSTERED " : "") + "INDEX " + brackets_escape(ind.name) + " ON " + escaped_name + " (";
 
