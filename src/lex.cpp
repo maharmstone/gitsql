@@ -1,4 +1,7 @@
 #include "lex.h"
+#include <string>
+#include <stdexcept>
+#include <stdint.h>
 
 using namespace std;
 

@@ -2,6 +2,7 @@
 #include <optional>
 #include <vector>
 #include <stdexcept>
+#include <algorithm>
 #include <tdscpp.h>
 
 #ifdef _WIN32
@@ -814,7 +815,7 @@ ORDER BY foreign_key_columns.constraint_object_id, foreign_key_columns.constrain
 						withs.emplace_back("PAD_INDEX = ON");
 
 					if (ind.fill_factor != 0)
-						withs.emplace_back(fmt::format("FILLFACTOR = {}", ind.fill_factor));
+						withs.emplace_back(format("FILLFACTOR = {}", ind.fill_factor));
 
 					// FIXME - SORT_IN_TEMPDB
 

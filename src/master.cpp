@@ -223,12 +223,12 @@ static string sid_to_string(span<const uint8_t> sid) {
 
 	sid = sid.subspan(6);
 
-	ret = fmt::format("S-1-{}", first_part);
+	ret = format("S-1-{}", first_part);
 
 	for (unsigned int i = 0; i < num_parts; i++) {
 		auto num = *(uint32_t*)sid.data();
 
-		ret += fmt::format("-{}", num);
+		ret += format("-{}", num);
 
 		sid = sid.subspan(sizeof(uint32_t));
 	}

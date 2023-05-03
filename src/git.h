@@ -14,7 +14,6 @@
 #include <condition_variable>
 #include <time.h>
 #include <tdscpp.h>
-#include <fmt/format.h>
 
 class GitRepo;
 class GitIndex;

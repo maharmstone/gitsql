@@ -2,7 +2,6 @@
 
 #include <string_view>
 #include <list>
-#include <fmt/format.h>
 
 enum class lex {
     whitespace,

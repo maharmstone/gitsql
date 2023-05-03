@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <span>
 #include <charconv>
+#include <iostream>
 #include <tdscpp.h>
 #include <nlohmann/json.hpp>
 #include "git.h"
@@ -427,7 +428,7 @@ errno_error::errno_error(string_view function, int en) : msg(function) {
 			msg += "EHWPOISON";
 			break;
 		default:
-			msg += fmt::format("{}", en);
+			msg += format("{}", en);
 			break;
 	}
 
@@ -1653,7 +1654,7 @@ ORDER BY git.id
 			try {
 				repo.checkout_head(&opts);
 			} catch (const exception& e) {
-				fmt::print(stderr, "{}\n", e.what());
+				cerr << e.what() << endl;
 			}
 		}
 	}
@@ -1886,7 +1887,7 @@ static string prompt_str(string_view msg) {
 	string s;
 #endif
 
-	fmt::print("{} ", msg);
+	cout << msg << " ";
 
 #ifdef _WIN32
 	if (!GetConsoleMode(con, &mode))
@@ -2151,13 +2152,13 @@ static void install(tds::tds& tds) {
 	}
 
 	if (has_xp_cmd)
-		fmt::print("Extended stored procedure xp_cmd already installed.\n");
+		cout << "Extended stored procedure xp_cmd already installed.\n";
 	else if (!filesystem::exists("xp_cmd.dll"))
-		fmt::print(stderr, "Not installing extended stored procedure as xp_cmd.dll not found.\n");
+		cerr << "Not installing extended stored procedure as xp_cmd.dll not found.\n";
 	else {
 		auto dll = filesystem::absolute(filesystem::path("xp_cmd.dll"));
 
-		fmt::print("Installing extended stored procedure xp_cmd.\n");
+		cout << "Installing extended stored procedure xp_cmd.\n";
 
 		tds::rpc r(tds, "sp_addextendedproc", "xp_cmd", dll.string());
 
@@ -2166,7 +2167,7 @@ static void install(tds::tds& tds) {
 	}
 
 	if (!object_exists(tds, "dbo.git_repo")) {
-		fmt::print("Creating table master.dbo.git_repo.\n");
+		cout << "Creating table master.dbo.git_repo.\n";
 
 		tds.run(R"(CREATE TABLE dbo.git_repo (
 	id INT IDENTITY NOT NULL PRIMARY KEY,
@@ -2176,10 +2177,10 @@ static void install(tds::tds& tds) {
 	server VARCHAR(15) NULL
 );)");
 	} else
-		fmt::print("Table master.dbo.git_repo already exists.\n");
+		cout << "Table master.dbo.git_repo already exists.\n";
 
 	if (!object_exists(tds, "dbo.git")) {
-		fmt::print("Creating table master.dbo.git.\n");
+		cout << "Creating table master.dbo.git.\n";
 
 		tds.run(R"(CREATE TABLE dbo.git (
 	id INT IDENTITY NOT NULL PRIMARY KEY,
@@ -2190,10 +2191,10 @@ static void install(tds::tds& tds) {
 	tran_id BIGINT NULL
 );)");
 	} else
-		fmt::print("Table master.dbo.git already exists.\n");
+		cout << "Table master.dbo.git already exists.\n";
 
 	if (!object_exists(tds, "dbo.git_files")) {
-		fmt::print("Creating table master.dbo.git_files.\n");
+		cout << "Creating table master.dbo.git_files.\n";
 
 		tds.run(R"(CREATE TABLE dbo.git_files (
 	file_id INT IDENTITY NOT NULL PRIMARY KEY,
@@ -2202,12 +2203,12 @@ static void install(tds::tds& tds) {
 	data VARBINARY(MAX) NULL
 );)");
 	} else
-		fmt::print("Table master.dbo.git_files already exists.\n");
+		cout << "Table master.dbo.git_files already exists.\n";
 
-	fmt::print("Granting INSERT permissions on dbo.git to public.\n");
+	cout << "Granting INSERT permissions on dbo.git to public.\n";
 	tds.run("GRANT INSERT ON dbo.git TO public");
 
-	fmt::print("Granting INSERT permissions on dbo.git_files to public.\n");
+	cout << "Granting INSERT permissions on dbo.git_files to public.\n";
 	tds.run("GRANT INSERT ON dbo.git_files TO public");
 
 	vector<string> dbs;
@@ -2231,7 +2232,7 @@ static void install(tds::tds& tds) {
 		}
 
 		while (true) {
-			fmt::print("\n");
+			cout << endl;
 			auto db = prompt_str("Add to database? Choices are " + db_string + ". Press Enter to skip.");
 
 			if (db.empty())
@@ -2246,7 +2247,7 @@ static void install(tds::tds& tds) {
 			}
 
 			if (!found) {
-				fmt::print(stderr, "Database {} not found.\n", db);
+				cerr << format("Database {} not found.\n", db);
 				continue;
 			}
 
@@ -2262,9 +2263,9 @@ static void install(tds::tds& tds) {
 			bool do_dump = false;
 
 			if (repo_num.has_value())
-				fmt::print("Repository {} already set up for database {}.\n", repo_num.value(), db);
+				cout << format("Repository {} already set up for database {}.\n", repo_num.value(), db);
 			else {
-				fmt::print("Setting up repository for database {}.\n", db);
+				cout << format("Setting up repository for database {}.\n", db);
 
 				string path;
 
@@ -2276,14 +2277,14 @@ static void install(tds::tds& tds) {
 
 					try {
 						if (filesystem::exists(path))
-							fmt::print("Directory {} already exists.\n", path);
+							cout << format("Directory {} already exists.\n", path);
 						else {
-							fmt::print("Creating directory {}.\n", path);
+							cout << format("Creating directory {}.\n", path);
 
 							filesystem::create_directories(path);
 						}
 					} catch (const exception& e) {
-						fmt::print(stderr, "{}\n", e.what());
+						cerr << e.what() << endl;
 						continue;
 					}
 
@@ -2302,11 +2303,11 @@ static void install(tds::tds& tds) {
 				}
 
 				if (ret == GIT_OK)
-					fmt::print("Repository already exists.\n");
+					cout << "Repository already exists.\n";
 				else if (ret != GIT_ENOTFOUND)
 					throw formatted_error("git_repository_open returned {}", ret);
 				else {
-					fmt::print("Creating new repository in {}.\n", path);
+					cout << format("Creating new repository in {}.\n", path);
 
 					{
 						git_repository* tmp = nullptr;
@@ -2334,16 +2335,16 @@ static void install(tds::tds& tds) {
 					repo_num = (unsigned int)sq[0];
 				}
 
-				fmt::print("Created repository {} for {} in {}.\n", repo_num.value(), db, path);
+				cout << format("Created repository {} for {} in {}.\n", repo_num.value(), db, path);
 
 				do_dump = true;
 			}
 
-			fmt::print("Installing trigger.\n");
+			cout << "Installing trigger.\n";
 			install_trigger(tds, db, get_exe_path(), repo_num.value());
 
 			if (do_dump) {
-				fmt::print("Doing initial dump.\n");
+				cout << "Doing initial dump.\n";
 				dump_sql2(tds, repo_num.value());
 			}
 		}
@@ -2390,14 +2391,14 @@ static optional<string> get_environment_variable(const string& name) {
 #endif
 
 static void print_usage() {
-	fmt::print(stderr, R"(Usage:
+	cerr << R"(Usage:
     gitsql flush
     gitsql object <schema> <object> <commit> <filename> [database]
     gitsql dump <repo-id>
     gitsql show <object>
     gitsql show <database> <object id>
     gitsql install <server>
-)");
+)";
 }
 
 #ifdef _WIN32
@@ -2610,7 +2611,7 @@ int main(int argc, char* argv[])
 
 				auto ddl = object_ddl_id(tds, id);
 
-				fmt::print("{}", ddl);
+				cout << ddl;
 			} else {
 #ifdef _WIN32
 				u16string_view object = (char16_t*)argv[2];
@@ -2631,7 +2632,7 @@ int main(int argc, char* argv[])
 
 				auto ddl = object_ddl(tds, onp.schema, onp.name);
 
-				fmt::print("{}", ddl);
+				cout << ddl;
 			}
 		} else if (cmd == "master") {
 			unsigned int repo;
@@ -2676,7 +2677,7 @@ int main(int argc, char* argv[])
 			dump_master(db_server, repo, smk);
 		}
 	} catch (const exception& e) {
-		fmt::print(stderr, "{}\n", e.what());
+		cerr << e.what() << endl;
 
 		if (cmd != "show") {
 			try {

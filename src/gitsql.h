@@ -8,8 +8,6 @@
 #include <span>
 #include <format>
 #include <tdscpp.h>
-#include <fmt/format.h>
-#include <fmt/compile.h>
 #include "lex.h"
 
 static const std::string_view db_app = "GitSQL";

@@ -19,7 +19,6 @@ set(SRC_FILES
 add_executable(gitsql ${SRC_FILES})
 
 find_package(tdscpp REQUIRED)
-find_package(fmt REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(nlohmann_json REQUIRED)
@@ -29,7 +28,6 @@ pkg_check_modules(LIBGIT2 REQUIRED libgit2)
 add_definitions(-DNOMINMAX)
 
 target_link_libraries(gitsql tdscpp)
-target_link_libraries(gitsql fmt::fmt-header-only)
 target_link_libraries(gitsql ZLIB::ZLIB)
 target_link_libraries(gitsql nlohmann_json::nlohmann_json)
 
