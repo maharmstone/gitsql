@@ -293,25 +293,6 @@ private:
 
 #endif
 
-template<>
-struct fmt::formatter<git_oid> {
-	constexpr auto parse(format_parse_context& ctx) {
-		auto it = ctx.begin();
-
-		if (it != ctx.end() && *it != '}')
-			throw format_error("invalid format");
-
-		return it;
-	}
-
-	template<typename format_context>
-	auto format(const git_oid& g, format_context& ctx) const {
-		return fmt::format_to(ctx.out(), "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-							  g.id[0], g.id[1], g.id[2], g.id[3], g.id[4], g.id[5], g.id[6], g.id[7], g.id[8], g.id[9],
-							  g.id[10], g.id[11], g.id[12], g.id[13], g.id[14], g.id[15], g.id[16], g.id[17], g.id[18], g.id[19]);
-	}
-};
-
 void update_git(GitRepo& repo, const std::string& user, const std::string& email, const std::string& description,
 				std::list<git_file2>& files, bool clear_all = false, const std::optional<tds::datetimeoffset>& dto = std::nullopt,
 				const std::string& branch = "");
