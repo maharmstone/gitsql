@@ -97,6 +97,7 @@ std::string type_to_string(std::string_view name, int max_length, int precision,
 void get_ldap_details_from_sid(PSID sid, std::string& name, std::string& email);
 #else
 void get_ldap_details_from_name(std::string_view username, std::string& name, std::string& email);
+void get_ldap_details_from_full_name(std::string_view username, std::string& name, std::string& email);
 #endif
 
 // parse.cpp

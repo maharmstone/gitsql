@@ -38,6 +38,7 @@ struct string_hash {
 };
 
 static unordered_map<string, pair<string, string>, string_hash, equal_to<>> ldap_cache;
+static unordered_map<string, string, string_hash, equal_to<>> ldap_domain;
 
 class ldap_error : public exception {
 public:
@@ -86,12 +87,15 @@ class ldapobj {
 public:
 	ldapobj();
 	map<string, string> search(const string& filter, const vector<string>& atts);
+	map<string, string> search_context(const string& filter, const vector<string>& atts,
+									   const string& context);
+
+	string naming_context;
 
 private:
 	void find_naming_context();
 
 	ldap_t ld;
-	string naming_context;
 };
 
 class ldap_message_closer {
@@ -221,7 +225,8 @@ void ldapobj::find_naming_context() {
 		throw runtime_error("Could not get LDAP naming context.");
 }
 
-map<string, string> ldapobj::search(const string& filter, const vector<string>& atts) {
+map<string, string> ldapobj::search_context(const string& filter, const vector<string>& atts,
+											const string& context) {
 	char* att;
 	ldap_message res;
 	BerElement* ber = nullptr;
@@ -239,7 +244,7 @@ map<string, string> ldapobj::search(const string& filter, const vector<string>& 
 	{
 		LDAPMessage* tmp = nullptr;
 
-		auto ret = ldap_search_ext_s(ld.get(), (char*)naming_context.c_str(), LDAP_SCOPE_SUBTREE, (char*)filter.c_str(),
+		auto ret = ldap_search_ext_s(ld.get(), (char*)context.c_str(), LDAP_SCOPE_SUBTREE, (char*)filter.c_str(),
 									atts.empty() ? nullptr : &attlist[0], false, nullptr, nullptr, nullptr,
 									0, &tmp);
 
@@ -266,6 +271,10 @@ map<string, string> ldapobj::search(const string& filter, const vector<string>& 
 		ber_free(ber, 0);
 
 	return values;
+}
+
+map<string, string> ldapobj::search(const string& filter, const vector<string>& atts) {
+	return search_context(filter, atts, naming_context);
 }
 
 #ifdef _WIN32
@@ -329,6 +338,66 @@ void get_ldap_details_from_sid(PSID sid, string& name, string& email) {
 }
 
 #else
+
+static string resolve_netbios_domain(ldapobj& l, string_view domain) {
+	if (auto f = ldap_domain.find(domain); f != ldap_domain.end()) {
+		const auto& p = *f;
+
+		return p.second;
+	}
+
+	auto res = l.search_context("(nETBIOSName=" + string(domain) + ")", { "dnsRoot" },
+								"CN=Partitions,CN=Configuration," + l.naming_context);
+
+	if (!res.contains("dnsRoot"))
+		throw runtime_error("Could not resolve NetBIOS domain " + string(domain) + ".");
+
+	const auto& ret = res.at("dnsRoot");
+
+	ldap_domain.try_emplace(string(domain), ret);
+
+	return ret;
+}
+
+void get_ldap_details_from_full_name(string_view username, string& name, string& email) {
+	if (auto f = ldap_cache.find(username); f != ldap_cache.end()) {
+		const auto& p = *f;
+
+		name = p.second.first;
+		email = p.second.second;
+
+		return;
+	}
+
+	ldapobj l;
+	string upn;
+
+	if (auto bs = username.find("\\"); bs != string::npos) {
+		auto domain = username.substr(0, bs);
+		username = username.substr(bs + 1);
+
+		auto domain_full = resolve_netbios_domain(l, domain);
+
+		upn = string(username) + "@" + string(domain_full);
+	} else
+		throw runtime_error("Domain not provided in username.");
+
+	auto ret = l.search("(userPrincipalName=" + upn + ")", { "givenName", "sn", "name", "mail" });
+
+	if (ret.count("givenName") != 0 && ret.count("sn") != 0)
+		name = ret.at("givenName") + " " + ret.at("sn");
+	else if (ret.count("name") != 0)
+		name = ret.at("name");
+	else
+		name = "";
+
+	if (ret.count("mail") != 0)
+		email = ret.at("mail");
+	else
+		email = "";
+
+	ldap_cache.try_emplace(string(username), make_pair(name, email));
+}
 
 void get_ldap_details_from_name(string_view username, string& name, string& email) {
 	if (auto f = ldap_cache.find(username); f != ldap_cache.end()) {
