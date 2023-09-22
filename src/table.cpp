@@ -944,10 +944,17 @@ ORDER BY extended_properties.minor_id,
 
 	{
 		bool first = true;
-		vector<pair<string, vector<string>>> stats;
+
+		struct stat {
+			string name;
+			optional<string> filter;
+			vector<string> cols;
+		};
+
+		vector<stat> stats;
 
 		tds::query sq(tds, tds::no_check{R"(
-SELECT stats.name, columns.name
+SELECT stats.name, columns.name, stats.filter_definition
 FROM sys.stats)" + hint + R"(
 JOIN sys.stats_columns)" + hint + R"( ON stats_columns.object_id = stats.object_id AND
 	stats_columns.stats_id = stats.stats_id
@@ -962,20 +969,24 @@ ORDER BY stats.name,
 		while (sq.fetch_row()) {
 			auto stat_name = (string)sq[0];
 
-			if (stats.empty() || stats.back().first != stat_name)
-				stats.emplace_back(stat_name, vector<string>{});
+			if (stats.empty() || stats.back().name != stat_name) {
+				stats.emplace_back(stat_name);
 
-			stats.back().second.emplace_back((string)sq[1]);
+				if (!sq[2].is_null)
+					stats.back().filter = (string)sq[2];
+			}
+
+			stats.back().cols.emplace_back((string)sq[1]);
 		}
 
 		for (const auto& s : stats) {
 			if (first)
 				ddl += "\n";
 
-			ddl += "CREATE STATISTICS " + brackets_escape(s.first) + " ON " + escaped_name + "(";
+			ddl += "CREATE STATISTICS " + brackets_escape(s.name) + " ON " + escaped_name + "(";
 
 			bool first2 = true;
-			for (const auto& c : s.second) {
+			for (const auto& c : s.cols) {
 				if (!first2)
 					ddl += ", ";
 
@@ -983,9 +994,12 @@ ORDER BY stats.name,
 				first2 = false;
 			}
 
-			ddl += ");\n";
+			ddl += ")";
 
-			// FIXME - filter
+			if (s.filter.has_value())
+				ddl += " WHERE " + cleanup_sql(s.filter.value());
+
+			ddl += ";\n";
 
 			first = false;
 		}
