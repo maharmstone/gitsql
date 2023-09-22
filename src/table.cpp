@@ -942,6 +942,26 @@ ORDER BY extended_properties.minor_id,
 		ddl += "GO\n";
 	}
 
+	{
+		bool first = true;
+
+		tds::query sq(tds, tds::no_check{R"(
+SELECT name
+FROM sys.stats)" + hint + R"(
+WHERE object_id = ? AND
+	user_created = 1
+ORDER BY name
+)"}, id);
+
+		while (sq.fetch_row()) {
+			if (first)
+				ddl += "\n";
+
+			ddl += "CREATE STATISTICS " + brackets_escape((string)sq[0]) + " ON " + escaped_name + "(?);\n"; // FIXME
+			first = false;
+		}
+	}
+
 	if (fulldump)
 		ddl += "\n" + dump_table(tds, escaped_name);
 
