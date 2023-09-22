@@ -944,20 +944,49 @@ ORDER BY extended_properties.minor_id,
 
 	{
 		bool first = true;
+		vector<pair<string, vector<string>>> stats;
 
 		tds::query sq(tds, tds::no_check{R"(
-SELECT name
+SELECT stats.name, columns.name
 FROM sys.stats)" + hint + R"(
-WHERE object_id = ? AND
-	user_created = 1
-ORDER BY name
+JOIN sys.stats_columns)" + hint + R"( ON stats_columns.object_id = stats.object_id AND
+	stats_columns.stats_id = stats.stats_id
+JOIN sys.columns)" + hint + R"( ON columns.object_id = stats.object_id AND
+	columns.column_id = stats_columns.column_id
+WHERE stats.object_id = ? AND
+	stats.user_created = 1
+ORDER BY stats.name,
+	stats_columns.stats_column_id
 )"}, id);
 
 		while (sq.fetch_row()) {
+			auto stat_name = (string)sq[0];
+
+			if (stats.empty() || stats.back().first != stat_name)
+				stats.emplace_back(stat_name, vector<string>{});
+
+			stats.back().second.emplace_back((string)sq[1]);
+		}
+
+		for (const auto& s : stats) {
 			if (first)
 				ddl += "\n";
 
-			ddl += "CREATE STATISTICS " + brackets_escape((string)sq[0]) + " ON " + escaped_name + "(?);\n"; // FIXME
+			ddl += "CREATE STATISTICS " + brackets_escape(s.first) + " ON " + escaped_name + "(";
+
+			bool first2 = true;
+			for (const auto& c : s.second) {
+				if (!first2)
+					ddl += ", ";
+
+				ddl += brackets_escape(c);
+				first2 = false;
+			}
+
+			ddl += ");\n";
+
+			// FIXME - filter
+
 			first = false;
 		}
 	}
