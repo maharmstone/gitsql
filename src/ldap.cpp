@@ -346,13 +346,13 @@ static string resolve_netbios_domain(ldapobj& l, string_view domain) {
 		return p.second;
 	}
 
-	auto res = l.search_context("(nETBIOSName=" + string(domain) + ")", { "dnsRoot" },
+	auto res = l.search_context("(nETBIOSName=" + string(domain) + ")", { "nCName" },
 								"CN=Partitions,CN=Configuration," + l.naming_context);
 
-	if (!res.contains("dnsRoot"))
+	if (!res.contains("nCName"))
 		throw runtime_error("Could not resolve NetBIOS domain " + string(domain) + ".");
 
-	const auto& ret = res.at("dnsRoot");
+	const auto& ret = res.at("nCName");
 
 	ldap_domain.try_emplace(string(domain), ret);
 
@@ -370,19 +370,18 @@ void get_ldap_details_from_full_name(string_view username, string& name, string&
 	}
 
 	ldapobj l;
-	string upn;
+	string_view nbdomain;
 
 	if (auto bs = username.find("\\"); bs != string::npos) {
-		auto domain = username.substr(0, bs);
+		nbdomain = username.substr(0, bs);
 		username = username.substr(bs + 1);
-
-		auto domain_full = resolve_netbios_domain(l, domain);
-
-		upn = string(username) + "@" + string(domain_full);
 	} else
 		throw runtime_error("Domain not provided in username.");
 
-	auto ret = l.search("(userPrincipalName=" + upn + ")", { "givenName", "sn", "name", "mail" });
+	auto domain = resolve_netbios_domain(l, nbdomain);
+
+	auto ret = l.search_context("(sAMAccountName=" + string(username) + ")", { "givenName", "sn", "name", "mail" },
+								domain);
 
 	if (ret.count("givenName") != 0 && ret.count("sn") != 0)
 		name = ret.at("givenName") + " " + ret.at("sn");
