@@ -266,9 +266,7 @@ string type_to_string(string_view name, int max_length, int precision, int scale
 		ret += "(" + (max_length == -1 ? "MAX" : to_string(max_length / 2)) + ")";
 	else if (name == "DECIMAL" || name == "NUMERIC")
 		ret += "(" + to_string(precision) +"," + to_string(scale) + ")";
-	else if ((name == "TIME" || name == "DATETIME2") && scale != 7)
-		ret += "(" + to_string(scale) + ")";
-	else if (name == "DATETIMEOFFSET" && scale != 7)
+	else if ((name == "TIME" || name == "DATETIME2" || name == "DATETIMEOFFSET") && scale != 7)
 		ret += "(" + to_string(scale) + ")";
 
 	return ret;
