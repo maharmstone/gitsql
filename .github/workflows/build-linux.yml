@@ -1,0 +1,30 @@
+name: build x86_64-pc-linux-gnu
+on: [push]
+jobs:
+  x86_64-pc-linux-gnu:
+    runs-on: ubuntu-rolling
+    steps:
+      - run: apt-get update
+      - run: apt-get install -y g++ git cmake nodejs wget unzip pkg-config zlib1g-dev nlohmann-json3-dev libgit2-dev libicu-dev libldap2-dev libsasl2-dev
+      - run: echo "SHORT_SHA=`echo ${{ github.sha }} | cut -c1-8`" >> $GITHUB_ENV
+      - run: git clone ${{ github.server_url }}/${{ github.repository }} ${SHORT_SHA}
+      - run: cd ${SHORT_SHA} && git checkout ${{ github.sha }}
+      - run: mkdir -p build/debug-work
+      - run: mkdir -p build/release-work
+      # - uses: robinraju/release-downloader@v1.10 # FIXME - doesn't work with Gitea
+      #   with:
+      #     repository: maharmstone/tdscpp
+      #     github-api-url: ${{ github.api_url }}
+      #     token: "" # FIXME - Gitea returns error 404 if this is set
+      #     latest: true
+      #     fileName: x86_64-pc-linux-gnu.zip
+      - run: mkdir tdscpp && cd tdscpp && wget -qO- ${{ github.server_url }}/maharmstone/tdscpp/releases/download/20240411/x86_64-pc-linux-gnu.zip > tdscpp.zip && unzip tdscpp.zip # FIXME - get latest version from API
+      - run: cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=${PWD}/build/debug -DCMAKE_FIND_ROOT_PATH=${PWD}/tdscpp/debug -S ${SHORT_SHA} -B build/debug-work && cmake --build build/debug-work --parallel `nproc` && cmake --install build/debug-work
+      - run: cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=${PWD}/build/release -DCMAKE_FIND_ROOT_PATH=${PWD}/tdscpp/release -S ${SHORT_SHA} -B build/release-work && cmake --build build/release-work --parallel `nproc` && cmake --install build/release-work
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ github.sha }}
+          overwrite: true
+          path: |
+            build/debug
+            build/release
