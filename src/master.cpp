@@ -21,9 +21,11 @@ struct user_pass {
 
 struct linked_server {
 	linked_server(unsigned int srvid, string_view srvname, string_view srvproduct,
-				  string_view providername, string_view datasource, string_view providerstring) :
+				  string_view providername, string_view datasource, string_view providerstring,
+				  string_view catalog) :
 				  srvid(srvid), srvname(srvname), srvproduct(srvproduct),
-				  providername(providername), datasource(datasource), providerstring(providerstring) {
+				  providername(providername), datasource(datasource), providerstring(providerstring),
+				  catalog(catalog) {
 	}
 
 	unsigned int srvid;
@@ -32,6 +34,7 @@ struct linked_server {
 	string providername;
 	string datasource;
 	string providerstring;
+	string catalog;
 	user_pass up;
 	map<string, user_pass> mappings;
 };
@@ -96,10 +99,11 @@ static void dump_linked_servers(const tds::options& opts, git_update& gu, span<c
 		tds::tds dac(opts);
 
 		{
-			tds::query sq(dac, "SELECT srvid, srvname, srvproduct, providername, datasource, providerstring FROM master.sys.sysservers WHERE srvid != 0");
+			tds::query sq(dac, "SELECT srvid, srvname, srvproduct, providername, datasource, providerstring, catalog FROM master.sys.sysservers WHERE srvid != 0");
 
 			while (sq.fetch_row()) {
-				servs.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2], (string)sq[3], (string)sq[4], (string)sq[5]);
+				servs.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2], (string)sq[3],
+								   (string)sq[4], (string)sq[5], (string)sq[6]);
 			}
 		}
 
@@ -155,6 +159,9 @@ WHERE syslnklgns.pwdhash IS NOT NULL)");
 
 		if (!serv.providerstring.empty())
 			j["providerstring"] = serv.providerstring;
+
+		if (!serv.catalog.empty())
+			j["catalog"] = serv.catalog;
 
 		if (!serv.up.pwdhash.empty()) {
 			auto pw = decrypt_pwdhash(serv.up.pwdhash, smk);
