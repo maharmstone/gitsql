@@ -671,6 +671,15 @@ string GitRepo::branch_upstream_remote(const string& refname) {
 	return remote;
 }
 
+git_remote_ptr GitRepo::remote_lookup(const string& name) {
+	git_remote* r;
+
+	if (auto ret = git_remote_lookup(&r, repo.get(), name.c_str()); ret)
+		throw git_exception(ret, "git_remote_lookup");
+
+	return git_remote_ptr{r};
+}
+
 void git_update::add_file(string_view filename, string_view data) {
 	{
 		lock_guard lg(lock);

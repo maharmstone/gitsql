@@ -107,6 +107,17 @@ public:
 
 using git_tree_entry_ptr = std::unique_ptr<git_tree_entry*, git_tree_entry_deleter>;
 
+class git_remote_deleter {
+public:
+	using pointer = git_remote*;
+
+	void operator()(git_remote* r) {
+		git_remote_free(r);
+	}
+};
+
+using git_remote_ptr = std::unique_ptr<git_remote*, git_remote_deleter>;
+
 class GitSignature {
 public:
 	GitSignature(const std::string& user, const std::string& email, const std::optional<tds::datetimeoffset>& dto = std::nullopt);
@@ -143,6 +154,7 @@ public:
 	bool branch_is_head(const std::string& name);
 	bool is_bare();
 	std::string branch_upstream_remote(const std::string& refname);
+	git_remote_ptr remote_lookup(const std::string& name);
 
 	git_repository_ptr repo;
 };
