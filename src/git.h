@@ -137,6 +137,14 @@ public:
 	git_tree_ptr tree;
 };
 
+class GitRemote {
+public:
+	GitRemote(git_remote* r) : r(r) { }
+	void push(const std::vector<std::string>& refspecs, const git_push_options& opts);
+
+	git_remote_ptr r;
+};
+
 class GitRepo {
 public:
 	GitRepo(const std::string& dir);
@@ -154,7 +162,7 @@ public:
 	bool branch_is_head(const std::string& name);
 	bool is_bare();
 	std::string branch_upstream_remote(const std::string& refname);
-	git_remote_ptr remote_lookup(const std::string& name);
+	GitRemote remote_lookup(const std::string& name);
 
 	git_repository_ptr repo;
 };

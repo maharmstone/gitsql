@@ -671,13 +671,30 @@ string GitRepo::branch_upstream_remote(const string& refname) {
 	return remote;
 }
 
-git_remote_ptr GitRepo::remote_lookup(const string& name) {
+GitRemote GitRepo::remote_lookup(const string& name) {
 	git_remote* r;
 
 	if (auto ret = git_remote_lookup(&r, repo.get(), name.c_str()); ret)
 		throw git_exception(ret, "git_remote_lookup");
 
-	return git_remote_ptr{r};
+	return r;
+}
+
+void GitRemote::push(const std::vector<std::string>& refspecs, const git_push_options& opts) {
+	vector<const char*> v;
+	git_strarray specs;
+
+	v.reserve(refspecs.size());
+
+	for (const auto& s : refspecs) {
+		v.push_back(s.c_str());
+	}
+
+	specs.strings = (char**)v.data();
+	specs.count = refspecs.size();
+
+	if (auto ret = git_remote_push(r.get(), &specs, &opts); ret)
+		throw git_exception(ret, "git_remote_push");
 }
 
 void git_update::add_file(string_view filename, string_view data) {
