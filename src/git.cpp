@@ -647,6 +647,30 @@ bool GitRepo::is_bare() {
 	return git_repository_is_bare(repo.get());
 }
 
+string GitRepo::branch_upstream_remote(const string& refname) {
+	string remote;
+	git_buf buf = {};
+
+	auto ret = git_branch_upstream_remote(&buf, repo.get(), refname.c_str());
+
+	if (ret == GIT_ENOTFOUND)
+		return "";
+
+	if (ret)
+		throw git_exception(ret, "git_branch_upstream_remote");
+
+	try {
+		remote.assign(string_view(buf.ptr, buf.size));
+	} catch (...) {
+		git_buf_dispose(&buf);
+		throw;
+	}
+
+	git_buf_dispose(&buf);
+
+	return remote;
+}
+
 void git_update::add_file(string_view filename, string_view data) {
 	{
 		lock_guard lg(lock);

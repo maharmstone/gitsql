@@ -142,6 +142,7 @@ public:
 	void reference_create(const std::string& name, const git_oid& id, bool force, const std::string& log_message);
 	bool branch_is_head(const std::string& name);
 	bool is_bare();
+	std::string branch_upstream_remote(const std::string& refname);
 
 	git_repository_ptr repo;
 };
