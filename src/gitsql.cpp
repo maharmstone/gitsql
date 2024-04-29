@@ -1268,7 +1268,8 @@ static void dump_options(tds::tds& tds, git_update& gu) {
 	gu.add_file("options.json", j.dump(3) + "\n");
 }
 
-static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& branch) {
+static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& branch,
+					 const string& public_key, const string& private_key) {
 	git_libgit2_init();
 	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
 
@@ -1434,6 +1435,8 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 
 		repo.checkout_head(&opts);
 	}
+
+	repo.try_push("refs/heads/" + branch, public_key, private_key);
 }
 
 static void get_user_details(const u16string& username, string& name, string& email) {
@@ -1659,6 +1662,8 @@ ORDER BY git.id
 				cerr << e.what() << endl;
 			}
 		}
+
+		// FIXME - push
 	}
 }
 
@@ -1837,10 +1842,10 @@ static void write_object_ddl(tds::tds& tds, u16string_view schema, u16string_vie
 }
 
 static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
-	string repo_dir, db, server, branch;
+	string repo_dir, db, server, branch, public_key, private_key;
 
 	{
-		tds::query sq(tds, "SELECT dir, db, server, branch FROM master.dbo.git_repo WHERE id = ?", repo_num);
+		tds::query sq(tds, "SELECT dir, db, server, branch, public_key, private_key FROM master.dbo.git_repo WHERE id = ?", repo_num);
 
 		if (!sq.fetch_row())
 			throw formatted_error("Repo {} not found in master.dbo.git_repo.", repo_num);
@@ -1849,6 +1854,8 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 		db = (string)sq[1];
 		server = (string)sq[2];
 		branch = (string)sq[3];
+		public_key = (string)sq[4];
+		private_key = (string)sq[5];
 	}
 
 	if (server.empty()) {
@@ -1857,7 +1864,8 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 		if (db != old_db)
 			tds.run(tds::no_check{"USE " + brackets_escape(db)});
 
-		dump_sql(tds, repo_dir, branch.empty() ? "master" : branch);
+		dump_sql(tds, repo_dir, branch.empty() ? "master" : branch,
+				 public_key, private_key);
 
 		if (db != old_db)
 			tds.run(tds::no_check{"USE " + brackets_escape(old_db)});
@@ -1865,7 +1873,8 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 		tds::tds tds2(server, db_username, db_password, db_app);
 
 		tds2.run(tds::no_check{"USE " + brackets_escape(db)});
-		dump_sql(tds2, repo_dir, branch.empty() ? "master" : branch);
+		dump_sql(tds2, repo_dir, branch.empty() ? "master" : branch,
+				 public_key, private_key);
 	}
 }
 
