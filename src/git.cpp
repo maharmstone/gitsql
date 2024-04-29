@@ -697,6 +697,46 @@ void GitRemote::push(const std::vector<std::string>& refspecs, const git_push_op
 		throw git_exception(ret, "git_remote_push");
 }
 
+void GitRepo::try_push(const string& ref, const string& public_key,
+					   const string& private_key) {
+	auto remote = branch_upstream_remote(ref);
+
+	if (remote.empty())
+		return;
+
+	auto r = remote_lookup(remote);
+
+	git_push_options options = GIT_PUSH_OPTIONS_INIT;
+
+	struct options_payload {
+		const char* public_key;
+		const char* private_key;
+	} p;
+
+	p.public_key = public_key.c_str();
+	p.private_key = private_key.c_str();
+
+	options.callbacks.payload = &p;
+
+	options.callbacks.credentials = [](git_credential** out, const char*, const char* username_from_url,
+									   unsigned int allowed_types, void* payload) -> int {
+		if (!(allowed_types & GIT_CREDENTIAL_SSH_MEMORY))
+			return 1;
+
+		const auto& p = *(options_payload*)payload;
+
+		return git_credential_ssh_key_memory_new(out, username_from_url, p.public_key,
+												 p.private_key, "");
+	};
+
+	options.callbacks.certificate_check = [](git_cert*, int, const char*, void*) -> int {
+		// FIXME
+		return 0;
+	};
+
+	r.push({ ref }, options);
+}
+
 void git_update::add_file(string_view filename, string_view data) {
 	{
 		lock_guard lg(lock);
