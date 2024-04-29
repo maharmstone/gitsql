@@ -18,9 +18,15 @@ public:
 	git_exception(int error, string_view func) {
 		auto lg2err = git_error_last();
 
-		if (lg2err && lg2err->message)
-			msg = string(func) + " failed (" + lg2err->message + ")";
-		else
+		if (lg2err && lg2err->message) {
+			msg = string(func) + " failed (" + lg2err->message;
+
+			while (!msg.empty() && (msg.back() == '\r' || msg.back() == '\n')) {
+				msg.pop_back();
+			}
+
+			msg += ")";
+		} else
 			msg = string(func) + " failed (error " + to_string(error) + ")";
 	}
 
