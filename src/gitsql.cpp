@@ -1500,12 +1500,14 @@ static void get_user_details(const u16string& username, string& name, string& em
 
 static void flush_git(const string& db_server) {
 	struct repo {
-		repo(unsigned int id, string_view dir, string_view branch) :
-			id(id), dir(dir), branch(branch) { }
+		repo(unsigned int id, string_view dir, string_view branch, string_view public_key, string_view private_key) :
+			id(id), dir(dir), branch(branch), public_key(public_key), private_key(private_key) { }
 
 		unsigned int id;
 		string dir;
 		string branch;
+		string public_key;
+		string private_key;
 	};
 
 	vector<repo> repos;
@@ -1518,10 +1520,11 @@ static void flush_git(const string& db_server) {
 		tds.run("SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; DELETE FROM master.dbo.git WHERE (SELECT COUNT(*) FROM master.dbo.git_files WHERE id = Git.id) = 0");
 
 		{
-			tds::batch sq(tds, "SELECT git.repo, git_repo.dir, git_repo.branch FROM (SELECT repo FROM master.dbo.git GROUP BY repo) git JOIN master.dbo.git_repo ON git_repo.id = Git.repo");
+			tds::batch sq(tds, "SELECT git.repo, git_repo.dir, git_repo.branch, git_repo.public_key, git_repo.private_key FROM (SELECT repo FROM master.dbo.git GROUP BY repo) git JOIN master.dbo.git_repo ON git_repo.id = Git.repo");
 
 			while (sq.fetch_row()) {
-				repos.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2]);
+				repos.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2],
+								   (string)sq[3], (string)sq[4]);
 			}
 
 			if (repos.size() == 0)
@@ -1662,7 +1665,8 @@ ORDER BY git.id
 			}
 		}
 
-		// FIXME - push
+		repo.try_push("refs/heads/" + (r.branch.empty() ? "master" : r.branch),
+					  r.public_key, r.private_key);
 	}
 }
 
