@@ -1498,17 +1498,16 @@ static void get_user_details(const u16string& username, string& name, string& em
 #endif
 }
 
-class repo {
-public:
-	repo(unsigned int id, string_view dir, string_view branch) :
-		id(id), dir(dir), branch(branch) { }
-
-	unsigned int id;
-	string dir;
-	string branch;
-};
-
 static void flush_git(const string& db_server) {
+	struct repo {
+		repo(unsigned int id, string_view dir, string_view branch) :
+			id(id), dir(dir), branch(branch) { }
+
+		unsigned int id;
+		string dir;
+		string branch;
+	};
+
 	vector<repo> repos;
 
 	git_libgit2_init();
