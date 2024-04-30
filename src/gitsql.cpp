@@ -1671,8 +1671,12 @@ ORDER BY git.id
 			}
 		}
 
-		repo.try_push("refs/heads/" + (r.branch.empty() ? "master" : r.branch),
-					  r.public_key, r.private_key);
+		try {
+			repo.try_push("refs/heads/" + (r.branch.empty() ? "master" : r.branch),
+						  r.public_key, r.private_key);
+		} catch (const exception& e) {
+			cerr << e.what() << endl;
+		}
 	}
 }
 
