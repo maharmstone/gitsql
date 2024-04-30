@@ -717,6 +717,7 @@ void GitRepo::try_push(const string& ref, const string& public_key,
 	struct options_payload {
 		const char* public_key;
 		const char* private_key;
+		optional<string> status;
 	} p;
 
 	p.public_key = public_key.c_str();
@@ -740,7 +741,19 @@ void GitRepo::try_push(const string& ref, const string& public_key,
 		return 0;
 	};
 
+	options.callbacks.push_update_reference = [](const char*, const char* status, void* payload) -> int {
+		auto& p = *(options_payload*)payload;
+
+		if (status)
+			p.status = status;
+
+		return 0;
+	};
+
 	r.push({ ref }, options);
+
+	if (p.status.has_value())
+		throw runtime_error("push failed: " + p.status.value());
 }
 
 void git_update::add_file(string_view filename, string_view data) {
