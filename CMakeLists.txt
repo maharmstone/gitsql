@@ -25,7 +25,7 @@ find_package(PkgConfig REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
-pkg_check_modules(LIBGIT2 REQUIRED libgit2)
+pkg_check_modules(LIBGIT2 REQUIRED IMPORTED_TARGET libgit2)
 
 add_definitions(-DNOMINMAX)
 
@@ -39,8 +39,7 @@ else()
 	target_link_libraries(gitsql ldap lber)
 endif()
 
-target_include_directories(gitsql PUBLIC ${LIBGIT2_INCLUDE_DIRS})
-target_link_libraries(gitsql ${LIBGIT2_LINK_LIBRARIES})
+target_link_libraries(gitsql PkgConfig::LIBGIT2)
 
 if(NOT MSVC)
 	target_compile_options(gitsql PUBLIC -Wall -Werror=cast-function-type -Wno-expansion-to-defined -Wunused-parameter -Wtype-limits -Wextra -Wconversion)

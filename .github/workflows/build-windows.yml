@@ -13,12 +13,15 @@ jobs:
       - run: mkdir -p release-work
       - run: mkdir nlohmann-json && cd nlohmann-json && wget -qO- https://www.burntcomma.com/packages/nlohmann-json-3.11.3-x86_64-pc-windows-msvc.tar.gz | tar -xz
       - run: mkdir zlib && cd zlib && wget -qO- https://www.burntcomma.com/packages/zlib-1.3.1-x86_64-pc-windows-msvc.tar.gz | tar -xz
-      - run: mkdir libgit2 && cd libgit2 && wget -qO- https://www.burntcomma.com/libgit2-1.1.0-x86_64-pc-windows-msvc.tar.gz | tar -xz
+      - run: mkdir libgit2 && cd libgit2 && wget -qO- https://www.burntcomma.com/packages/libgit2-1.6.4-x86_64-pc-windows-msvc.tar.gz | tar -xz
+      - run: mkdir libssh2 && cd libssh2 && wget -qO- https://www.burntcomma.com/packages/libssh2-1.11.0-x86_64-pc-windows-msvc.tar.gz | tar -xz
+      - run: mkdir pcre && cd pcre && wget -qO- https://www.burntcomma.com/packages/pcre-8.45-x86_64-pc-windows-msvc.tar.gz | tar -xz
+      - run: mkdir openssl && cd openssl && wget -qO- https://www.burntcomma.com/packages/openssl-3.3.0-x86_64-pc-windows-msvc.tar.gz | tar -xz
       - run: mkdir tdscpp && cd tdscpp && wget -qO- ${{ github.server_url }}/maharmstone/tdscpp/releases/download/latest/x86_64-pc-windows-msvc.zip > tdscpp.zip && unzip tdscpp.zip
       - run: |
           cmake -DCMAKE_TOOLCHAIN_FILE=msvc-amd64.cmake \
             -DCMAKE_FIND_ROOT_PATH="${PWD}/nlohmann-json;${PWD}/tdscpp/debug" \
-            -DCMAKE_PREFIX_PATH="${PWD}/libgit2/debug" \
+            -DCMAKE_PREFIX_PATH="${PWD}/libgit2/debug;${PWD}/pcre/debug;${PWD}/libssh2/debug" \
             -DZLIB_ROOT="${PWD}/zlib/debug" -DZLIB_INCLUDE_DIR="${PWD}/zlib/include" \
             -DLIBGIT2_INCLUDE_DIRS="${PWD}/libgit2/include" \
             -DCMAKE_BUILD_TYPE=Debug \
@@ -29,7 +32,7 @@ jobs:
       - run: |
           cmake -DCMAKE_TOOLCHAIN_FILE=msvc-amd64.cmake \
             -DCMAKE_FIND_ROOT_PATH="${PWD}/nlohmann-json;${PWD}/tdscpp" \
-            -DCMAKE_PREFIX_PATH="${PWD}/libgit2" \
+            -DCMAKE_PREFIX_PATH="${PWD}/libgit2;${PWD}/pcre;${PWD}/libssh2" \
             -DZLIB_ROOT="${PWD}/zlib" -DZLIB_INCLUDE_DIR="${PWD}/zlib/include" \
             -DLIBGIT2_INCLUDE_DIRS="${PWD}/libgit2/include" \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -37,8 +40,8 @@ jobs:
             -S ${SHORT_SHA} -B release-work && \
           cmake --build release-work --parallel `nproc` && \
           cmake --install release-work
-      - run: cp tdscpp/debug/bin/tdscpp.dll zlib/debug/bin/zlibd1.dll libgit2/debug/bin/libgit2.dll libgit2/bin/pcre.dll install/debug/bin/
-      - run: cp tdscpp/bin/tdscpp.dll zlib/bin/zlib1.dll libgit2/bin/libgit2.dll libgit2/bin/pcre.dll install/bin/
+      - run: cp tdscpp/debug/bin/tdscpp.dll zlib/debug/bin/zlibd1.dll libgit2/debug/bin/git2.dll pcre/debug/bin/pcred.dll libssh2/debug/bin/libssh2.dll openssl/debug/bin/libcrypto-3-x64.dll install/debug/bin/
+      - run: cp tdscpp/bin/tdscpp.dll zlib/bin/zlib1.dll libgit2/bin/git2.dll pcre/bin/pcre.dll libssh2/bin/libssh2.dll openssl/bin/libcrypto-3-x64.dll install/bin/
       - uses: actions/upload-artifact@v3
         with:
           name: ${{ github.sha }}
