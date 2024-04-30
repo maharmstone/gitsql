@@ -1437,7 +1437,11 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 		repo.checkout_head(&opts);
 	}
 
-	repo.try_push("refs/heads/" + branch, public_key, private_key);
+	try {
+		repo.try_push("refs/heads/" + branch, public_key, private_key);
+	} catch (const exception& e) {
+		cerr << e.what() << endl;
+	}
 }
 
 static void get_user_details(const u16string& username, string& name, string& email) {
