@@ -1272,6 +1272,7 @@ static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const stri
 					 const string& public_key, const string& private_key) {
 	git_libgit2_init();
 	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
+	git_libgit2_opts(GIT_OPT_SET_OWNER_VALIDATION, 0);
 
 	vector<sql_obj> objs;
 
@@ -1514,6 +1515,7 @@ static void flush_git(const string& db_server) {
 
 	git_libgit2_init();
 	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
+	git_libgit2_opts(GIT_OPT_SET_OWNER_VALIDATION, 0);
 
 	{
 		tds::tds tds(db_server, db_username, db_password, db_app);
@@ -2154,6 +2156,7 @@ static filesystem::path get_exe_path() {
 static void install(tds::tds& tds) {
 	git_libgit2_init();
 	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
+	git_libgit2_opts(GIT_OPT_SET_OWNER_VALIDATION, 0);
 
 	tds.run("USE master");
 

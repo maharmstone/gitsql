@@ -332,6 +332,7 @@ void dump_master(string_view db_server, unsigned int repo_num, span<const std::b
 
 	git_libgit2_init();
 	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
+	git_libgit2_opts(GIT_OPT_SET_OWNER_VALIDATION, 0);
 
 	GitRepo repo(repo_dir);
 
