@@ -11,7 +11,7 @@ jobs:
       - run: cd ${SHORT_SHA} && git checkout ${{ github.sha }}
       - run: mkdir -p debug-work
       - run: mkdir -p release-work
-      - run: mkdir nlohmann-json && cd nlohmann-json && wget -qO- https://www.burntcomma.com/nlohmann-json-3.11.2-x86_64-pc-windows-msvc.tar.gz | tar -xz
+      - run: mkdir nlohmann-json && cd nlohmann-json && wget -qO- https://www.burntcomma.com/packages/nlohmann-json-3.11.3-x86_64-pc-windows-msvc.tar.gz | tar -xz
       - run: mkdir zlib && cd zlib && wget -qO- https://www.burntcomma.com/packages/zlib-1.3.1-x86_64-pc-windows-msvc.tar.gz | tar -xz
       - run: mkdir libgit2 && cd libgit2 && wget -qO- https://www.burntcomma.com/libgit2-1.1.0-x86_64-pc-windows-msvc.tar.gz | tar -xz
       - run: mkdir tdscpp && cd tdscpp && wget -qO- ${{ github.server_url }}/maharmstone/tdscpp/releases/download/latest/x86_64-pc-windows-msvc.zip > tdscpp.zip && unzip tdscpp.zip
