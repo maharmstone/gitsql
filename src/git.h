@@ -163,8 +163,7 @@ public:
 	bool is_bare();
 	std::string branch_upstream_remote(const std::string& refname);
 	GitRemote remote_lookup(const std::string& name);
-	void try_push(const std::string& ref, const std::string& public_key,
-				  const std::string& private_key);
+	void try_push(const std::string& ref);
 
 	git_repository_ptr repo;
 };

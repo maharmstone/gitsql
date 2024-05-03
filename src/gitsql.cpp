@@ -1268,8 +1268,7 @@ static void dump_options(tds::tds& tds, git_update& gu) {
 	gu.add_file("options.json", j.dump(3) + "\n");
 }
 
-static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& branch,
-					 const string& public_key, const string& private_key) {
+static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& branch) {
 	git_libgit2_init();
 	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
 	git_libgit2_opts(GIT_OPT_SET_OWNER_VALIDATION, 0);
@@ -1438,7 +1437,7 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 	}
 
 	try {
-		repo.try_push("refs/heads/" + branch, public_key, private_key);
+		repo.try_push("refs/heads/" + branch);
 	} catch (const exception& e) {
 		cerr << e.what() << endl;
 	}
@@ -1505,14 +1504,12 @@ static void get_user_details(const u16string& username, string& name, string& em
 
 static void flush_git(const string& db_server) {
 	struct repo {
-		repo(unsigned int id, string_view dir, string_view branch, string_view public_key, string_view private_key) :
-			id(id), dir(dir), branch(branch), public_key(public_key), private_key(private_key) { }
+		repo(unsigned int id, string_view dir, string_view branch) :
+			id(id), dir(dir), branch(branch) { }
 
 		unsigned int id;
 		string dir;
 		string branch;
-		string public_key;
-		string private_key;
 	};
 
 	vector<repo> repos;
@@ -1526,11 +1523,10 @@ static void flush_git(const string& db_server) {
 		tds.run("SET LOCK_TIMEOUT 0; SET XACT_ABORT ON; DELETE FROM master.dbo.git WHERE (SELECT COUNT(*) FROM master.dbo.git_files WHERE id = Git.id) = 0");
 
 		{
-			tds::batch sq(tds, "SELECT git.repo, git_repo.dir, git_repo.branch, git_repo.public_key, git_repo.private_key FROM (SELECT repo FROM master.dbo.git GROUP BY repo) git JOIN master.dbo.git_repo ON git_repo.id = Git.repo");
+			tds::batch sq(tds, "SELECT git.repo, git_repo.dir, git_repo.branch FROM (SELECT repo FROM master.dbo.git GROUP BY repo) git JOIN master.dbo.git_repo ON git_repo.id = Git.repo");
 
 			while (sq.fetch_row()) {
-				repos.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2],
-								   (string)sq[3], (string)sq[4]);
+				repos.emplace_back((unsigned int)sq[0], (string)sq[1], (string)sq[2]);
 			}
 
 			if (repos.size() == 0)
@@ -1672,8 +1668,7 @@ ORDER BY git.id
 		}
 
 		try {
-			repo.try_push("refs/heads/" + (r.branch.empty() ? "master" : r.branch),
-						  r.public_key, r.private_key);
+			repo.try_push("refs/heads/" + (r.branch.empty() ? "master" : r.branch));
 		} catch (const exception& e) {
 			cerr << e.what() << endl;
 		}
@@ -1855,10 +1850,10 @@ static void write_object_ddl(tds::tds& tds, u16string_view schema, u16string_vie
 }
 
 static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
-	string repo_dir, db, server, branch, public_key, private_key;
+	string repo_dir, db, server, branch;
 
 	{
-		tds::query sq(tds, "SELECT dir, db, server, branch, public_key, private_key FROM master.dbo.git_repo WHERE id = ?", repo_num);
+		tds::query sq(tds, "SELECT dir, db, server, branch FROM master.dbo.git_repo WHERE id = ?", repo_num);
 
 		if (!sq.fetch_row())
 			throw formatted_error("Repo {} not found in master.dbo.git_repo.", repo_num);
@@ -1867,8 +1862,6 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 		db = (string)sq[1];
 		server = (string)sq[2];
 		branch = (string)sq[3];
-		public_key = (string)sq[4];
-		private_key = (string)sq[5];
 	}
 
 	if (server.empty()) {
@@ -1877,8 +1870,7 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 		if (db != old_db)
 			tds.run(tds::no_check{"USE " + brackets_escape(db)});
 
-		dump_sql(tds, repo_dir, branch.empty() ? "master" : branch,
-				 public_key, private_key);
+		dump_sql(tds, repo_dir, branch.empty() ? "master" : branch);
 
 		if (db != old_db)
 			tds.run(tds::no_check{"USE " + brackets_escape(old_db)});
@@ -1886,8 +1878,7 @@ static void dump_sql2(tds::tds& tds, unsigned int repo_num) {
 		tds::tds tds2(server, db_username, db_password, db_app);
 
 		tds2.run(tds::no_check{"USE " + brackets_escape(db)});
-		dump_sql(tds2, repo_dir, branch.empty() ? "master" : branch,
-				 public_key, private_key);
+		dump_sql(tds2, repo_dir, branch.empty() ? "master" : branch);
 	}
 }
 

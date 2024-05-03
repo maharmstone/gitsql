@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <unordered_set>
+#include <fstream>
 #include <zlib.h>
 #include "git.h"
 #include "gitsql.h"
@@ -703,8 +704,85 @@ void GitRemote::push(const std::vector<std::string>& refspecs, const git_push_op
 		throw git_exception(ret, "git_remote_push");
 }
 
-void GitRepo::try_push(const string& ref, const string& public_key,
-					   const string& private_key) {
+static vector<pair<string, string>> load_ssh_keys() {
+	vector<pair<string, string>> keys;
+
+	static const string key_names[] = {
+		"id_rsa",
+		"id_ecdsa",
+		"id_ecdsa_sk",
+		"id_ed25519",
+		"id_ed25519_sk",
+		"id_xmss",
+		"id_dsa"
+	};
+
+#ifdef _WIN32
+	const char* home = getenv("USERPROFILE");
+#else
+	const char* home = getenv("HOME");
+#endif
+
+	if (!home)
+		return {};
+
+	auto sshdir = filesystem::path{home} / ".ssh";
+
+	if (!filesystem::exists(sshdir))
+		return {};
+
+	for (const auto& n : key_names) {
+		auto fn = sshdir / n;
+
+		if (!filesystem::exists(fn))
+			continue;
+
+		auto fnpub = sshdir / (n + ".pub");
+
+		if (!filesystem::exists(fnpub))
+			continue;
+
+		string private_key, public_key;
+
+		private_key.resize(file_size(fn));
+
+		{
+			ifstream f(fn, ios::binary);
+
+			if (!f.is_open()) {
+				cerr << "Could not open " << fn.string() << " for reading." << endl;
+				continue;
+			}
+
+			if (!f.read(private_key.data(), private_key.size())) {
+				cerr << "Could not read " << fn.string() << "." << endl;
+				continue;
+			}
+		}
+
+		public_key.resize(file_size(fnpub));
+
+		{
+			ifstream f(fnpub, ios::binary);
+
+			if (!f.is_open()) {
+				cerr << "Could not open " << fnpub.string() << " for reading." << endl;
+				continue;
+			}
+
+			if (!f.read(public_key.data(), public_key.size())) {
+				cerr << "Could not read " << fnpub.string() << "." << endl;
+				continue;
+			}
+		}
+
+		keys.emplace_back(make_pair(public_key, private_key));
+	}
+
+	return keys;
+}
+
+void GitRepo::try_push(const string& ref) {
 	auto remote = branch_upstream_remote(ref);
 
 	if (remote.empty())
@@ -714,30 +792,43 @@ void GitRepo::try_push(const string& ref, const string& public_key,
 
 	git_push_options options = GIT_PUSH_OPTIONS_INIT;
 
+	// FIXME - way of saying to use specific key? Or use libssh to parse ~/.ssh/config file?
+
+	auto keys = load_ssh_keys();
+
+	if (keys.empty())
+		throw runtime_error("No SSH keys loaded.");
+
 	struct options_payload {
-		const char* public_key;
-		const char* private_key;
 		optional<string> status;
+		vector<pair<string, string>> keys;
+		unsigned int key_num = 0;
 	} p;
 
-	p.public_key = public_key.c_str();
-	p.private_key = private_key.c_str();
+	swap(p.keys, keys);
 
 	options.callbacks.payload = &p;
 
 	options.callbacks.credentials = [](git_credential** out, const char*, const char* username_from_url,
 									   unsigned int allowed_types, void* payload) -> int {
 		if (!(allowed_types & GIT_CREDENTIAL_SSH_MEMORY))
-			return 1;
+			return GIT_PASSTHROUGH;
 
-		const auto& p = *(options_payload*)payload;
+		auto& p = *(options_payload*)payload;
 
-		return git_credential_ssh_key_memory_new(out, username_from_url, p.public_key,
-												 p.private_key, "");
+		if (p.key_num == p.keys.size())
+			return GIT_EAUTH;
+
+		auto ret = git_credential_ssh_key_memory_new(out, username_from_url, p.keys[p.key_num].first.c_str(),
+													 p.keys[p.key_num].second.c_str(), "");
+
+		p.key_num++;
+
+		return ret;
 	};
 
 	options.callbacks.certificate_check = [](git_cert*, int, const char*, void*) -> int {
-		// FIXME
+		// FIXME - parse ~/.ssh/known_hosts?
 		return 0;
 	};
 
