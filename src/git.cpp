@@ -566,16 +566,9 @@ void GitRepo::checkout_head(const git_checkout_options* opts) {
 }
 
 bool GitRepo::branch_is_head(const std::string& name) {
-	int ret;
 	git_reference_ptr ref;
 
-	{
-		git_reference* tmp = nullptr;
-
-		ret = git_reference_lookup(&tmp, repo.get(), ("refs/heads/" + name).c_str());
-
-		ref.reset(tmp);
-	}
+	auto ret = git_reference_lookup(out_ptr(ref), repo.get(), ("refs/heads/" + name).c_str());
 
 	if (ret == GIT_ENOTFOUND)
 		return false;
