@@ -299,14 +299,8 @@ git_oid GitRepo::index_tree_id() const {
 	git_index_ptr index;
 	git_oid tree_id;
 
-	{
-		git_index* tmp = nullptr;
-
-		if (auto ret = git_repository_index(&tmp, repo.get()))
-			throw git_exception(ret, "git_repository_index");
-
-		index.reset(tmp);
-	}
+	if (auto ret = git_repository_index(out_ptr(index), repo.get()))
+		throw git_exception(ret, "git_repository_index");
 
 	if (auto ret = git_index_write_tree(&tree_id, index.get()))
 		throw git_exception(ret, "git_index_write_tree");
