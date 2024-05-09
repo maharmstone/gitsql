@@ -75,11 +75,8 @@ GitTree::GitTree(const GitRepo& repo, const GitTreeEntry& gte) {
 
 git_tree_entry_ptr GitTree::entry_bypath(const string& path) {
 	git_tree_entry_ptr gte;
-	git_tree_entry* tmp = nullptr;
 
-	int ret = git_tree_entry_bypath(&tmp, tree.get(), path.c_str());
-
-	gte.reset(tmp);
+	int ret = git_tree_entry_bypath(out_ptr(gte), tree.get(), path.c_str());
 
 	if (ret != 0 && ret != GIT_ENOTFOUND)
 		throw git_exception(ret, "git_tree_entry_bypath");
