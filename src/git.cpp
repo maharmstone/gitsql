@@ -42,20 +42,16 @@ private:
 static constexpr auto jan1970 = chrono::duration_cast<chrono::seconds>(chrono::time_point{chrono::sys_days{1970y/chrono::January/1d}}.time_since_epoch());
 
 GitSignature::GitSignature(const string& user, const string& email, const optional<tds::datetimeoffset>& dto) {
-	git_signature* tmp = nullptr;
-
 	if (dto.has_value()) {
 		auto tp = (chrono::time_point<chrono::system_clock>)dto.value();
 		auto secs = chrono::duration_cast<chrono::seconds>(tp.time_since_epoch()) - jan1970;
 
-		if (auto ret = git_signature_new(&tmp, user.c_str(), email.c_str(), secs.count(), dto.value().offset))
+		if (auto ret = git_signature_new(out_ptr(sig), user.c_str(), email.c_str(), secs.count(), dto.value().offset))
 			throw git_exception(ret, "git_signature_new");
 	} else {
-		if (auto ret = git_signature_now(&tmp, user.c_str(), email.c_str()))
+		if (auto ret = git_signature_now(out_ptr(sig), user.c_str(), email.c_str()))
 			throw git_exception(ret, "git_signature_now");
 	}
-
-	sig.reset(tmp);
 }
 
 GitTree::GitTree(const git_commit* commit) {
