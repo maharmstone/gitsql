@@ -499,12 +499,8 @@ void update_git(GitRepo& repo, const string& user, const string& email, const st
 }
 
 GitIndex::GitIndex(const GitRepo& repo) {
-	git_index* tmp = nullptr;
-
-	if (auto ret = git_repository_index(&tmp, repo.repo.get()))
+	if (auto ret = git_repository_index(out_ptr(index), repo.repo.get()))
 		throw git_exception(ret, "git_repository_index");
-
-	index.reset(tmp);
 }
 
 void GitIndex::write_tree(git_oid* oid) {
