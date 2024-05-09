@@ -420,17 +420,8 @@ void GitRepo::branch_create(const string& branch_name, const git_commit* target,
 
 void GitRepo::reference_create(const string& name, const git_oid& id, bool force, const string& log_message) {
 	git_reference_ptr ref;
-	int ret;
 
-	{
-		git_reference* tmp = nullptr;
-
-		ret = git_reference_create(&tmp, repo.get(), name.c_str(), &id, force ? 1 : 0, log_message.c_str());
-
-		ref.reset(tmp);
-	}
-
-	if (ret)
+	if (auto ret = git_reference_create(out_ptr(ref), repo.get(), name.c_str(), &id, force ? 1 : 0, log_message.c_str()))
 		throw git_exception(ret, "git_reference_create");
 }
 
