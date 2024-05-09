@@ -400,15 +400,8 @@ static void do_clear_all(const GitRepo& repo, const GitTree& tree, const string&
 
 git_reference_ptr GitRepo::branch_lookup(const std::string& branch_name, git_branch_t branch_type) {
 	git_reference_ptr ref;
-	int ret;
 
-	{
-		git_reference* tmp = nullptr;
-
-		ret = git_branch_lookup(&tmp, repo.get(), branch_name.c_str(), branch_type);
-
-		ref.reset(tmp);
-	}
+	auto ret = git_branch_lookup(out_ptr(ref), repo.get(), branch_name.c_str(), branch_type);
 
 	if (ret && ret != GIT_ENOTFOUND)
 		throw git_exception(ret, "git_branch_lookup");
