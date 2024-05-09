@@ -55,21 +55,13 @@ GitSignature::GitSignature(const string& user, const string& email, const option
 }
 
 GitTree::GitTree(const git_commit* commit) {
-	git_tree* tmp = nullptr;
-
-	if (auto ret = git_commit_tree(&tmp, commit))
+	if (auto ret = git_commit_tree(out_ptr(tree), commit))
 		throw git_exception(ret, "git_commit_tree");
-
-	tree.reset(tmp);
 }
 
 GitTree::GitTree(const GitRepo& repo, const git_oid& oid) {
-	git_tree* tmp = nullptr;
-
-	if (auto ret = git_tree_lookup(&tmp, repo.repo.get(), &oid))
+	if (auto ret = git_tree_lookup(out_ptr(tree), repo.repo.get(), &oid))
 		throw git_exception(ret, "git_tree_lookup");
-
-	tree.reset(tmp);
 }
 
 GitTree::GitTree(const GitRepo& repo, const GitTreeEntry& gte) {
