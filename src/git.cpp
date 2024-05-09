@@ -403,11 +403,10 @@ git_reference_ptr GitRepo::branch_lookup(const std::string& branch_name, git_bra
 
 	auto ret = git_branch_lookup(out_ptr(ref), repo.get(), branch_name.c_str(), branch_type);
 
-	if (ret && ret != GIT_ENOTFOUND)
+	if (ret == GIT_ENOTFOUND)
+		return nullptr;
+	else if (ret)
 		throw git_exception(ret, "git_branch_lookup");
-
-	if (ret)
-		ref.reset();
 
 	return ref;
 }
