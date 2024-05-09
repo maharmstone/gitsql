@@ -78,11 +78,10 @@ git_tree_entry_ptr GitTree::entry_bypath(const string& path) {
 
 	int ret = git_tree_entry_bypath(out_ptr(gte), tree.get(), path.c_str());
 
-	if (ret != 0 && ret != GIT_ENOTFOUND)
+	if (ret == GIT_ENOTFOUND)
+		return nullptr;
+	else if (ret)
 		throw git_exception(ret, "git_tree_entry_bypath");
-
-	if (ret)
-		gte.reset();
 
 	return gte;
 }
