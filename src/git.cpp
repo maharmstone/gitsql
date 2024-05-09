@@ -413,17 +413,8 @@ git_reference_ptr GitRepo::branch_lookup(const std::string& branch_name, git_bra
 
 void GitRepo::branch_create(const string& branch_name, const git_commit* target, bool force) {
 	git_reference_ptr ref;
-	int ret;
 
-	{
-		git_reference* tmp = nullptr;
-
-		ret = git_branch_create(&tmp, repo.get(), branch_name.c_str(), target, force ? 1 : 0);
-
-		ref.reset(tmp);
-	}
-
-	if (ret)
+	if (auto ret = git_branch_create(out_ptr(ref), repo.get(), branch_name.c_str(), target, force ? 1 : 0))
 		throw git_exception(ret, "git_branch_create");
 }
 
