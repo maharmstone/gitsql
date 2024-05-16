@@ -118,6 +118,17 @@ public:
 
 using git_remote_ptr = std::unique_ptr<git_remote*, git_remote_deleter>;
 
+class git_odb_deleter {
+public:
+	using pointer = git_odb*;
+
+	void operator()(git_odb* o) {
+		git_odb_free(o);
+	}
+};
+
+using git_odb_ptr = std::unique_ptr<git_odb*, git_odb_deleter>;
+
 class GitSignature {
 public:
 	GitSignature(const std::string& user, const std::string& email, const std::optional<tds::datetimeoffset>& dto = std::nullopt);
