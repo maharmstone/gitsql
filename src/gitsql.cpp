@@ -1540,7 +1540,7 @@ static void flush_git(const string& db_server) {
 		while (true) {
 			tds::datetimeoffset dto;
 			string name, email, description;
-			list<git_file> files;
+			list<git_file2> files;
 			bool clear_all = false;
 			list<unsigned int> delete_commits;
 			list<unsigned int> delete_files;
@@ -1618,7 +1618,10 @@ ORDER BY git.id
 							}
 						}
 
-						files.emplace_back((string)sq[5], sq[6]);
+						if (!sq[6].is_null)
+							files.emplace_back((string)sq[5], repo.blob_create_from_buffer((string)sq[6]));
+						else
+							files.emplace_back((string)sq[5], nullopt);
 					}
 
 					if (!sq.fetch_row())
@@ -1626,18 +1629,8 @@ ORDER BY git.id
 				} while (true);
 			}
 
-			if (files.size() > 0 || clear_all) {
-				list<git_file2> files2;
-
-				for (const auto& f : files) {
-					if (f.data.has_value())
-						files2.emplace_back(f.filename, repo.blob_create_from_buffer(f.data.value()));
-					else
-						files2.emplace_back(f.filename, nullopt);
-				}
-
-				update_git(repo, name, email, description, files2, clear_all, dto, r.branch);
-			}
+			if (!files.empty() || clear_all)
+				update_git(repo, name, email, description, files, clear_all, dto, r.branch);
 
 			if (!delete_commits.empty()) {
 				tds::trans trans(tds);
