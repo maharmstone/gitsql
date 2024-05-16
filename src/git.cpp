@@ -194,14 +194,8 @@ git_oid GitRepo::blob_create_from_buffer(string_view data) {
 	if (auto ret = git_odb_hash(&blob, data.data(), data.length(), GIT_OBJECT_BLOB))
 		throw git_exception(ret, "git_odb_hash");
 
-	{
-		git_odb* tmp;
-
-		if (auto ret = git_repository_odb(&tmp, repo.get()))
-			throw git_exception(ret, "git_repository_odb");
-
-		odb.reset(tmp);
-	}
+	if (auto ret = git_repository_odb(out_ptr(odb), repo.get()))
+		throw git_exception(ret, "git_repository_odb");
 
 	if (git_odb_exists(odb.get(), &blob) == 1)
 		return blob;
