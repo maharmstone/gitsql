@@ -163,7 +163,7 @@ public:
 	git_commit_ptr commit_lookup(const git_oid* oid);
 	git_oid commit_create(const GitSignature& author, const GitSignature& committer, const std::string& message, const GitTree& tree,
 						  git_commit* parent = nullptr);
-	git_oid blob_create_from_buffer(std::string_view data);
+	git_oid blob_create_from_buffer(std::span<const uint8_t> data);
 	git_oid tree_create_updated(const GitTree& baseline, std::span<const git_tree_update> updates);
 	git_oid index_tree_id() const;
 	void checkout_head(const git_checkout_options* opts = nullptr);
@@ -175,6 +175,10 @@ public:
 	std::string branch_upstream_remote(const std::string& refname);
 	GitRemote remote_lookup(const std::string& name);
 	void try_push(const std::string& ref);
+
+	git_oid blob_create_from_buffer(std::string_view data) {
+		return blob_create_from_buffer(std::span((uint8_t*)data.data(), data.size()));
+	}
 
 	git_repository_ptr repo;
 };

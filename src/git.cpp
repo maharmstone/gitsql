@@ -187,11 +187,11 @@ static filesystem::path get_object_filename(const filesystem::path& repopath, co
 	return file;
 }
 
-git_oid GitRepo::blob_create_from_buffer(string_view data) {
+git_oid GitRepo::blob_create_from_buffer(span<const uint8_t> data) {
 	git_oid blob;
 	git_odb_ptr odb;
 
-	if (auto ret = git_odb_hash(&blob, data.data(), data.length(), GIT_OBJECT_BLOB))
+	if (auto ret = git_odb_hash(&blob, data.data(), data.size(), GIT_OBJECT_BLOB))
 		throw git_exception(ret, "git_odb_hash");
 
 	if (auto ret = git_repository_odb(out_ptr(odb), repo.get()))
@@ -223,7 +223,7 @@ git_oid GitRepo::blob_create_from_buffer(string_view data) {
 		throw errno_error("open", errno);
 #endif
 
-	string header = "blob " + to_string(data.length());
+	string header = "blob " + to_string(data.size());
 	header.push_back(0);
 
 	z_stream strm;
@@ -284,7 +284,7 @@ git_oid GitRepo::blob_create_from_buffer(string_view data) {
 		if (strm.avail_in == 0 && writing_header) {
 			writing_header = false;
 			strm.next_in = (unsigned char*)data.data();
-			strm.avail_in = (unsigned int)data.length();
+			strm.avail_in = (unsigned int)data.size();
 		}
 	} while (err != Z_STREAM_END);
 
