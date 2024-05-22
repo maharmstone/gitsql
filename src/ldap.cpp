@@ -229,18 +229,12 @@ map<string, string> ldapobj::search_context(const string& filter, const vector<s
 		attlist.push_back(nullptr);
 	}
 
-	{
-		LDAPMessage* tmp = nullptr;
+	auto ret = ldap_search_ext_s(ld.get(), (char*)context.c_str(), LDAP_SCOPE_SUBTREE, (char*)filter.c_str(),
+								 atts.empty() ? nullptr : &attlist[0], false, nullptr, nullptr, nullptr,
+								 0, out_ptr(res));
 
-		auto ret = ldap_search_ext_s(ld.get(), (char*)context.c_str(), LDAP_SCOPE_SUBTREE, (char*)filter.c_str(),
-									atts.empty() ? nullptr : &attlist[0], false, nullptr, nullptr, nullptr,
-									0, &tmp);
-
-		res.reset(tmp);
-
-		if (ret != LDAP_SUCCESS)
-			throw ldap_error("ldap_search_ext_s", ret);
-	}
+	if (ret != LDAP_SUCCESS)
+		throw ldap_error("ldap_search_ext_s", ret);
 
 	att = ldap_first_attribute(ld.get(), res.get(), &ber);
 
