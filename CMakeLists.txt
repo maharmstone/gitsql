@@ -18,6 +18,11 @@ set(SRC_FILES
 	src/master.cpp
 	src/aes.cpp)
 
+if(WIN32)
+	set(SRC_FILES ${SRC_FILES}
+		src/gitsql.rc)
+endif()
+
 add_executable(gitsql ${SRC_FILES})
 
 find_package(tdscpp REQUIRED)
