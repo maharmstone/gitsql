@@ -29,6 +29,7 @@ find_package(tdscpp REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(libssh REQUIRED)
 
 pkg_check_modules(LIBGIT2 REQUIRED IMPORTED_TARGET libgit2)
 
@@ -37,6 +38,7 @@ add_definitions(-DNOMINMAX)
 target_link_libraries(gitsql tdscpp)
 target_link_libraries(gitsql ZLIB::ZLIB)
 target_link_libraries(gitsql nlohmann_json::nlohmann_json)
+target_link_libraries(gitsql ssh)
 
 if(WIN32)
 	target_link_libraries(gitsql wldap32)

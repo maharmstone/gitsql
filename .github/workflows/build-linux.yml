@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-rolling
     steps:
       - run: apt-get update
-      - run: apt-get install -y g++ git cmake nodejs wget unzip pkg-config zlib1g-dev nlohmann-json3-dev libgit2-dev libicu-dev libldap2-dev libsasl2-dev
+      - run: apt-get install -y g++ git cmake nodejs wget unzip pkg-config zlib1g-dev nlohmann-json3-dev libgit2-dev libicu-dev libldap2-dev libsasl2-dev libssh-dev
       - run: wget ${{ github.server_url }}/maharmstone/tdscpp/releases/download/latest/tdscpp-dev.deb && apt install -y ./tdscpp-dev.deb
       - run: echo "SHORT_SHA=`echo ${{ github.sha }} | cut -c1-8`" >> $GITHUB_ENV
       - run: git clone ${{ github.server_url }}/${{ github.repository }} ${SHORT_SHA}
