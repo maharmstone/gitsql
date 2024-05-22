@@ -724,8 +724,8 @@ public:
 
 using ssh_string_ptr = unique_ptr<char*, ssh_string_deleter>;
 
-static optional<string> get_ssh_identity(const string& host) {
-	ssh_string_ptr old_identity, new_identity;
+static void get_ssh_settings(const string& host, optional<string>& identity, optional<string>& user) {
+	ssh_string_ptr old_identity, new_identity, user_ptr;
 
 	ssh_session_ptr sess{ssh_new()};
 	if (!sess)
@@ -742,16 +742,14 @@ static optional<string> get_ssh_identity(const string& host) {
 	if (auto err = ssh_options_get(sess.get(), SSH_OPTIONS_IDENTITY, out_ptr(new_identity)); err)
 		throw runtime_error("ssh_options_get failed for SSH_OPTIONS_IDENTITY (error " + to_string(err) + ")");
 
-	if (!new_identity)
-		return nullopt;
+	if (new_identity && (!old_identity || strcmp(new_identity.get(), old_identity.get())))
+		identity = new_identity.get();
 
-	if (old_identity && !strcmp(new_identity.get(), old_identity.get()))
-		return nullopt;
-
-	return new_identity.get();
+	if (auto err = ssh_options_get(sess.get(), SSH_OPTIONS_USER, out_ptr(user_ptr)); !err)
+		user = user_ptr.get();
 }
 
-static vector<pair<string, string>> load_ssh_keys(const string& host) {
+static vector<pair<string, string>> load_ssh_keys(const optional<string>& identity) {
 	vector<pair<string, string>> keys;
 
 	static const string key_names[] = {
@@ -804,7 +802,6 @@ static vector<pair<string, string>> load_ssh_keys(const string& host) {
 		return true;
 	};
 
-	auto identity = get_ssh_identity(host);
 	if (identity.has_value()) {
 		filesystem::path fn{identity.value()};
 
@@ -879,8 +876,11 @@ void GitRepo::try_push(const string& ref) {
 		url = url.substr(at + 1);
 
 	git_push_options options = GIT_PUSH_OPTIONS_INIT;
+	optional<string> identity, user;
 
-	auto keys = load_ssh_keys(url);
+	get_ssh_settings(url, identity, user);
+
+	auto keys = load_ssh_keys(identity);
 
 	if (keys.empty())
 		throw runtime_error("No SSH keys loaded.");
@@ -888,19 +888,28 @@ void GitRepo::try_push(const string& ref) {
 	struct options_payload {
 		optional<string> status;
 		vector<pair<string, string>> keys;
+		optional<string> user;
 		unsigned int key_num = 0;
 	} p;
 
 	swap(p.keys, keys);
+	swap(p.user, user);
 
 	options.callbacks.payload = &p;
 
 	options.callbacks.credentials = [](git_credential** out, const char*, const char* username_from_url,
 									   unsigned int allowed_types, void* payload) -> int {
+		auto& p = *(options_payload*)payload;
+
+		if (allowed_types & GIT_CREDENTIAL_USERNAME) {
+			if (p.user.has_value())
+				return git_credential_username_new(out, p.user.value().c_str());
+			else
+				return GIT_PASSTHROUGH;
+		}
+
 		if (!(allowed_types & GIT_CREDENTIAL_SSH_MEMORY))
 			return GIT_PASSTHROUGH;
-
-		auto& p = *(options_payload*)payload;
 
 		if (p.key_num == p.keys.size())
 			return GIT_EAUTH;
