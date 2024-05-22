@@ -142,16 +142,10 @@ ldapobj::ldapobj() {
 	if (!ld)
 		throw ldap_error("ldap_init", LdapGetLastError());
 #else
-	{
-		LDAP* tmp = nullptr;
+	err = ldap_initialize(out_ptr(ld), nullptr);
 
-		err = ldap_initialize(&tmp, nullptr);
-
-		if (err != LDAP_SUCCESS)
-			throw ldap_error("ldap_initialize", err);
-
-		ld.reset(tmp);
-	}
+	if (err != LDAP_SUCCESS)
+		throw ldap_error("ldap_initialize", err);
 #endif
 
 #ifdef _WIN32
