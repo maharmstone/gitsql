@@ -16,6 +16,7 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include "outptr.h"
 
 using namespace std;
 

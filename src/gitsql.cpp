@@ -23,6 +23,7 @@
 #include <nlohmann/json.hpp>
 #include "git.h"
 #include "gitsql.h"
+#include "outptr.h"
 
 using namespace std;
 using json = nlohmann::json;
