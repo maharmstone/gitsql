@@ -904,8 +904,18 @@ void GitRepo::try_push(const string& ref) {
 		if (allowed_types & GIT_CREDENTIAL_USERNAME) {
 			if (p.user.has_value())
 				return git_credential_username_new(out, p.user.value().c_str());
-			else
-				return GIT_PASSTHROUGH;
+			else {
+#ifdef _WIN32
+				const char* username = getenv("USERNAME");
+#else
+				const char* username = getenv("USER");
+#endif
+
+				if (username)
+					return git_credential_username_new(out, username);
+				else
+					return GIT_PASSTHROUGH;
+			}
 		}
 
 		if (!(allowed_types & GIT_CREDENTIAL_SSH_MEMORY))
