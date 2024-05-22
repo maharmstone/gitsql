@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include <fstream>
 #include <zlib.h>
+#include <libssh/libssh.h>
 #include "git.h"
 #include "gitsql.h"
 #include "outptr.h"
@@ -701,7 +702,56 @@ void GitRemote::push(const std::vector<std::string>& refspecs, const git_push_op
 		throw git_exception(ret, "git_remote_push");
 }
 
-static vector<pair<string, string>> load_ssh_keys() {
+class ssh_session_deleter {
+public:
+	using pointer = ssh_session;
+
+	void operator()(ssh_session s) {
+		ssh_free(s);
+	}
+};
+
+using ssh_session_ptr = unique_ptr<ssh_session, ssh_session_deleter>;
+
+class ssh_string_deleter {
+public:
+	using pointer = char*;
+
+	void operator()(char* s) {
+		ssh_string_free_char(s);
+	}
+};
+
+using ssh_string_ptr = unique_ptr<char*, ssh_string_deleter>;
+
+static optional<string> get_ssh_identity(const string& host) {
+	ssh_string_ptr old_identity, new_identity;
+
+	ssh_session_ptr sess{ssh_new()};
+	if (!sess)
+		throw runtime_error("ssh_new failed");
+
+	if (auto err = ssh_options_set(sess.get(), SSH_OPTIONS_HOST, host.c_str()); err)
+		throw runtime_error("ssh_options_set failed for SSH_OPTIONS_HOST (error " + to_string(err) + ")");
+
+	ssh_options_get(sess.get(), SSH_OPTIONS_IDENTITY, out_ptr(old_identity));
+
+	if (auto err = ssh_options_parse_config(sess.get(), nullptr); err)
+		throw runtime_error("ssh_options_parse_config failed (error " + to_string(err) + ")");
+
+	if (auto err = ssh_options_get(sess.get(), SSH_OPTIONS_IDENTITY, out_ptr(new_identity)); err)
+		throw runtime_error("ssh_options_get failed for SSH_OPTIONS_IDENTITY (error " + to_string(err) + ")");
+
+	if (!new_identity)
+		return nullopt;
+
+	if (old_identity && !strcmp(new_identity.get(), old_identity.get()))
+		return nullopt;
+
+	return new_identity.get();
+}
+
+static vector<pair<string, string>> load_ssh_keys(const string& host) {
 	vector<pair<string, string>> keys;
 
 	static const string key_names[] = {
@@ -713,6 +763,64 @@ static vector<pair<string, string>> load_ssh_keys() {
 		"id_xmss",
 		"id_dsa"
 	};
+
+	auto add_key = [&](const filesystem::path& fn, const filesystem::path& fnpub) -> bool {
+		string private_key, public_key;
+
+		private_key.resize(file_size(fn));
+
+		{
+			ifstream f(fn, ios::binary);
+
+			if (!f.is_open()) {
+				cerr << "Could not open " << fn.string() << " for reading." << endl;
+				return false;
+			}
+
+			if (!f.read(private_key.data(), private_key.size())) {
+				cerr << "Could not read " << fn.string() << "." << endl;
+				return false;
+			}
+		}
+
+		public_key.resize(file_size(fnpub));
+
+		{
+			ifstream f(fnpub, ios::binary);
+
+			if (!f.is_open()) {
+				cerr << "Could not open " << fnpub.string() << " for reading." << endl;
+				return false;
+			}
+
+			if (!f.read(public_key.data(), public_key.size())) {
+				cerr << "Could not read " << fnpub.string() << "." << endl;
+				return false;
+			}
+		}
+
+		keys.emplace_back(make_pair(public_key, private_key));
+
+		return true;
+	};
+
+	auto identity = get_ssh_identity(host);
+	if (identity.has_value()) {
+		filesystem::path fn{identity.value()};
+
+		if (!filesystem::exists(fn))
+			throw runtime_error("Private key " + fn.string() + " does not exist.");
+
+		filesystem::path fnpub{identity.value() + ".pub"};
+
+		if (!filesystem::exists(fnpub))
+			throw runtime_error("Public key " + fnpub.string() + " does not exist.");
+
+		if (!add_key(fn, fnpub))
+			throw runtime_error("Failed to read keys.");
+
+		return keys;
+	}
 
 #ifdef _WIN32
 	const char* home = getenv("USERPROFILE");
@@ -739,41 +847,7 @@ static vector<pair<string, string>> load_ssh_keys() {
 		if (!filesystem::exists(fnpub))
 			continue;
 
-		string private_key, public_key;
-
-		private_key.resize(file_size(fn));
-
-		{
-			ifstream f(fn, ios::binary);
-
-			if (!f.is_open()) {
-				cerr << "Could not open " << fn.string() << " for reading." << endl;
-				continue;
-			}
-
-			if (!f.read(private_key.data(), private_key.size())) {
-				cerr << "Could not read " << fn.string() << "." << endl;
-				continue;
-			}
-		}
-
-		public_key.resize(file_size(fnpub));
-
-		{
-			ifstream f(fnpub, ios::binary);
-
-			if (!f.is_open()) {
-				cerr << "Could not open " << fnpub.string() << " for reading." << endl;
-				continue;
-			}
-
-			if (!f.read(public_key.data(), public_key.size())) {
-				cerr << "Could not read " << fnpub.string() << "." << endl;
-				continue;
-			}
-		}
-
-		keys.emplace_back(make_pair(public_key, private_key));
+		add_key(fn, fnpub);
 	}
 
 	return keys;
@@ -787,11 +861,26 @@ void GitRepo::try_push(const string& ref) {
 
 	auto r = remote_lookup(remote);
 
+	string url{git_remote_url(r.r.get())};
+
+	if (auto css = url.find("://"); css != string::npos) {
+		if (url.substr(0, css) != "ssh")
+			throw runtime_error("Protocol " + url.substr(0, css) + " not supported for pushing.");
+
+		url = url.substr(css);
+	}
+
+	if (auto colon = url.find(':'); colon == string::npos)
+		throw runtime_error("Local URLs not supported for pushing.");
+	else
+		url = url.substr(0, colon);
+
+	if (auto at = url.find('@'); at != string::npos)
+		url = url.substr(at + 1);
+
 	git_push_options options = GIT_PUSH_OPTIONS_INIT;
 
-	// FIXME - way of saying to use specific key? Or use libssh to parse ~/.ssh/config file?
-
-	auto keys = load_ssh_keys();
+	auto keys = load_ssh_keys(url);
 
 	if (keys.empty())
 		throw runtime_error("No SSH keys loaded.");
