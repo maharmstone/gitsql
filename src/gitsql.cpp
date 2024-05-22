@@ -2303,13 +2303,8 @@ static void install(tds::tds& tds) {
 				// FIXME - ask if it should be bare?
 
 				git_repository_ptr repo;
-				int ret;
 
-				{
-					git_repository* tmp = nullptr;
-					ret = git_repository_open(&tmp, path.c_str());
-					repo.reset(tmp);
-				}
+				auto ret = git_repository_open(out_ptr(repo), path.c_str());
 
 				if (ret == GIT_OK)
 					cout << "Repository already exists.\n";
@@ -2318,11 +2313,7 @@ static void install(tds::tds& tds) {
 				else {
 					cout << format("Creating new repository in {}.\n", path);
 
-					{
-						git_repository* tmp = nullptr;
-						ret = git_repository_init(&tmp, path.c_str(), false);
-						repo.reset(tmp);
-					}
+					ret = git_repository_init(out_ptr(repo), path.c_str(), false);
 
 					if (ret)
 						throw formatted_error("git_repository_open returned {}", ret);
