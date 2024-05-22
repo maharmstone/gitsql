@@ -38,13 +38,82 @@ private:
 
 using namespace std;
 
+static string libgit2_error_to_string(int error) {
+	switch (error) {
+		case GIT_OK:
+			return "GIT_OK";
+		case GIT_ERROR:
+			return "GIT_ERROR";
+		case GIT_ENOTFOUND:
+			return "GIT_ENOTFOUND";
+		case GIT_EEXISTS:
+			return "GIT_EEXISTS";
+		case GIT_EAMBIGUOUS:
+			return "GIT_EAMBIGUOUS";
+		case GIT_EBUFS:
+			return "GIT_EBUFS";
+		case GIT_EUSER:
+			return "GIT_EUSER";
+		case GIT_EBAREREPO:
+			return "GIT_EBAREREPO";
+		case GIT_EUNBORNBRANCH:
+			return "GIT_EUNBORNBRANCH";
+		case GIT_EUNMERGED:
+			return "GIT_EUNMERGED";
+		case GIT_ENONFASTFORWARD:
+			return "GIT_ENONFASTFORWARD";
+		case GIT_EINVALIDSPEC:
+			return "GIT_EINVALIDSPEC";
+		case GIT_ECONFLICT:
+			return "GIT_ECONFLICT";
+		case GIT_ELOCKED:
+			return "GIT_ELOCKED";
+		case GIT_EMODIFIED:
+			return "GIT_EMODIFIED";
+		case GIT_EAUTH:
+			return "GIT_EAUTH";
+		case GIT_ECERTIFICATE:
+			return "GIT_ECERTIFICATE";
+		case GIT_EAPPLIED:
+			return "GIT_EAPPLIED";
+		case GIT_EPEEL:
+			return "GIT_EPEEL";
+		case GIT_EEOF:
+			return "GIT_EEOF";
+		case GIT_EINVALID:
+			return "GIT_EINVALID";
+		case GIT_EUNCOMMITTED:
+			return "GIT_EUNCOMMITTED";
+		case GIT_EDIRECTORY:
+			return "GIT_EDIRECTORY";
+		case GIT_EMERGECONFLICT:
+			return "GIT_EMERGECONFLICT";
+		case GIT_PASSTHROUGH:
+			return "GIT_PASSTHROUGH";
+		case GIT_ITEROVER:
+			return "GIT_ITEROVER";
+		case GIT_RETRY:
+			return "GIT_RETRY";
+		case GIT_EMISMATCH:
+			return "GIT_EMISMATCH";
+		case GIT_EINDEXDIRTY:
+			return "GIT_EINDEXDIRTY";
+		case GIT_EAPPLYFAIL:
+			return "GIT_EAPPLYFAIL";
+		case GIT_EOWNER:
+			return "GIT_EOWNER";
+		default:
+			return to_string(error);
+	}
+}
+
 class git_exception : public exception {
 public:
 	git_exception(int error, string_view func) {
 		auto lg2err = git_error_last();
 
 		if (lg2err && lg2err->message) {
-			msg = string(func) + " failed (" + lg2err->message;
+			msg = string(func) + " failed (error " + libgit2_error_to_string(error) + ", " + lg2err->message;
 
 			while (!msg.empty() && (msg.back() == '\r' || msg.back() == '\n')) {
 				msg.pop_back();
@@ -52,7 +121,7 @@ public:
 
 			msg += ")";
 		} else
-			msg = string(func) + " failed (error " + to_string(error) + ")";
+			msg = string(func) + " failed (error " + libgit2_error_to_string(error) + ")";
 	}
 
 	const char* what() const noexcept {
