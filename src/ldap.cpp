@@ -188,18 +188,12 @@ void ldapobj::find_naming_context() {
 
 	const char* atts[] = { "defaultNamingContext", nullptr };
 
-	{
-		LDAPMessage* tmp = nullptr;
+	auto err = ldap_search_ext_s(ld.get(), nullptr, LDAP_SCOPE_BASE, nullptr,
+								 (char**)atts, false, nullptr, nullptr, nullptr,
+								 0, out_ptr(res));
 
-		auto err = ldap_search_ext_s(ld.get(), nullptr, LDAP_SCOPE_BASE, nullptr,
-									(char**)atts, false, nullptr, nullptr, nullptr,
-									0, &tmp);
-
-		res.reset(tmp);
-
-		if (err != LDAP_SUCCESS)
-			throw ldap_error("ldap_search_ext_s", err);
-	}
+	if (err != LDAP_SUCCESS)
+		throw ldap_error("ldap_search_ext_s", err);
 
 	auto att = ldap_first_attribute(ld.get(), res.get(), &ber);
 
