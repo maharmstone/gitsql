@@ -135,12 +135,12 @@ GitTree::GitTree(const GitRepo& repo, const git_oid& oid) {
 }
 
 GitTree::GitTree(const GitRepo& repo, const GitTreeEntry& gte) {
-	git_object* tmp = nullptr;
+	git_object_ptr obj;
 
-	if (auto ret = git_tree_entry_to_object(&tmp, repo.repo.get(), gte))
+	if (auto ret = git_tree_entry_to_object(out_ptr(obj), repo.repo.get(), gte))
 		throw git_exception(ret, "git_tree_entry_to_object");
 
-	tree.reset((git_tree*)tmp);
+	tree.reset((git_tree*)obj.release());
 }
 
 git_tree_entry_ptr GitTree::entry_bypath(const string& path) {
@@ -607,12 +607,12 @@ git_object_t GitTreeEntry::type() {
 }
 
 GitTree::GitTree(const GitRepo& repo, const string& rev) {
-	git_object* tmp = nullptr;
+	git_object_ptr obj;
 
-	if (auto ret = git_revparse_single(&tmp, repo.repo.get(), rev.c_str()))
+	if (auto ret = git_revparse_single(out_ptr(obj), repo.repo.get(), rev.c_str()))
 		throw git_exception(ret, "git_revparse_single");
 
-	tree.reset((git_tree*)tmp);
+	tree.reset((git_tree*)obj.release());
 }
 
 GitBlob::GitBlob(const GitTree& tree, const string& path) {
