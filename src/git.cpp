@@ -724,60 +724,7 @@ public:
 
 using ssh_string_ptr = unique_ptr<char*, ssh_string_deleter>;
 
-class ssh_knownhosts_entry_deleter {
-public:
-	using pointer = ssh_knownhosts_entry*;
-
-	void operator()(ssh_knownhosts_entry* e) {
-		ssh_knownhosts_entry_free(e);
-	}
-};
-
-using ssh_knownhosts_entry_ptr = unique_ptr<ssh_knownhosts_entry, ssh_knownhosts_entry_deleter>;
-
-static vector<ssh_knownhosts_entry_ptr> read_known_hosts(const string& host) {
-#ifdef _WIN32
-	const char* home = getenv("USERPROFILE");
-#else
-	const char* home = getenv("HOME");
-#endif
-
-	if (!home)
-		return {};
-
-	auto sshdir = filesystem::path{home} / ".ssh";
-
-	if (!filesystem::exists(sshdir))
-		return {};
-
-	auto fn = sshdir / "known_hosts";
-
-	if (!filesystem::exists(fn))
-		return {};
-
-	ifstream f(fn);
-
-	if (!f.good())
-		throw runtime_error("Failed to open " + fn.string() + " for reading.");
-
-	string line;
-	vector<ssh_knownhosts_entry_ptr> ret;
-
-	while (getline(f, line)) {
-		ssh_knownhosts_entry_ptr ent;
-
-		auto err = ssh_known_hosts_parse_line(host.c_str(), line.c_str(), out_ptr(ent));
-		if (err)
-			continue;
-
-		ret.emplace_back(move(ent));
-	}
-
-	return ret;
-}
-
-void get_ssh_settings(const string& host, optional<string>& identity, optional<string>& user,
-					  vector<ssh_knownhosts_entry_ptr>& known_hosts) {
+void get_ssh_settings(const string& host, optional<string>& identity, optional<string>& user) {
 	ssh_string_ptr old_identity, new_identity, user_ptr, known_hosts_file;
 
 	ssh_session_ptr sess{ssh_new()};
@@ -800,8 +747,6 @@ void get_ssh_settings(const string& host, optional<string>& identity, optional<s
 
 	if (auto err = ssh_options_get(sess.get(), SSH_OPTIONS_USER, out_ptr(user_ptr)); !err)
 		user = user_ptr.get();
-
-	read_known_hosts(host);
 }
 
 static vector<pair<string, string>> load_ssh_keys(const optional<string>& identity) {
@@ -932,9 +877,8 @@ void GitRepo::try_push(const string& ref) {
 
 	git_push_options options = GIT_PUSH_OPTIONS_INIT;
 	optional<string> identity, user;
-	vector<ssh_knownhosts_entry_ptr> known_hosts;
 
-	get_ssh_settings(url, identity, user, known_hosts);
+	get_ssh_settings(url, identity, user);
 
 	auto keys = load_ssh_keys(identity);
 
@@ -986,11 +930,6 @@ void GitRepo::try_push(const string& ref) {
 		p.key_num++;
 
 		return ret;
-	};
-
-	options.callbacks.certificate_check = [](git_cert*, int, const char*, void*) -> int {
-		// FIXME - parse ~/.ssh/known_hosts?
-		return 0;
 	};
 
 	options.callbacks.push_update_reference = [](const char*, const char* status, void* payload) -> int {
