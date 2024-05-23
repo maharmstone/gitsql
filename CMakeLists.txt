@@ -61,4 +61,5 @@ install(TARGETS gitsql DESTINATION "${CMAKE_INSTALL_BINDIR}")
 
 if(MSVC)
 	install(FILES $<TARGET_PDB_FILE:gitsql> DESTINATION bin OPTIONAL)
+	target_link_options(gitsql PUBLIC /MANIFEST:NO)
 endif()
