@@ -1269,6 +1269,23 @@ static void dump_options(tds::tds& tds, git_update& gu) {
 	gu.add_file("options.json", j.dump(3) + "\n");
 }
 
+static string synonym_ddl(tds::tds& tds, int64_t object_id, string_view schema, string_view name) {
+	string base_object_name;
+
+	{
+		tds::query sq(tds, "SELECT base_object_name FROM sys.synonyms WHERE object_id = ?", object_id);
+
+		if (!sq.fetch_row())
+			throw formatted_error("Could not find base object name for SYNONYM {}.", object_id);
+
+		base_object_name = (string)sq[0];
+	}
+
+	// FIXME - remove excess square brackets
+
+	return "CREATE SYNONYM " + brackets_escape(schema) + "." + brackets_escape(name) + " FOR " + base_object_name + ";";
+}
+
 void do_dump_sql(tds::tds& tds, git_update& gu) {
 	vector<sql_obj> objs;
 
@@ -1285,7 +1302,7 @@ LEFT JOIN sys.sql_modules ON sql_modules.object_id = objects.object_id
 LEFT JOIN sys.table_types ON objects.type = 'TT' AND table_types.type_table_object_id = objects.object_id
 JOIN sys.schemas ON schemas.schema_id = COALESCE(table_types.schema_id, objects.schema_id)
 LEFT JOIN sys.extended_properties ON extended_properties.major_id = objects.object_id AND extended_properties.minor_id = 0 AND extended_properties.name = 'microsoft_database_tools_support'
-WHERE objects.type IN ('V','P','FN','TF','IF','U','TT') AND
+WHERE objects.type IN ('V','P','FN','TF','IF','U','TT','SN') AND
 	(extended_properties.value IS NULL OR extended_properties.value != 1)
 ORDER BY schemas.name, objects.name)");
 
@@ -1364,6 +1381,8 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 			filename += "tables/";
 		else if (obj.type == "TT" || obj.type == "T")
 			filename += "types/";
+		else if (obj.type == "SN")
+			filename += "synonyms/";
 
 		if (obj.type == "U" || obj.type == "TT")
 			obj.def = table_ddl(tds, obj.id, false);
@@ -1373,6 +1392,8 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 			obj.def = munge_definition(obj.def, obj.schema, obj.name, lex::PROCEDURE);
 		else if (obj.type == "FN" || obj.type == "TF" || obj.type == "IF")
 			obj.def = munge_definition(obj.def, obj.schema, obj.name, lex::FUNCTION);
+		else if (obj.type == "SN")
+			obj.def = synonym_ddl(tds, obj.id, obj.schema, obj.name);
 
 		obj.def = fix_whitespace(obj.def);
 
