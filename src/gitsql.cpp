@@ -1269,6 +1269,19 @@ static void dump_options(tds::tds& tds, git_update& gu) {
 	gu.add_file("options.json", j.dump(3) + "\n");
 }
 
+static void debracket(string_view& sv) {
+	if (sv.empty())
+		return;
+
+	if (sv.front() != '[' || sv.back() != ']')
+		return;
+
+	if (sv.find(']') != sv.size() - 1)
+		return;
+
+	sv = sv.substr(1, sv.size() - 2);
+}
+
 static string synonym_ddl(tds::tds& tds, int64_t object_id, string_view schema, string_view name) {
 	string base_object_name;
 
@@ -1281,7 +1294,22 @@ static string synonym_ddl(tds::tds& tds, int64_t object_id, string_view schema, 
 		base_object_name = (string)sq[0];
 	}
 
-	// FIXME - remove excess square brackets
+	auto onp = tds::parse_object_name(base_object_name);
+
+	debracket(onp.server);
+	debracket(onp.db);
+	debracket(onp.schema);
+	debracket(onp.name);
+
+	base_object_name = brackets_escape(onp.schema) + "." + brackets_escape(onp.name);
+
+	if (!onp.db.empty())
+		base_object_name = brackets_escape(onp.db) + "." + base_object_name;
+	else if (!onp.server.empty())
+		base_object_name = "." + base_object_name;
+
+	if (!onp.server.empty())
+		base_object_name = brackets_escape(onp.server) + "." + base_object_name;
 
 	return "CREATE SYNONYM " + brackets_escape(schema) + "." + brackets_escape(name) + " FOR " + base_object_name + ";";
 }
