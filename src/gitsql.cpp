@@ -1274,12 +1274,12 @@ void do_dump_sql(tds::tds& tds, git_update& gu) {
 
 	{
 		tds::query sq(tds, R"(SELECT schemas.name,
-COALESCE(table_types.name, objects.name),
-sql_modules.definition,
-RTRIM(objects.type),
-objects.object_id,
-CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END,
-sql_modules.uses_quoted_identifier
+	COALESCE(table_types.name, objects.name),
+	sql_modules.definition,
+	RTRIM(objects.type),
+	objects.object_id,
+	CASE WHEN EXISTS (SELECT * FROM sys.database_permissions WHERE class_desc = 'OBJECT_OR_COLUMN' AND major_id = objects.object_id) THEN 1 ELSE 0 END,
+	sql_modules.uses_quoted_identifier
 FROM sys.objects
 LEFT JOIN sys.sql_modules ON sql_modules.object_id = objects.object_id
 LEFT JOIN sys.table_types ON objects.type = 'TT' AND table_types.type_table_object_id = objects.object_id
@@ -1337,12 +1337,12 @@ ORDER BY schemas.name, objects.name)");
 
 	{
 		tds::query sq(tds, R"(SELECT name,
-system_type_id,
-SCHEMA_NAME(schema_id),
-max_length,
-precision,
-scale,
-is_nullable
+	system_type_id,
+	SCHEMA_NAME(schema_id),
+	max_length,
+	precision,
+	scale,
+	is_nullable
 FROM sys.types
 WHERE is_user_defined = 1 AND is_table_type = 0)");
 
