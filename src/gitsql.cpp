@@ -1269,7 +1269,7 @@ static void dump_options(tds::tds& tds, git_update& gu) {
 	gu.add_file("options.json", j.dump(3) + "\n");
 }
 
-static void do_dump_sql(tds::tds& tds, git_update& gu) {
+void do_dump_sql(tds::tds& tds, git_update& gu) {
 	vector<sql_obj> objs;
 
 	{

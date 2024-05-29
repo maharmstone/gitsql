@@ -82,9 +82,12 @@ private:
 
 #endif
 
+struct git_update;
+
 // gitsql.cpp
 std::string get_current_username();
 void get_current_user_details(std::string& name, std::string& email);
+void do_dump_sql(tds::tds& tds, git_update& gu);
 
 // table.cpp
 std::string table_ddl(tds::tds& tds, int64_t id, bool nolock);

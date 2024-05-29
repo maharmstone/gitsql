@@ -353,6 +353,13 @@ void dump_master(string_view db_server, unsigned int repo_num, span<const std::b
 	dump_principals(opts, gu);
 	dump_extended_stored_procedures(opts, gu);
 
+	{
+		opts.db = "master";
+
+		tds::tds tds(opts);
+		do_dump_sql(tds, gu);
+	}
+
 	string name, email;
 
 	get_current_user_details(name, email);
