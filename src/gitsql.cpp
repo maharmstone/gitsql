@@ -1269,11 +1269,7 @@ static void dump_options(tds::tds& tds, git_update& gu) {
 	gu.add_file("options.json", j.dump(3) + "\n");
 }
 
-static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& branch) {
-	git_libgit2_init();
-	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
-	git_libgit2_opts(GIT_OPT_SET_OWNER_VALIDATION, 0);
-
+static void do_dump_sql(tds::tds& tds, git_update& gu) {
 	vector<sql_obj> objs;
 
 	{
@@ -1338,12 +1334,6 @@ ORDER BY schemas.name, objects.name)");
 			objs.emplace_back("principals", r.first, get_role_definition(tds, r.first, r.second));
 		}
 	}
-
-	GitRepo repo(repo_dir.string());
-
-	git_update gu(repo);
-
-	gu.start();
 
 	{
 		tds::query sq(tds, R"(SELECT name,
@@ -1417,6 +1407,18 @@ WHERE is_user_defined = 1 AND is_table_type = 0)");
 	dump_filegroups(tds, gu);
 	dump_log_files(tds, gu);
 	dump_options(tds, gu);
+}
+
+static void dump_sql(tds::tds& tds, const filesystem::path& repo_dir, const string& branch) {
+	git_libgit2_init();
+	git_libgit2_opts(GIT_OPT_ENABLE_STRICT_OBJECT_CREATION, false);
+	git_libgit2_opts(GIT_OPT_SET_OWNER_VALIDATION, 0);
+
+	GitRepo repo(repo_dir.string());
+	git_update gu(repo);
+	gu.start();
+
+	do_dump_sql(tds, gu);
 
 	gu.stop();
 
