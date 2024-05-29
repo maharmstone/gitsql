@@ -2,6 +2,7 @@
 #include "aes.h"
 #include "git.h"
 #include <nlohmann/json.hpp>
+#include <iostream>
 
 using namespace std;
 using json = nlohmann::json;
@@ -359,4 +360,10 @@ void dump_master(string_view db_server, unsigned int repo_num, span<const std::b
 	gu.stop();
 
 	update_git(repo, name, email, "Update", gu.files2, true, nullopt, branch);
+
+	try {
+		repo.try_push("refs/heads/" + (branch.empty() ? "master" : branch));
+	} catch (const exception& e) {
+		cerr << e.what() << endl;
+	}
 }
