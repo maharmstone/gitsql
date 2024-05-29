@@ -2398,6 +2398,7 @@ static void print_usage() {
     gitsql dump <repo-id>
     gitsql show <object>
     gitsql show <database> <object id>
+    gitsql master <repo> <smk>
     gitsql install <server>
 )";
 }
